@@ -12,7 +12,7 @@ Status proyek terkini, pelacakan milestone, dan roadmap implementasi sistem ERP 
 | **M2: Database Hardening & Migrasi** | 30 PostgreSQL databases, RLS, role least-privilege, partisi bulanan, seed data | ✅ COMPLETED | 2026-08-07 |
 | **M3: Modul Bersama & Arsitektur Layanan** | `services/shared` (`platform`, `httpx`, `eventbus`), outbox relay, CDC | ✅ COMPLETED | 2026-08-09 |
 | **M4: Blueprint Microservices (20 Go Microservices + API Gateway)** | Seluruh SVC-001 s.d. SVC-019 + SVC-010-CUR (`currency-service`) dan `api-gateway` dibangun, sqlc codegen, REST endpoints | ✅ COMPLETED | 2026-08-10 |
-| **M5: E2E Integration & Smoke Testing** | Baseline live 79/79 checks (`E2E_SMOKE_PASS`) terverifikasi; `deploy/smoke-test.sh` diperluas menjadi 88 checks (Steps 1–13, `13a`–`13g`, sintaks tervalidasi via `bash -n`; menunggu eksekusi live Step 13 di Docker Compose) | 🔄 IN PROGRESS (79/79 Live, 88 Checks Ready) | 2026-11-14 |
+| **M5: E2E Integration & Smoke Testing** | Baseline live 79/79 checks (`E2E_SMOKE_PASS`) terverifikasi; `deploy/smoke-test.sh` diperluas menjadi 104 checks (Steps 1–14, `13a`–`13g` + `14a`–`14g`, sintaks tervalidasi via `bash -n`; menunggu eksekusi live Steps 13–14 di Docker Compose) | 🔄 IN PROGRESS (79/79 Live, 104 Checks Ready) | 2026-11-14 |
 | **M6: Enterprise Architecture Harmonization** | ADR-011 s.d. ADR-015, React 19 + Vite + TanStack SPA architecture, Chrome Extension, Cortex V7 | ✅ COMPLETED | 2026-11-11 |
 | **M7: Decoupled Backoffice SPA** | Implementasi React 19 + Vite + TanStack Router + TanStack Query v5 + virtual data tables (`apps/web-spa`) | ✅ COMPLETED | 2026-11-11 |
 | **M8: Enterprise Chrome Extension MV3** | Side Panel Quick Approvals, DJP e-Faktur helper, Bank Extractor & Sandbox (`apps/chrome-companion`) | ✅ COMPLETED | 2026-11-11 |
@@ -55,8 +55,8 @@ Status proyek terkini, pelacakan milestone, dan roadmap implementasi sistem ERP 
 ## 3. Verifikasi & Pengujian Kualitas
 
 - **Smoke Test (`deploy/smoke-test.sh`)**:
-  - **88 checks** end-to-end (Steps 1–13, termasuk `13a`–`13g`) yang menguji pembuatan resource di 20 Go microservices, outbox relay publikasi ke 20 Redpanda domain event topics, pemrosesan consumer audit & reporting CQRS, saga lintas domain (INT-001, INT-002, INT-003), penolakan transaksi tidak seimbang (BR-556), pengujian optimistic lock (409 Conflict), penegakan isolasi Row-Level Security (RLS 404), serta Step 13 (`13a`–`13g`): `:8100/readyz`, `GET /currencies` (`IDR`), pembuatan/upsert kurs `USD -> IDR` `SPOT`, konversi `100.0000 USD -> IDR` (`POST /exchange-rates/convert`), autentikasi JWT ke `$GW/auth/login`, dan akses terautentikasi Bearer token ke `$GW/currencies`, `$GW/exchange-rates/convert`, serta `$GW/events/stream`.
-  - Status: **79/79 Live PASSED (`E2E_SMOKE_PASS`)** pada baseline 19 microservice + `api-gateway`; skrip **88 checks** (termasuk Step 13 `13a`–`13g`) tervalidasi sintaks (`bash -n`) dan siap dijalankan ulang saat Docker Desktop VM aktif.
+  - **104 checks** end-to-end (Steps 1–14, termasuk `13a`–`13g` dan `14a`–`14g`) yang menguji pembuatan resource di 20 Go microservices, outbox relay publikasi ke 20 Redpanda domain event topics, pemrosesan consumer audit & reporting CQRS, saga lintas domain (INT-001, INT-002, INT-003), penolakan transaksi tidak seimbang (BR-556), pengujian optimistic lock (409 Conflict), penegakan isolasi Row-Level Security (RLS 404), serta Step 13 (`13a`–`13g`): `:8100/readyz`, `GET /currencies` (`IDR`), pembuatan/upsert kurs `USD -> IDR` `SPOT`, konversi `100.0000 USD -> IDR` (`POST /exchange-rates/convert`), autentikasi JWT ke `$GW/auth/login`, dan akses terautentikasi Bearer token ke `$GW/currencies`, `$GW/exchange-rates/convert`, serta `$GW/events/stream`. Step 14 (`14a`–`14g`) menguji dimension & localization services: readiness langsung (`:8102`/`:8110`), cost/profit center, RLS lintas org (`404`), allocation rule dengan BR total tepat 100 (`422`/`201`), bahasa & translation bundle seeded system org, routing + RBAC via gateway, dan konsumsi audit `dimension.cost_center.upserted` + `localization.bundle.updated`.
+  - Status: **79/79 Live PASSED (`E2E_SMOKE_PASS`)** pada baseline 19 microservice + `api-gateway`; skrip **104 checks** (termasuk Step 13 `13a`–`13g` dan Step 14 `14a`–`14g`) tervalidasi sintaks (`bash -n`) dan siap dijalankan ulang saat Docker Desktop VM aktif.
 - **Dataform Compilation (`src/data_modules/custom/`)**:
   - Kompilasi lokal `@dataform/cli@3.1.5` lulus (`0` error) menghasilkan **32 datasets** (`20` staging views, `4` annotation views, `8` dimensional/fact tables), **4 assertions** (`assert_fx_rate_coverage`, `assert_gl_balance`, `assert_org_referential_integrity`, `assert_tri_currency_completeness`), dan **31 source declarations**.
 - **Benchmark Performa (`db/benchmark/RESULTS.md`)**:
@@ -68,7 +68,7 @@ Status proyek terkini, pelacakan milestone, dan roadmap implementasi sistem ERP 
 ## 4. Langkah Selanjutnya (Immediate Next Steps)
 
 1. **Eksekusi Live Step 13 (`deploy/smoke-test.sh`)**:
-   - Restart Docker Desktop VM setelah memberi ruang disk kosong memadai, lalu jalankan `docker compose up -d --build` dan `bash deploy/smoke-test.sh` (88 checks).
+   - Restart Docker Desktop VM setelah memberi ruang disk kosong memadai, lalu jalankan `docker compose up -d --build` dan `bash deploy/smoke-test.sh` (104 checks).
 2. **Verifikasi Runtime Ekstensi Chrome (`apps/chrome-companion`)**:
    - Unit test `node --test test/companion.test.js` (15/15) telah lulus; muat ekstensi via `chrome://extensions` (*Developer mode* → *Load unpacked*) untuk uji UI live dan tambahkan screenshot 1280×800 ke `apps/chrome-companion/CHROMEWEBSTORE.md` sebelum distribusi.
 3. **Verifikasi Browser Live Backoffice SPA (`apps/web-spa`)**:

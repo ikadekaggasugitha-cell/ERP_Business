@@ -18,7 +18,7 @@ client / gateway ──REST──▶ 18 producer services ─┴─outbox(same t
 
 ```bash
 docker compose up -d --build     # Postgres (30 DBs) + Redpanda (20 topics) + bootstrap/migrate/grants/seeds + 20 Go microservices + api-gateway
-bash deploy/smoke-test.sh        # 88 checks (Steps 1–13, 13a–13g); prints E2E_SMOKE_PASS, exits non-zero on any fail
+bash deploy/smoke-test.sh        # 104 checks (Steps 1–14, 13a–13g, 14a–14g); prints E2E_SMOKE_PASS, exits non-zero on any fail
 docker compose down -v           # tear down
 ```
 
@@ -35,7 +35,7 @@ Bring-up order (compose `depends_on`): `db(healthy) → bootstrap(30 DBs + roles
 | HR | `hr` / `payroll` | 8097 / 8098 | `hr.employee.updated` · `payroll.run.completed` |
 | Consumers | `audit` (8083) · `reporting` (8099) | 8083 / 8099 | `audit` consumes 20 Redpanda domain event topics · `reporting` CQRS projects `gl.journal.posted` |
 
-## What the smoke test verifies (88 checks across Steps 1–13)
+## What the smoke test verifies (104 checks across Steps 1–14)
 
 - Every producer's REST create/action returns the expected status (`201`/`200`).
 - **Event flow**: all producers emit → transactional outbox → relay → Redpanda (20 domain event topics) → **audit** appends to `audit_log`; **reporting** projects `gl.journal.posted` into `gl_balance_snapshot` (CQRS read model).
@@ -52,6 +52,14 @@ Bring-up order (compose `depends_on`): `db(healthy) → bootstrap(30 DBs + roles
   - `13e`: Authenticates against `POST $GW/auth/login` (`http://localhost:8000/api/v1/auth/login`) to obtain a valid JWT token (`GW_TOKEN`) and tests `GET $GW/currencies` (`200`) with `-H "Authorization: Bearer $GW_TOKEN"`.
   - `13f`: Verifies `POST $GW/exchange-rates/convert` (`200`) via Gateway with `-H "Authorization: Bearer $GW_TOKEN"`.
   - `13g`: Verifies SSE streaming endpoint `$GW/stream/events?ticket=$GW_TICKET` (`200`) with `-H "Authorization: Bearer $GW_TOKEN"`.
+- **Step 14 (`14a`–`14g`) — Dimension & Localization Services (SVC-021, SVC-029)**:
+  - `14a`: Direct `:8102/readyz` (dimension) and `:8110/readyz` (localization) (`200`).
+  - `14b`: Creates a cost center + profit center; idempotent replay (`201`).
+  - `14c`: RLS — org B cannot read org A's cost center (`404`).
+  - `14d`: Allocation rule business rule — target percentages must total exactly 100 (`422` invalid, `201` valid).
+  - `14e`: Seeded languages visible via system org, translation creation (`201`), bundle fallback overlay contains the new key.
+  - `14f`: Gateway routing `:8000/cost-centers` and `:8000/translation-bundles/id` (`200`).
+  - `14g`: Audit consumed `dimension.cost_center.upserted` and `localization.bundle.updated`.
 
 ## Auth in this stack
 

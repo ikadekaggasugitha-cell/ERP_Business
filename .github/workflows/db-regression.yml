@@ -1,0 +1,51 @@
+name: db-regression
+
+on:
+  push:
+    paths: ["db/migrations/**", "db/tests/**", ".github/workflows/db-regression.yml"]
+  pull_request:
+    paths: ["db/migrations/**", "db/tests/**", ".github/workflows/db-regression.yml"]
+
+jobs:
+  sql-regression:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      PGPASSWORD: postgres
+      PGURL: postgres://postgres:postgres@localhost:5432
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install golang-migrate
+        run: |
+          curl -fsSL https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz
+          sudo mv migrate /usr/local/bin/
+
+      - name: Create databases
+        run: |
+          psql "$PGURL/postgres" -c "CREATE DATABASE gl_db"
+          psql "$PGURL/postgres" -c "CREATE DATABASE org_db"
+
+      - name: Migrate gl_db
+        run: migrate -path db/migrations/gl_db -database "$PGURL/gl_db?sslmode=disable" up
+
+      - name: Migrate org_db
+        run: migrate -path db/migrations/org_db -database "$PGURL/org_db?sslmode=disable" up
+
+      - name: Regression — document number uniqueness (gl_db)
+        run: psql "$PGURL/gl_db?sslmode=disable" -f db/tests/document_number_uniqueness.sql
+
+      - name: Regression — RLS isolation (gl_db)
+        run: psql "$PGURL/gl_db?sslmode=disable" -f db/tests/rls_regression.sql
+
+      - name: Regression — optimistic locking (org_db)
+        run: psql "$PGURL/org_db?sslmode=disable" -f db/tests/optimistic_lock_regression.sql

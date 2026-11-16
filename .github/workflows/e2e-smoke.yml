@@ -1,0 +1,17 @@
+name: e2e-smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bring up full stack (30 DBs, Redpanda, 20 services + gateway)
+        run: docker compose up -d --build
+
+      - name: Run smoke test (104 checks)
+        run: bash deploy/smoke-test.sh
