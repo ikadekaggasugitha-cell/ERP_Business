@@ -49,3 +49,44 @@ jobs:
 
       - name: Regression — optimistic locking (org_db)
         run: psql "$PGURL/org_db?sslmode=disable" -f db/tests/optimistic_lock_regression.sql
+
+  rls-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      PGPASSWORD: postgres
+      PGURL: postgres://postgres:postgres@localhost:5432
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [fixedasset_db, budget_db, financialclose_db, consolidation_db, project_db, asset_db, maintenance_db, crm_db]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install golang-migrate
+        run: |
+          curl -fsSL https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz
+          sudo mv migrate /usr/local/bin/
+
+      - name: Create and migrate ${{ matrix.db }}
+        run: |
+          psql "$PGURL/postgres" -c "CREATE DATABASE ${{ matrix.db }}"
+          migrate -path db/migrations/${{ matrix.db }} -database "$PGURL/${{ matrix.db }}?sslmode=disable" up
+
+      - name: Apply seeds if present (upgrades smoke checks B/C to live rows)
+        run: |
+          if [ -f "db/seeds/${{ matrix.db }}/seed.sql" ]; then
+            psql "$PGURL/${{ matrix.db }}?sslmode=disable" -f "db/seeds/${{ matrix.db }}/seed.sql"
+          fi
+
+      - name: RLS smoke (${{ matrix.db }})
+        run: psql "$PGURL/${{ matrix.db }}?sslmode=disable" -f db/tests/rls_smoke.sql
