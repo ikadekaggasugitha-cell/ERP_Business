@@ -14,6 +14,9 @@ duplicates or overwrites.
 | `security_db`    | Permissions (`<module>.<action>` for 14 modules) + system roles (SYSTEM_ADMIN, FINANCE_MANAGER, ACCOUNTANT, AUDITOR, VIEWER) + role→permission grants |
 | `tax_db`         | Indonesian tax codes (PPN 11%, PPh 21/22/23/4(2), …) |
 | `coa_db`         | Fiscal calendar template `STD-MONTHLY` + FY2026 + 12 monthly periods |
+| `fixedasset_db`  | Asset categories (building, vehicle, machine, office equipment, computer, land) with default depreciation method / useful life |
+| `financialclose_db` | Standard closing checklist templates (bank reconciliation → financial statement preparation, 10 tasks) |
+| `crm_db`         | Customer segments (SMB, Enterprise, Key Account, Government, Retail) with segment criteria |
 
 Transactional/demo data is **not** seeded (chosen scope: standard reference only).
 
@@ -32,7 +35,7 @@ psql -d currency_db -v org_id=<tenant-uuid> -v actor=<user-uuid> -f db/seeds/cur
 ## Run order (after migrations + grants)
 
 ```bash
-for db in currency_db localization_db org_db security_db tax_db coa_db; do
+for db in currency_db localization_db org_db security_db tax_db coa_db fixedasset_db financialclose_db crm_db; do
   psql -U postgres -d "$db" -f "db/seeds/$db/seed.sql"
 done
 ```
