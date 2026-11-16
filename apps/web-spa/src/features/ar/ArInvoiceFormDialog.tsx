@@ -129,11 +129,13 @@ export function ArInvoiceFormDialog({
   const watchedLines = form.watch('lines');
   const watchedTotal = form.watch('totalAmount');
   const watchedCurrency = form.watch('currencyCode') || 'IDR';
-  const computedLinesSum = useMemo(() => computeArLinesTotal(watchedLines || []), [watchedLines]);
+  const computedLinesSum = computeArLinesTotal(watchedLines || []);
 
-  const linesBalanced = useMemo(() => {
-    return new Decimal(watchedTotal || '0').equals(new Decimal(computedLinesSum || '0'));
-  }, [watchedTotal, computedLinesSum]);
+  // `form.watch('lines')` returns the live (mutated in place) array, so a useMemo
+  // keyed on its reference never invalidates — compute per render instead.
+  const linesBalanced = new Decimal(watchedTotal || '0').equals(
+    new Decimal(computedLinesSum || '0'),
+  );
 
   const mutation = useMutation({
     mutationFn: (values: ArInvoiceFormValues) =>

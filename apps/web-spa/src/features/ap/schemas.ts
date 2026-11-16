@@ -38,10 +38,7 @@ export const apInvoiceFormSchema = z
       .trim()
       .length(3, 'Currency must be a 3-letter ISO code')
       .transform((val) => val.toUpperCase()),
-    totalAmount: z
-      .string()
-      .trim()
-      .refine(isPositiveDecimal, 'Total amount must be greater than zero'),
+    totalAmount: z.string().trim(),
     goodsReceiptRef: z.string().trim().max(120).optional(),
     lines: z.array(apInvoiceLineSchema).min(1, 'At least one expense/asset line is required'),
   })
@@ -53,16 +50,25 @@ export const apInvoiceFormSchema = z
         message: 'Due date cannot be earlier than invoice date',
       });
     }
-    const total = new Decimal(data.totalAmount || '0');
+    const totalRaw = (data.totalAmount || '0').trim();
+    const total = DECIMAL_STRING_REGEX.test(totalRaw) ? new Decimal(totalRaw) : null;
     const lineSum = Decimal.sum(
       data.lines.map((line) => (isNonNegativeDecimal(line.amount) ? line.amount : '0')),
       4,
     );
-    if (!total.equals(lineSum)) {
+    if (!total || !total.equals(lineSum)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['totalAmount'],
-        message: `Line sum (${lineSum.toString(2)}) must match invoice total (${total.toString(2)})`,
+        message: `Line sum (${lineSum.toString(2)}) must match invoice total (${total ? total.toString(2) : totalRaw || '0'})`,
+      });
+      return;
+    }
+    if (!total.isPositive()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['totalAmount'],
+        message: 'Total amount must be greater than zero',
       });
     }
   });
