@@ -322,14 +322,6 @@ func (s *Server) updateParty(w http.ResponseWriter, r *http.Request) {
 		OrganizationID: existing.OrganizationID,
 		CorrelationID:  corr,
 	}
-	evUpdated := masterdatadb.InsertOutboxParams{
-		AggregateType:  "Party",
-		AggregateID:    id,
-		EventType:      "masterdata.party.updated",
-		Payload:        payload,
-		OrganizationID: existing.OrganizationID,
-		CorrelationID:  corr,
-	}
 	newVer, err := s.repo.UpdatePartyAndEmit(r.Context(), scope, masterdatadb.UpdatePartyParams{
 		ID:         id,
 		RowVersion: ver,
@@ -338,7 +330,7 @@ func (s *Server) updateParty(w http.ResponseWriter, r *http.Request) {
 		TaxID:      taxID,
 		IsShared:   req.IsShared,
 		UpdatedBy:  &actor,
-	}, evUpsert, evUpdated)
+	}, evUpsert)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.WriteError(w, r, httpx.Conflict("VERSION_CONFLICT", "party berubah secara bersamaan"))

@@ -1,5 +1,5 @@
 // Package mdcache keeps procurement-service's local party read model refreshed
-// via masterdata.party.upserted / masterdata.party.updated events with DLQ poison handling.
+// via masterdata.party.upserted events with DLQ poison handling.
 package mdcache
 
 import (
@@ -16,7 +16,6 @@ import (
 // Topics lists the Kafka topics consumed by the procurement masterdata cache.
 var Topics = []string{
 	eventbus.TopicFor("masterdata.party.upserted"),
-	eventbus.TopicFor("masterdata.party.updated"),
 }
 
 // PartyCacheStore persists deduplicated party cache updates.
@@ -49,7 +48,7 @@ func (x *Consumer) Close() error { return x.c.Close() }
 
 // Handle processes a single masterdata envelope, flagging malformed payloads as poison for DLQ routing.
 func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
-	if env.EventType != "masterdata.party.upserted" && env.EventType != "masterdata.party.updated" {
+	if env.EventType != "masterdata.party.upserted" {
 		return nil
 	}
 	org, err := uuid.Parse(env.OrganizationID)

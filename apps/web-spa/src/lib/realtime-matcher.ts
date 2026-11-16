@@ -225,7 +225,6 @@ export const KNOWN_SSE_EVENT_TYPES = [
   'erp.manufacturing.workorder.released.v1',
   'erp.manufacturing.workorder.completed.v1',
   'erp.masterdata.party.upserted.v1',
-  'erp.masterdata.party.updated.v1',
   'masterdata.party.upserted',
   'masterdata.item.upserted',
   'erp.org.unit.upserted.v1',

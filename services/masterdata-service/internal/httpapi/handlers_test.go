@@ -109,8 +109,8 @@ func TestMasterdataPartiesAndItemsCRUD(t *testing.T) {
 		"name":      "PT Acme Updated",
 		"partyType": "both",
 	}, hdrs)
-	if rr.Code != http.StatusOK || len(store.updatedEvents) != 2 {
-		t.Fatalf("expected 200 and 2 outbox events on party update, got %d (%d events)", rr.Code, len(store.updatedEvents))
+	if rr.Code != http.StatusOK || len(store.updatedEvents) != 1 {
+		t.Fatalf("expected 200 and 1 outbox event (party.upserted) on party update, got %d (%d events)", rr.Code, len(store.updatedEvents))
 	}
 
 	if rr := doMDReq(t, h, http.MethodPost, "/items", map[string]any{

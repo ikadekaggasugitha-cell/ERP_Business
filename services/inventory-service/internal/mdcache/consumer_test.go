@@ -38,7 +38,7 @@ func TestInventoryMDCachePoisonAndValid(t *testing.T) {
 
 	err = c.Handle(context.Background(), eventbus.Envelope{
 		EventID:        uuid.NewString(),
-		EventType:      "masterdata.party.updated",
+		EventType:      "masterdata.party.upserted",
 		AggregateID:    uuid.NewString(),
 		OrganizationID: uuid.NewString(),
 		Data:           json.RawMessage(`{"code":"C-1","name":"PT Pelanggan","partyType":"Customer"}`),

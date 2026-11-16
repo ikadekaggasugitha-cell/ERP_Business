@@ -43,7 +43,7 @@ func TestMDCacheConsumerPoisonAndValid(t *testing.T) {
 	// Poison: invalid JSON payload
 	err = c.Handle(context.Background(), eventbus.Envelope{
 		EventID:        uuid.NewString(),
-		EventType:      "masterdata.party.updated",
+		EventType:      "masterdata.party.upserted",
 		AggregateID:    uuid.NewString(),
 		OrganizationID: uuid.NewString(),
 		Data:           json.RawMessage(`{invalid`),

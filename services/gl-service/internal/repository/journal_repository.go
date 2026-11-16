@@ -432,10 +432,25 @@ func upsertBalancesAndEmitOutbox(
 	if err != nil {
 		return err
 	}
-	return q.InsertOutbox(ctx, gldb.InsertOutboxParams{
+	if err := q.InsertOutbox(ctx, gldb.InsertOutboxParams{
 		AggregateType:  "JournalEntry",
 		AggregateID:    entry.ID,
 		EventType:      "gl.journal.posted",
+		Payload:        payload,
+		OrganizationID: entry.OrganizationID,
+		CorrelationID:  entry.CorrelationID,
+	}); err != nil {
+		return err
+	}
+	// Reversal entries additionally emit gl.journal.reversed for audit/SSE;
+	// the gl.journal.posted row above keeps feeding the reporting balance projector.
+	if entry.ReversedEntryID == nil {
+		return nil
+	}
+	return q.InsertOutbox(ctx, gldb.InsertOutboxParams{
+		AggregateType:  "JournalEntry",
+		AggregateID:    entry.ID,
+		EventType:      "gl.journal.reversed",
 		Payload:        payload,
 		OrganizationID: entry.OrganizationID,
 		CorrelationID:  entry.CorrelationID,
