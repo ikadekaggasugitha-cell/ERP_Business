@@ -523,7 +523,7 @@ func handleSSE(hub *sse.Hub, secret []byte, allowAnon bool) http.HandlerFunc {
 
 		if ticket := strings.TrimSpace(r.URL.Query().Get("ticket")); ticket != "" {
 			claims, err = auth.VerifyHS256(ticket, secret, time.Now().UTC())
-			if err == nil && claims.TokenUse != "stream" && claims.TokenUse != "access" {
+			if err == nil && claims.TokenUse != "stream" {
 				err = auth.ErrInvalidToken
 			}
 		} else {
