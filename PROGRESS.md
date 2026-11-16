@@ -12,7 +12,7 @@ Status proyek terkini, pelacakan milestone, dan roadmap implementasi sistem ERP 
 | **M2: Database Hardening & Migrasi** | 30 PostgreSQL databases, RLS, role least-privilege, partisi bulanan, seed data | ✅ COMPLETED | 2026-08-07 |
 | **M3: Modul Bersama & Arsitektur Layanan** | `services/shared` (`platform`, `httpx`, `eventbus`), outbox relay, CDC | ✅ COMPLETED | 2026-08-09 |
 | **M4: Blueprint Microservices (20 Go Microservices + API Gateway)** | Seluruh SVC-001 s.d. SVC-019 + SVC-010-CUR (`currency-service`) dan `api-gateway` dibangun, sqlc codegen, REST endpoints | ✅ COMPLETED | 2026-08-10 |
-| **M5: E2E Integration & Smoke Testing** | Baseline live 79/79 checks (`E2E_SMOKE_PASS`) terverifikasi; `deploy/smoke-test.sh` diperluas menjadi 104 checks (Steps 1–14, `13a`–`13g` + `14a`–`14g`, sintaks tervalidasi via `bash -n`; menunggu eksekusi live Steps 13–14 di Docker Compose) | 🔄 IN PROGRESS (79/79 Live, 104 Checks Ready) | 2026-11-14 |
+| **M5: E2E Integration & Smoke Testing** | Smoke test live **104/104 checks** (`E2E_SMOKE_PASS`) pada compose 25 kontainer healthy — Steps 1–14 termasuk live pertama untuk `13a`–`13g` (currency `:8100`) dan `14a`–`14g` (dimension `:8102` / localization `:8110`), `13g` SSE dengan fix stream-ticket; RBAC 45/45; regresi DB (document-number, optimistic lock, RLS hardened `9f99497`) lulus live | ✅ COMPLETED | 2026-11-16 |
 | **M6: Enterprise Architecture Harmonization** | ADR-011 s.d. ADR-015, React 19 + Vite + TanStack SPA architecture, Chrome Extension, Cortex V7 | ✅ COMPLETED | 2026-11-11 |
 | **M7: Decoupled Backoffice SPA** | Implementasi React 19 + Vite + TanStack Router + TanStack Query v5 + virtual data tables (`apps/web-spa`) | ✅ COMPLETED | 2026-11-11 |
 | **M8: Enterprise Chrome Extension MV3** | Side Panel Quick Approvals, DJP e-Faktur helper, Bank Extractor & Sandbox (`apps/chrome-companion`) | ✅ COMPLETED | 2026-11-11 |
@@ -31,7 +31,7 @@ Status proyek terkini, pelacakan milestone, dan roadmap implementasi sistem ERP 
 | `ar-service` (009) | ✅ 201 Created | ✅ `ar.invoice.issued` | ✅ Active | ✅ Enforced | ✅ Pass |
 | `coa-service` (006) | ✅ 201 Created | ✅ `coa.account.upserted` | ✅ Active | ✅ Enforced | ✅ Pass |
 | `tax-service` (010) | ✅ 201 Created | ✅ `tax.invoice.issued` | ✅ Active | ✅ Enforced | ✅ Pass |
-| `currency-service` (010-CUR) | ✅ 201 Created / 200 OK | ✅ `currency.rate.created` / `currency.rate.updated` | ✅ Active | ✅ Enforced | ⏳ Go/Race Pass (Live Pending) |
+| `currency-service` (010-CUR) | ✅ 201 Created / 200 OK | ✅ `currency.rate.created` / `currency.rate.updated` | ✅ Active | ✅ Enforced | ✅ Pass (Step 13) |
 | `treasury-cashbank-service` (011) | ✅ 201 Created | ✅ `treasury.payment.settled` | ✅ Active | ✅ Enforced | ✅ Pass |
 | `user-service` (002) | ✅ 201 Created | ✅ `user.account.upserted` | ✅ Active | ✅ Enforced | ✅ Pass |
 | `security-service` (003) | ✅ 201 Created | ✅ `security.role.upserted` | ✅ Active | ✅ Enforced | ✅ Pass |
@@ -44,8 +44,8 @@ Status proyek terkini, pelacakan milestone, dan roadmap implementasi sistem ERP 
 | `sales-service` (015) | ✅ 201 Created | ✅ `sales.order.confirmed` | ✅ Active | ✅ Enforced | ✅ Pass |
 | `hr-service` (016) | ✅ 201 Created | ✅ `hr.employee.updated` | ✅ Active | ✅ Enforced | ✅ Pass |
 | `payroll-service` (017) | ✅ 201 Created | ✅ `payroll.run.completed` | ✅ Active | ✅ Enforced | ✅ Pass |
-| `dimension-service` (021, :8102) | ✅ Cost/Profit Center CRUD + Allocation Rule (BR total=100) | ✅ `dimension.cost_center.upserted` / `dimension.profit_center.upserted` / `dimension.allocation_rule.upserted` | ✅ Active | ✅ Enforced | ⏳ Go/Race Pass (Live Pending, Step 14) |
-| `localization-service` (029, :8110) | ✅ Language, Translation, Bundle (fallback overlay), Locale Format | ✅ `localization.language.updated` / `localization.bundle.updated` / `localization.locale_format.updated` | ✅ Active | ✅ Enforced (+ system org seed) | ⏳ Go/Race Pass (Live Pending, Step 14) |
+| `dimension-service` (021, :8102) | ✅ Cost/Profit Center CRUD + Allocation Rule (BR total=100) | ✅ `dimension.cost_center.upserted` / `dimension.profit_center.upserted` / `dimension.allocation_rule.upserted` | ✅ Active | ✅ Enforced | ✅ Pass (Step 14) |
+| `localization-service` (029, :8110) | ✅ Language, Translation, Bundle (fallback overlay), Locale Format | ✅ `localization.language.updated` / `localization.bundle.updated` / `localization.locale_format.updated` | ✅ Active | ✅ Enforced (+ system org seed) | ✅ Pass (Step 14) |
 | `audit-service` (018) | ✅ 200 OK Query | ➖ Consumer Only (20 Redpanda domain event topics) | ✅ Active | ✅ Enforced | ✅ Pass |
 | `reporting-service` (019) | ✅ 200 OK CQRS | ➖ Consumer Only (GL snapshots, sales, inventory) | ✅ Active | ✅ Enforced | ✅ Pass |
 | `api-gateway` (GW :8000) | ✅ Auth, Proxy, SSE | ➖ Reverse Proxy + Kafka SSE Bridge (20 Redpanda domain event topics) | ✅ Active | ✅ Scope-Enforced | ✅ Pass |
@@ -56,7 +56,7 @@ Status proyek terkini, pelacakan milestone, dan roadmap implementasi sistem ERP 
 
 - **Smoke Test (`deploy/smoke-test.sh`)**:
   - **104 checks** end-to-end (Steps 1–14, termasuk `13a`–`13g` dan `14a`–`14g`) yang menguji pembuatan resource di 20 Go microservices, outbox relay publikasi ke 20 Redpanda domain event topics, pemrosesan consumer audit & reporting CQRS, saga lintas domain (INT-001, INT-002, INT-003), penolakan transaksi tidak seimbang (BR-556), pengujian optimistic lock (409 Conflict), penegakan isolasi Row-Level Security (RLS 404), serta Step 13 (`13a`–`13g`): `:8100/readyz`, `GET /currencies` (`IDR`), pembuatan/upsert kurs `USD -> IDR` `SPOT`, konversi `100.0000 USD -> IDR` (`POST /exchange-rates/convert`), autentikasi JWT ke `$GW/auth/login`, dan akses terautentikasi Bearer token ke `$GW/currencies`, `$GW/exchange-rates/convert`, serta `$GW/events/stream`. Step 14 (`14a`–`14g`) menguji dimension & localization services: readiness langsung (`:8102`/`:8110`), cost/profit center, RLS lintas org (`404`), allocation rule dengan BR total tepat 100 (`422`/`201`), bahasa & translation bundle seeded system org, routing + RBAC via gateway, dan konsumsi audit `dimension.cost_center.upserted` + `localization.bundle.updated`.
-  - Status: **79/79 Live PASSED (`E2E_SMOKE_PASS`)** pada baseline 19 microservice + `api-gateway`; skrip **104 checks** (termasuk Step 13 `13a`–`13g` dan Step 14 `14a`–`14g`) tervalidasi sintaks (`bash -n`) dan siap dijalankan ulang saat Docker Desktop VM aktif.
+  - Status: **104/104 Live PASSED (`E2E_SMOKE_PASS`)** (2026-11-16) pada 25 kontainer compose healthy — live pertama untuk Step 13 (`13a`–`13g`, currency) dan Step 14 (`14a`–`14g`, dimension & localization), `13g` SSE memakai fix stream-ticket; regresi DB (document-number uniqueness, optimistic lock, RLS hardened `9f99497`) lulus live.
 - **Dataform Compilation (`src/data_modules/custom/`)**:
   - Kompilasi lokal `@dataform/cli@3.1.5` lulus (`0` error) menghasilkan **32 datasets** (`20` staging views, `4` annotation views, `8` dimensional/fact tables), **4 assertions** (`assert_fx_rate_coverage`, `assert_gl_balance`, `assert_org_referential_integrity`, `assert_tri_currency_completeness`), dan **31 source declarations**.
 - **Benchmark Performa (`db/benchmark/RESULTS.md`)**:
@@ -67,13 +67,13 @@ Status proyek terkini, pelacakan milestone, dan roadmap implementasi sistem ERP 
 
 ## 4. Langkah Selanjutnya (Immediate Next Steps)
 
-1. **Eksekusi Live Step 13 (`deploy/smoke-test.sh`)**:
-   - Restart Docker Desktop VM setelah memberi ruang disk kosong memadai, lalu jalankan `docker compose up -d --build` dan `bash deploy/smoke-test.sh` (104 checks).
+1. **Eksekusi Rencana Gap Database (`tasks/plan.md`)**:
+   - Phase 0 foundation (runner migrasi lokal, RLS smoke CI untuk 8 DB extended, seeds extended), lalu Sprint 2–5: 8 layanan extended di atas DB yang sudah bermigrasi (`fixedasset`, `budget`, `financialclose`, `consolidation`, `project`, `asset`, `maintenance`, `crm`).
 2. **Verifikasi Runtime Ekstensi Chrome (`apps/chrome-companion`)**:
    - Unit test `node --test test/companion.test.js` (15/15) telah lulus; muat ekstensi via `chrome://extensions` (*Developer mode* → *Load unpacked*) untuk uji UI live dan tambahkan screenshot 1280×800 ke `apps/chrome-companion/CHROMEWEBSTORE.md` sebelum distribusi.
 3. **Verifikasi Browser Live Backoffice SPA (`apps/web-spa`)**:
-   - `tsc --noEmit`, `eslint .`, `vite build`, dan `node --experimental-strip-types --test test/*.test.js` (11/11) telah lulus; lakukan uji interaksi browser terhadap gateway live.
-3. **Provisioning BigQuery & Eksekusi Dataform (`src/data_modules/custom`)**:
+   - Battery lulus penuh: `tsc --noEmit`, `eslint .`, `vite build`, vitest **67/67** (routeTree di-regenerate + perbaikan memo AP/AR), node tests **17/17**; lakukan uji interaksi browser terhadap gateway live.
+4. **Provisioning BigQuery & Eksekusi Dataform (`src/data_modules/custom`)**:
    - Siapkan dataset `erp_staging`, `sap_ddic_replica`, dan `erp_analytics` di GCP BigQuery ketika kredensial produksi tersedia.
-4. **Hardening Infrastruktur Produksi (M10)**:
+5. **Hardening Infrastruktur Produksi (M10)**:
    - Konfigurasi Kong API Gateway OIDC plugin, HashiCorp Vault secrets, Apicurio Avro Schema Registry, serta integrasi Hardware Web-Bridge (Web Serial/Web HID).
