@@ -148,6 +148,23 @@ membuat partisi bulanan untuk tahun berjalan. Untuk produksi, otomatisasi partis
 depan menggunakan `pg_partman` atau job terjadwal (SAD BAB 6.8). PK partitioned table
 menyertakan kunci partisi (mis. `PRIMARY KEY (id, posting_date)`), sesuai batasan PostgreSQL.
 
+## Runner Lokal (tanpa docker-compose)
+
+`db/ops/migrate.sh` mengapply migrasi via CLI [`golang-migrate`](https://github.com/golang-migrate)
+terpasang lokal (Homebrew `golang-migrate`), tanpa kontainer one-shot compose:
+
+```bash
+chmod +x db/ops/migrate.sh
+./db/ops/migrate.sh gl_db              # satu DB (nama dir = nama DB)
+./db/ops/migrate.sh all                # semua db/migrations/*_db urut nama (fail-fast)
+MIGRATE_DSN_PREFIX=postgres://postgres:secret@db.example.com:5432/ ./db/ops/migrate.sh org_db
+./db/ops/migrate.sh fixedasset_db fixedasset_db_test   # apply ke DB scratch/target lain
+```
+
+Default DSN `postgres://postgres:postgres@localhost:5432/` mengikuti kredensial layanan
+`db` docker-compose; override lewat `MIGRATE_DSN_PREFIX`. Argumen kedua berguna untuk
+menguji migrasi pada DB buangan tanpa menyentuh DB riil.
+
 ## Di Luar Cakupan (mengacu DBDD BAB 1.2)
 
 - Role/grant, HA/backup/PITR/tuning (operasional).
