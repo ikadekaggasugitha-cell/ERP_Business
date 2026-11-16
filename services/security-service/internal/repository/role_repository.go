@@ -164,6 +164,7 @@ func (r *RoleRepository) DrainAndPublish(ctx context.Context, limit int32, pub *
 		return 0, nil
 	}
 	published := 0
+	var pubErr error
 	for _, row := range rows {
 		env := eventbus.Envelope{
 			EventID:        row.ID.String(),
@@ -184,12 +185,13 @@ func (r *RoleRepository) DrainAndPublish(ctx context.Context, limit int32, pub *
 			ID:        row.ID,
 			CreatedAt: row.CreatedAt,
 		}); err != nil {
-			return published, err
+			pubErr = err
+			break
 		}
 		published++
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return published, err
 	}
-	return published, nil
+	return published, pubErr
 }

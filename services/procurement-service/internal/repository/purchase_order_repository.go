@@ -376,7 +376,8 @@ func (r *PurchaseOrderRepository) DrainAndPublish(ctx context.Context, pub *even
 			break
 		}
 		if e := q.MarkOutboxPublished(ctx, procurementdb.MarkOutboxPublishedParams{ID: row.ID, CreatedAt: row.CreatedAt}); e != nil {
-			return published, e
+			pubErr = e
+			break
 		}
 		published++
 	}

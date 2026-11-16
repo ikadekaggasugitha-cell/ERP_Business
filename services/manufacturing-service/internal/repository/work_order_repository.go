@@ -235,7 +235,8 @@ func (r *WorkOrderRepository) DrainAndPublish(ctx context.Context, pub *eventbus
 			break
 		}
 		if e := q.MarkOutboxPublished(ctx, manufacturingdb.MarkOutboxPublishedParams{ID: row.ID, CreatedAt: row.CreatedAt}); e != nil {
-			return published, e
+			pubErr = e
+			break
 		}
 		published++
 	}

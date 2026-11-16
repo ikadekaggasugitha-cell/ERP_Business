@@ -464,6 +464,7 @@ func (r *JournalRepository) DrainAndPublish(ctx context.Context, limit int32, pu
 		return 0, nil
 	}
 	published := 0
+	var pubErr error
 	for _, row := range rows {
 		if err := pub.Publish(ctx, eventbus.Envelope{
 			EventID:        row.ID.String(),
@@ -476,13 +477,15 @@ func (r *JournalRepository) DrainAndPublish(ctx context.Context, limit int32, pu
 			SchemaVersion:  "1.0",
 			Data:           row.Payload,
 		}); err != nil {
+			pubErr = err
 			break
 		}
 		if err := q.MarkOutboxPublished(ctx, gldb.MarkOutboxPublishedParams{
 			ID:        row.ID,
 			CreatedAt: row.CreatedAt,
 		}); err != nil {
-			return published, err
+			pubErr = err
+			break
 		}
 		published++
 	}
@@ -490,5 +493,5 @@ func (r *JournalRepository) DrainAndPublish(ctx context.Context, limit int32, pu
 		return 0, fmt.Errorf("commit outbox: %w", err)
 	}
 	committed = true
-	return published, nil
+	return published, pubErr
 }

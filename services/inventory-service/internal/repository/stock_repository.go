@@ -621,7 +621,8 @@ func (r *StockRepository) DrainAndPublish(ctx context.Context, pub *eventbus.Pub
 			break
 		}
 		if e := q.MarkOutboxPublished(ctx, inventorydb.MarkOutboxPublishedParams{ID: row.ID, CreatedAt: row.CreatedAt}); e != nil {
-			return published, e
+			pubErr = e
+			break
 		}
 		published++
 	}
