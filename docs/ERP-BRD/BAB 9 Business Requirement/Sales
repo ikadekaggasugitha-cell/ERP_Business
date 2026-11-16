@@ -1,0 +1,166 @@
+# 9.14 Sales Management Requirements
+
+## 9.14.1 Overview
+
+Sales Management mengelola seluruh siklus penjualan mulai dari permintaan penawaran harga (*Sales Quotation*), pembuatan pesanan penjualan (*Sales Order*), pengiriman barang (*Delivery Order*), hingga penerbitan faktur penjualan (*Sales Invoice*).
+
+Modul ini menjadi titik temu antara kebutuhan pelanggan yang dikelola pada Customer Relationship Management (CRM), ketersediaan barang yang dikelola pada Inventory Management, serta pencatatan piutang yang dikelola pada Accounts Receivable. Seluruh transaksi penjualan harus dapat ditelusuri mulai dari permintaan awal pelanggan hingga pelunasan.
+
+ERP harus mendukung berbagai skema penjualan (retail, grosir, kontrak, proyek), *price list* dan kebijakan diskon yang dapat dikonfigurasi per organisasi, pelanggan, maupun kategori produk, serta *workflow* persetujuan berjenjang berdasarkan nilai transaksi, jenis pelanggan, dan struktur organisasi, sejalan dengan prinsip Configuration over Customization dan Organization Tree First.
+
+---
+
+# 9.14.2 Business Requirement Catalogue
+
+## BR-766 – Sales Order Master
+
+| Attribute           | Description                                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-766                                                                                                                               |
+| Requirement Name    | Sales Order Master                                                                                                                   |
+| Category            | Sales Management                                                                                                                     |
+| Priority            | Critical                                                                                                                             |
+| Business Objective  | BO-003, BO-009                                                                                                                       |
+| Stakeholder Owner   | SH-034 (Sales Department)                                                                                                            |
+| Description         | Sistem harus menyediakan Sales Order sebagai dokumen utama pesanan penjualan yang mencatat pelanggan, produk, kuantitas, harga, dan jadwal pengiriman. |
+| Business Rationale  | Sales Order menjadi dasar bagi seluruh proses hilir (reservasi stok, pengiriman, penagihan) sehingga harus terstruktur dan konsisten. |
+| Business Value      | Standarisasi proses penjualan dan visibilitas status pesanan secara end-to-end.                                                      |
+| Acceptance Criteria | Sales Order dapat dibuat, diubah sebelum disetujui, dan ditelusuri statusnya sejak Draft hingga Completed.                           |
+
+---
+
+## BR-767 – Sales Quotation Management
+
+| Attribute        | Description                                                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-767                                                                                                                         |
+| Requirement Name | Sales Quotation Management                                                                                                     |
+| Priority         | High                                                                                                                           |
+| Description      | Sistem harus mendukung pembuatan penawaran harga (*Sales Quotation*) kepada pelanggan sebelum Sales Order dibuat, termasuk masa berlaku penawaran. |
+
+---
+
+## BR-768 – Price List and Discount Policy
+
+| Attribute        | Description                                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-768                                                                                                                         |
+| Requirement Name | Price List and Discount Policy                                                                                                 |
+| Priority         | Critical                                                                                                                       |
+| Description      | Sistem harus mendukung price list dan kebijakan diskon yang dapat dikonfigurasi per organisasi, pelanggan, atau kategori produk, dengan periode berlaku tertentu. |
+
+---
+
+## BR-769 – Sales Order Approval Workflow
+
+| Attribute        | Description                                                                                                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-769                                                                                                                        |
+| Requirement Name | Sales Order Approval Workflow                                                                                                 |
+| Priority         | Critical                                                                                                                      |
+| Description      | Sales Order harus melalui alur persetujuan berjenjang berdasarkan nilai transaksi, jenis pelanggan, dan kredit limit sebelum diproses lebih lanjut. |
+
+---
+
+## BR-770 – Stock Reservation Integration
+
+| Attribute        | Description                                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-770                                                                                                                 |
+| Requirement Name | Stock Reservation Integration                                                                                          |
+| Priority         | Critical                                                                                                               |
+| Description      | Sistem harus melakukan reservasi stok pada modul Inventory begitu Sales Order disetujui untuk menjamin ketersediaan barang. |
+
+---
+
+## BR-771 – Delivery Order Management
+
+| Attribute        | Description                                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-771                                                                                                         |
+| Requirement Name | Delivery Order Management                                                                                      |
+| Priority         | Critical                                                                                                       |
+| Description      | Sistem harus mendukung pembuatan Delivery Order berdasarkan Sales Order, termasuk pengiriman parsial (partial shipment). |
+
+---
+
+## BR-772 – Sales Invoice Generation
+
+| Attribute           | Description                                                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-772                                                                                                             |
+| Requirement Name    | Sales Invoice Generation                                                                                           |
+| Priority            | Critical                                                                                                           |
+| Description         | Sistem harus menghasilkan Sales Invoice berdasarkan Delivery Order atau Sales Order yang telah dikonfirmasi.       |
+| Acceptance Criteria | Sales Invoice otomatis terkirim ke modul Accounts Receivable untuk pencatatan piutang.                             |
+
+---
+
+## BR-773 – Sales Return Management
+
+| Attribute        | Description                                                                                                 |
+| ---------------- | --------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-773                                                                                                    |
+| Requirement Name | Sales Return Management                                                                                   |
+| Priority         | High                                                                                                      |
+| Description      | Sistem harus mendukung retur penjualan (barang maupun sebagian nilai invoice) dengan dampak otomatis terhadap stok dan piutang. |
+
+---
+
+## BR-774 – Multi-Channel Sales Support
+
+| Attribute        | Description                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-774                                                                                                        |
+| Requirement Name | Multi-Channel Sales Support                                                                                    |
+| Priority         | Medium                                                                                                        |
+| Description      | Sistem harus mendukung pencatatan penjualan dari berbagai kanal (langsung, cabang, proyek, digital) dalam satu platform yang sama. |
+
+---
+
+## BR-775 – Sales Performance Reporting
+
+| Attribute        | Description                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-775                                                                                                  |
+| Requirement Name | Sales Performance Reporting                                                                             |
+| Priority         | High                                                                                                    |
+| Description      | Sistem harus menyediakan laporan kinerja penjualan (per produk, pelanggan, sales person, organisasi, dan periode). |
+
+---
+
+# 9.14.3 Sales Business Rules Reference
+
+| Business Rule ID | Description                                                                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| BRule-SALES-001   | Sales Order tidak dapat diproses apabila Customer berstatus Suspended atau Blocked (credit hold).               |
+| BRule-SALES-002   | Delivery Order hanya dapat dibuat setelah Sales Order berstatus Approved.                                       |
+| BRule-SALES-003   | Sales Invoice harus mengacu pada Delivery Order atau Sales Order yang valid.                                     |
+| BRule-SALES-004   | Perubahan harga setelah Sales Order disetujui memerlukan otorisasi ulang (re-approval).                         |
+| BRule-SALES-005   | Retur penjualan hanya dapat diproses terhadap Sales Invoice yang tercatat dan berada dalam masa retur yang berlaku. |
+| BRule-SALES-006   | Seluruh transaksi penjualan wajib tercatat pada Audit Trail.                                                     |
+
+---
+
+# 9.14.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process             |
+| -------------- | ------------------ | ----------- | --------------------------- |
+| BR-766         | BO-003              | SH-034      | Sales Order Administration  |
+| BR-767         | BO-009              | SH-034      | Quotation Management        |
+| BR-768         | BO-009              | SH-034      | Pricing Configuration       |
+| BR-769         | BO-011              | SH-034      | Sales Approval Workflow     |
+| BR-770         | BO-014              | SH-032      | Inventory Integration       |
+| BR-771         | BO-009              | SH-033      | Delivery Management         |
+| BR-772         | BO-022              | SH-003      | Invoicing & Receivable      |
+| BR-773         | BO-014              | SH-034      | Sales Return Handling       |
+| BR-774         | BO-006              | SH-034      | Multi-Channel Sales         |
+| BR-775         | BO-008              | SH-034      | Sales Analytics             |
+
+---
+
+# 9.14.5 Summary
+
+Modul **Sales Management** menyediakan proses penjualan yang terintegrasi penuh dengan CRM, Inventory, dan Accounts Receivable, mendukung berbagai skema harga, workflow persetujuan berjenjang, serta pelaporan kinerja penjualan lintas organisasi.
+
+Seluruh requirement pada bagian ini akan diturunkan lebih lanjut menjadi Functional Requirements, desain basis data, spesifikasi API, dan skenario pengujian pada dokumen lanjutan.

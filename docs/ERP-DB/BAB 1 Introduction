@@ -1,0 +1,110 @@
+# BAB 1. Introduction
+
+## 1.1 Purpose
+
+Database Design Document (DBDD) ini mendefinisikan **desain fisik basis data PostgreSQL** untuk platform ERP multi-organisasi. DBDD menerjemahkan arsitektur data pada **SAD BAB 6** menjadi struktur konkret: skema, tabel, kolom, tipe data, kunci, indeks, partisi, dan kebijakan keamanan level baris (RLS).
+
+Tujuan dokumen:
+
+* Menyediakan **Entity Relationship Diagram (ERD)** dan **Data Dictionary** sebagai acuan implementasi skema dan penulisan migrasi.
+* Menetapkan **standar & konvensi** basis data yang seragam lintas seluruh layanan (BAB 2).
+* Menjaga keterlacakan dari kebutuhan bisnis (BRD BR-xxx) dan layanan (SAD SVC-xxx) menuju struktur tabel fisik.
+* Menjadi dasar penyusunan **skrip migrasi** (`golang-migrate`, strategi *expand–contract* — SAD BAB 10.4) dan **API Specification** turunan.
+
+DBDD **tidak** mendefinisikan aturan bisnis baru; aturan level field mengacu pada **BRD BAB 9 (BR-xxx)** dan **BAB 10 (Business Rules)**.
+
+## 1.2 Scope
+
+### In Scope
+
+* Desain fisik per basis data layanan (database-per-service): tabel, kolom, tipe, *constraint*, indeks, partisi.
+* Pola multi-tenancy fisik (schema-per-tenant vs shared + RLS) dan kebijakan RLS.
+* Tabel teknis lintas layanan: *outbox*, *processed_events*, audit, read model, konfigurasi.
+* Strategi indeks, partisi, retensi, dan arsip pada level fisik.
+
+### Out of Scope
+
+* Logika bisnis & validasi aplikatif (di layanan Go) — mengacu BRD/SAD.
+* Kontrak API/event (OpenAPI/Protobuf) — pada artefak **API Specification** (`API-xxx`).
+* Konfigurasi operasional basis data (HA/backup/PITR/tuning) — pada artefak **Deployment/Operations** (arsitekturnya di SAD BAB 6.9 & 8.8).
+* Data seed/master awal — pada artefak **Data Migration** (SAD BAB 6.10).
+
+## 1.3 Relationship to SAD and BRD
+
+```text
+BRD BAB 9 (BR-xxx, atribut bisnis) ──► SAD BAB 4 (SVC-xxx) + BAB 6 (Data Architecture)
+                                              │
+                                              ▼
+                          ►►  DATABASE DESIGN DOCUMENT (dokumen ini)  ◄◄
+                                              │
+                                              ▼
+                           Migrasi skema (golang-migrate) + API Specification
+```
+
+| Sumber                       | Kontribusi ke DBDD                                        |
+| ---------------------------- | --------------------------------------------------------- |
+| BRD BAB 9 (BR-xxx)           | Atribut bisnis & aturan yang menjadi kolom/constraint.     |
+| SAD BAB 4.5 (SVC-xxx)        | Kepemilikan basis data per layanan.                       |
+| SAD BAB 6 (Data Architecture)| Prinsip: database-per-service, tenancy, RLS, partisi, konsistensi. |
+| SAD BAB 5 (Event/Outbox)     | Tabel *outbox* & *processed_events*.                      |
+
+## 1.4 Database Topology (Database-per-Service)
+
+Sesuai ADR-001, setiap layanan memiliki basis datanya sendiri. Tidak ada *foreign key* lintas-basis-data; relasi lintas layanan diwakili oleh **referensi logis** (mis. `organization_id`, `customer_id`) yang divalidasi di aplikasi/via event, bukan *constraint* fisik.
+
+| Basis Data          | Layanan (SVC)                 | Domain                          |
+| ------------------- | ------------------------------ | ------------------------------- |
+| `org_db`            | SVC-001 org-service            | Organization Management         |
+| `user_db`           | SVC-002 user-service           | User Management                 |
+| `security_db`       | SVC-003 security-service       | Security Management             |
+| `workflow_db`       | SVC-004 workflow-service       | Workflow Management             |
+| `masterdata_db`     | SVC-005 masterdata-service     | Master Data Management          |
+| `coa_db`            | SVC-006 coa-service            | Chart of Accounts               |
+| `currency_db`       | (currency-service)             | Currency Management             |
+| `gl_db`             | SVC-007 gl-service             | General Ledger                  |
+| `ap_db`             | SVC-008 ap-service             | Accounts Payable                |
+| `ar_db`             | SVC-009 ar-service             | Accounts Receivable             |
+| `tax_db`            | SVC-010 tax-service            | Tax Management                  |
+| `treasury_db`       | SVC-011 treasury-cashbank      | Treasury, Cash & Bank           |
+| `procurement_db`    | SVC-012 procurement-service    | Procurement                     |
+| `inventory_db`      | SVC-013 inventory-service      | Inventory                       |
+| `manufacturing_db`  | SVC-014 manufacturing-service  | Manufacturing                   |
+| `sales_db`          | SVC-015 sales-service          | Sales                           |
+| `hr_db`             | SVC-016 hr-service             | Human Resource Management       |
+| `payroll_db`        | SVC-017 payroll-service        | Payroll                         |
+| `audit_db`          | SVC-018 audit-service          | Audit Trail                     |
+| `reporting_db`      | SVC-019 reporting-service      | Reporting/Dashboard (read model)|
+| `fixedasset_db`     | SVC-020 fixedasset-service     | Fixed Asset (BAB 9.2)           |
+| `dimension_db`      | SVC-021 dimension-service      | Cost & Profit Center (BAB 9.3)  |
+| `budget_db`         | SVC-022 budget-service         | Budget Management (BAB 9.4)     |
+| `financialclose_db` | SVC-023 financial-close-service| Financial Close (BAB 9.5)       |
+| `consolidation_db`  | SVC-024 consolidation-service  | Financial Consolidation (BAB 9.6)|
+| `project_db`        | SVC-025 project-service        | Project Management (BAB 9.7)    |
+| `asset_db`          | SVC-026 asset-service          | Asset Management (BAB 9.8)      |
+| `maintenance_db`    | SVC-027 maintenance-service    | Maintenance Management (BAB 9.9)|
+| `crm_db`            | SVC-028 crm-service            | Customer Relationship Mgmt (BAB 9.10)|
+| `localization_db`   | SVC-029 localization-service   | Localization & Multi-Language (BAB 9.11)|
+
+Domain-domain lanjutan (Fixed Asset, Cost/Profit Center, Budget, Financial Close, Consolidation, Project, Asset, Maintenance, CRM, Localization) telah didesain penuh pada **BAB 9 (Extended Domain Schema)**.
+
+## 1.5 Identifier and Notation Conventions
+
+| Prefix / Notasi     | Makna                                                       |
+| ------------------- | ----------------------------------------------------------- |
+| `db.table`          | Nama tabel fisik (mis. `gl.journal_entry`).                 |
+| DBS-xxx             | Database Standard (aturan konvensi, BAB 2).                 |
+| PK / FK(→)          | Primary Key / Foreign Key (referensi).                      |
+| U                   | Unique constraint / unique index.                           |
+| IDX                 | Index.                                                      |
+| BR-xxx / SVC-xxx    | Referensi silang ke BRD / SAD.                              |
+
+ERD menggunakan notasi **Mermaid `erDiagram`**. Data Dictionary disajikan sebagai tabel: `Column | Type | Null | Key | Description`.
+
+## 1.6 How to Read This Document
+
+* **BAB 2** wajib dibaca lebih dulu — memuat standar & konvensi yang berlaku untuk seluruh tabel (kolom umum, tipe, RLS, partisi) sehingga tidak diulang per tabel.
+* **BAB 3–7** memuat desain per domain (ERD + Data Dictionary), dikelompokkan mengikuti subdomain SAD (Platform/Core, Financial, Operational, HR).
+* **BAB 8** memuat tabel teknis lintas layanan, strategi indeks/partisi konsolidasi, dan matriks traceability.
+* Setiap tabel mengasumsikan **Common Columns** (BAB 2.4) kecuali dinyatakan lain; Data Dictionary per tabel hanya mencantumkan kolom domain-spesifik.
+
+---

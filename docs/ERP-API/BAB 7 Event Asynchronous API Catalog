@@ -1,0 +1,152 @@
+# BAB 7. Event / Asynchronous API Catalog
+
+## 7.1 Overview
+
+Bab ini mendefinisikan **kontrak API asinkron** — *event* yang diterbitkan dan dikonsumsi melalui **Apache Kafka**. Event adalah *first-class contract* setara REST: perubahan skemanya tunduk pada tata kelola versi (Apicurio). Bab ini merealisasikan INT-004, ADR-005 (Selective Exactly-Once), dan ADR-008 (Outbox), melengkapi katalog *topic* pada SAD BAB 5 & 13.10.
+
+Setiap event dipetakan ke tabel `outbox` sumbernya (DBDD BAB 2.10); konsumen wajib idempoten (BAB 2.10 API / DBDD `processed_event`).
+
+---
+
+## 7.2 Event Envelope and Schema Governance (Apicurio)
+
+### 7.2.1 Envelope Standar
+
+Seluruh event memakai *envelope* konsisten (header + payload):
+
+```json
+{
+  "eventId": "uuid",
+  "eventType": "erp.gl.journal.posted.v1",
+  "occurredAt": "2026-08-05T10:00:00Z",
+  "organizationId": "uuid",
+  "correlationId": "uuid",
+  "causationId": "uuid",
+  "producer": "gl-service",
+  "schemaVersion": 1,
+  "payload": { /* skema spesifik event */ }
+}
+```
+
+* `eventId` — identitas unik (deduplikasi/idempotensi konsumen).
+* `correlationId` — korelasi lintas layanan (SAD BAB 11.6); `causationId` — event/permintaan pemicu.
+* Header Kafka menyalin `eventId`, `eventType`, `correlationId`, `organizationId` untuk *routing*/*filtering* tanpa deserialisasi payload.
+
+### 7.2.2 Tata Kelola Skema (Apicurio)
+
+| Aturan                                                                       | Referensi        |
+| ---------------------------------------------------------------------------- | ---------------- |
+| Skema payload didaftarkan pada **Apicurio** (Avro/Protobuf).                 | ADR-003          |
+| Kompatibilitas **BACKWARD** (default) — konsumen lama tetap dapat memproses. | NFR-014          |
+| Perubahan *breaking* menaikkan versi mayor topic (`.v2`).                     | INT-014          |
+| Validasi skema pada CI sebelum *deploy* (gerbang kontrak).                    | SAD BAB 10.6     |
+
+---
+
+## 7.3 Topic Catalog
+
+Konvensi nama: `erp.<domain>.<entity>.<event>.v<versi>` (SAD BAB 13.10.2). *Partition key* = `organization_id`/*aggregate id*.
+
+| Topic                                  | Produsen (SVC)        | Konsumen Utama                     | Delivery            | INT      |
+| -------------------------------------- | --------------------- | ----------------------------------- | ------------------- | -------- |
+| `erp.masterdata.customer.upserted.v1`  | SVC-005               | sales, ar, crm                      | At-Least-Once       | BO-010   |
+| `erp.masterdata.vendor.upserted.v1`    | SVC-005               | procurement, ap                     | At-Least-Once       | BO-010   |
+| `erp.masterdata.item.upserted.v1`      | SVC-005               | inventory, sales, procurement       | At-Least-Once       | BO-010   |
+| `erp.workflow.approval.completed.v1`   | SVC-004               | modul asal dokumen                  | At-Least-Once       | INT-004  |
+| `erp.sales.order.confirmed.v1`         | SVC-015               | inventory, reporting                | At-Least-Once       | INT-001  |
+| `erp.inventory.stock.reserved.v1`      | SVC-013               | sales, manufacturing                | **Exactly-Once**    | INT-001  |
+| `erp.inventory.goods.issued.v1`        | SVC-013               | ar, gl                              | **Exactly-Once**    | INT-001  |
+| `erp.procurement.po.approved.v1`       | SVC-012               | inventory                           | At-Least-Once       | INT-002  |
+| `erp.procurement.goods.received.v1`    | SVC-012               | ap, inventory                       | At-Least-Once       | INT-002  |
+| `erp.ap.invoice.recorded.v1`           | SVC-008               | gl, treasury                        | **Exactly-Once**    | INT-002  |
+| `erp.ar.invoice.issued.v1`             | SVC-009               | gl, tax                             | **Exactly-Once**    | INT-001  |
+| `erp.gl.journal.posted.v1`             | SVC-007               | reporting, audit                    | **Exactly-Once**    | muara    |
+| `erp.cashbank.payment.settled.v1`      | SVC-011               | ar, ap, gl                          | **Exactly-Once**    | INT-005  |
+| `erp.hr.employee.updated.v1`           | SVC-016               | payroll                             | At-Least-Once       | INT-003  |
+| `erp.payroll.run.completed.v1`         | SVC-017               | gl, treasury                        | **Exactly-Once**    | INT-003  |
+| `erp.manufacturing.workorder.completed.v1` | SVC-014           | inventory                           | At-Least-Once       | 9.9      |
+| `erp.audit.event.recorded.v1`          | seluruh layanan       | audit                               | At-Least-Once       | 9.20     |
+
+Setiap topic memiliki pasangan `.dlq` dan (opsional) `.retry` (BAB 7.6).
+
+---
+
+## 7.4 Key Event Schemas
+
+**`erp.gl.journal.posted.v1`** (payload):
+
+```json
+{
+  "journalEntryId": "uuid",
+  "journalNo": "GL-2026-000123",
+  "financialOrganizationId": "uuid",
+  "ledgerId": "uuid",
+  "fiscalPeriodId": "uuid",
+  "postingDate": "2026-08-05",
+  "currency": "IDR",
+  "totalDebit": "1000.0000",
+  "totalCredit": "1000.0000",
+  "sourceModule": "AR",
+  "sourceDocumentRef": "AR-INV-000045"
+}
+```
+
+**`erp.sales.order.confirmed.v1`** (payload):
+
+```json
+{
+  "salesOrderId": "uuid",
+  "soNo": "SO-2026-000045",
+  "customerId": "uuid",
+  "currency": "IDR",
+  "lines": [ { "itemId": "uuid", "orderQty": "10.0000", "unitPrice": "50000.0000" } ]
+}
+```
+
+**`erp.inventory.reservation.failed.v1`** (kompensasi Saga INT-001):
+
+```json
+{
+  "salesOrderId": "uuid",
+  "itemId": "uuid",
+  "requestedQty": "10.0000",
+  "availableQty": "3.0000",
+  "reason": "INSUFFICIENT_STOCK"
+}
+```
+
+Skema payload lengkap per event dikelola sebagai artefak Avro/Protobuf di Apicurio (diturunkan dari katalog ini).
+
+---
+
+## 7.5 Delivery Semantics and Consumer Guidance
+
+Menerapkan **Selective Exactly-Once** (ADR-005):
+
+| Kelas Event                          | Produsen                         | Konsumen                                     |
+| ------------------------------------ | -------------------------------- | -------------------------------------------- |
+| **Exactly-Once** (finansial absolut) | Kafka transactions + Outbox      | `isolation.level=read_committed`, commit offset transaksional |
+| **At-Least-Once** (lainnya)          | Producer idempoten + Outbox      | **Wajib idempoten** (dedup `eventId` via `processed_event`) |
+
+**Panduan konsumen (wajib):**
+
+1. Cek `eventId` pada `processed_event`; jika sudah ada, *skip* (idempotensi).
+2. Proses dalam transaksi lokal; tulis `processed_event` + perubahan data atomik.
+3. Kegagalan transien → biarkan Kafka *redeliver*; kegagalan permanen → arahkan ke `.dlq`.
+4. Jaga *ordering* per `organizationId`/*aggregate* (disediakan partition key).
+
+---
+
+## 7.6 Dead Letter and Retry
+
+* Event yang gagal diproses setelah *retry* diarahkan ke **`<topic>.dlq`** dengan metadata kegagalan (`errorReason`, `attempts`, `originalTopic`).
+* Topic `.retry` (opsional) untuk *retry with backoff* sebelum DLQ.
+* DLQ dipantau (SAD BAB 9.6); pemrosesan ulang manual/terotomasi setelah perbaikan.
+
+---
+
+## 7.7 Summary
+
+Bab ini mendefinisikan katalog **API asinkron**: *envelope* event standar (dengan `eventId`, `correlationId`, `causationId`), tata kelola skema via **Apicurio** (kompatibilitas BACKWARD, versioning topic), **topic catalog** lengkap dengan kelas *delivery* (Selective Exactly-Once), skema event kunci, panduan konsumen idempoten, serta mekanisme DLQ/retry. Event diperlakukan sebagai kontrak setara REST dan menjadi tulang punggung integrasi antar-modul (INT-001–004) sesuai ADR-005/008.
+
+---

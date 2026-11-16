@@ -1,0 +1,207 @@
+# 9.5.3.5 Exchange Rate Type Requirements
+
+---
+
+# 9.5.3.5.1 Overview
+
+Exchange Rate Type merupakan master konfigurasi yang mendefinisikan kategori atau tujuan penggunaan nilai tukar mata uang dalam Enterprise Resource Planning (ERP).
+
+Exchange Rate Type memungkinkan organisasi menggunakan beberapa jenis kurs untuk pasangan mata uang yang sama sesuai kebutuhan akuntansi, pelaporan, treasury, perpajakan, maupun operasional bisnis. Pemisahan antara jenis kurs dan nilai kurs memberikan fleksibilitas dalam memenuhi berbagai standar akuntansi internasional, regulasi lokal, serta kebijakan internal perusahaan.
+
+Setiap Exchange Rate yang disimpan dalam sistem wajib mengacu pada satu Exchange Rate Type yang valid.
+
+---
+
+# 9.5.3.5.2 Business Capability
+
+Exchange Rate Type menyediakan kapabilitas berikut:
+
+* Pengelolaan master jenis kurs.
+* Konfigurasi tipe kurs standar dan kustom.
+* Penetapan tujuan penggunaan (*usage context*).
+* Assignment ke Financial Organization, Ledger, dan Financial Book.
+* Penetapan tipe kurs bawaan (*default*).
+* Effective dating dan versioning.
+* Lifecycle management.
+* Audit trail.
+* Integrasi dengan Currency Conversion Policy.
+* Dukungan multi-GAAP dan multi-country.
+
+---
+
+# 9.5.3.5.3 Business Requirement Catalogue
+
+## BR-121 – Exchange Rate Type Master
+
+| Attribute           | Description                                                                                           |
+| ------------------- | ----------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-121                                                                                                |
+| Requirement Name    | Exchange Rate Type Master                                                                             |
+| Category            | Exchange Rate Type                                                                                    |
+| Priority            | Critical                                                                                              |
+| Business Objective  | BO-009                                                                                                |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                      |
+| Description         | Sistem harus menyediakan master Exchange Rate Type yang dapat dikonfigurasi tanpa perubahan aplikasi. |
+| Business Value      | Memungkinkan penggunaan berbagai jenis kurs sesuai kebutuhan bisnis dan regulasi.                     |
+| Acceptance Criteria | Administrator dapat membuat, mengubah, mengaktifkan, dan menonaktifkan Exchange Rate Type.            |
+
+---
+
+## BR-122 – Standard & Custom Rate Type
+
+| Attribute        | Description                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-122                                                                                                                                      |
+| Requirement Name | Standard & Custom Rate Type                                                                                                                 |
+| Priority         | Critical                                                                                                                                    |
+| Description      | Sistem harus menyediakan tipe kurs bawaan (Spot, Average, Closing, Historical, Corporate, Tax) serta mendukung penambahan tipe kurs kustom. |
+
+---
+
+## BR-123 – Usage Context Assignment
+
+| Attribute        | Description                                                                                                                                                            |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-123                                                                                                                                                                 |
+| Requirement Name | Usage Context Assignment                                                                                                                                               |
+| Priority         | Critical                                                                                                                                                               |
+| Description      | Setiap Exchange Rate Type harus dapat dikaitkan dengan konteks penggunaan seperti transaksi operasional, pelaporan, konsolidasi, treasury, perpajakan, atau budgeting. |
+
+---
+
+## BR-124 – Organization Scope
+
+| Attribute        | Description                                                                                                                                               |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-124                                                                                                                                                    |
+| Requirement Name | Organization Scope                                                                                                                                        |
+| Priority         | High                                                                                                                                                      |
+| Description      | Exchange Rate Type harus dapat diterapkan secara global atau dibatasi pada Financial Organization, Ledger, Financial Book, maupun Business Unit tertentu. |
+
+---
+
+## BR-125 – Default Exchange Rate Type
+
+| Attribute        | Description                                                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-125                                                                                                                                                               |
+| Requirement Name | Default Exchange Rate Type                                                                                                                                           |
+| Priority         | High                                                                                                                                                                 |
+| Description      | Sistem harus mendukung penetapan satu Exchange Rate Type sebagai default untuk kombinasi Financial Organization, Ledger, Financial Book, dan proses bisnis tertentu. |
+
+---
+
+## BR-126 – Effective Dating
+
+| Attribute        | Description                                                                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-126                                                                                                                                       |
+| Requirement Name | Effective Dating                                                                                                                             |
+| Priority         | High                                                                                                                                         |
+| Description      | Setiap Exchange Rate Type harus memiliki tanggal mulai dan akhir berlaku sehingga perubahan konfigurasi tidak memengaruhi histori transaksi. |
+
+---
+
+## BR-127 – Versioning Support
+
+| Attribute        | Description                                                                                                                              |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-127                                                                                                                                   |
+| Requirement Name | Exchange Rate Type Versioning                                                                                                            |
+| Priority         | High                                                                                                                                     |
+| Description      | Sistem harus mendukung versioning terhadap konfigurasi Exchange Rate Type agar perubahan kebijakan tidak memengaruhi transaksi historis. |
+
+---
+
+## BR-128 – Lifecycle Management
+
+| Attribute        | Description                                                                                                                 |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-128                                                                                                                      |
+| Requirement Name | Exchange Rate Type Lifecycle                                                                                                |
+| Priority         | Medium                                                                                                                      |
+| Description      | Sistem harus mendukung status Draft, Active, Suspended, Deprecated, Inactive, dan Archived untuk setiap Exchange Rate Type. |
+
+---
+
+## BR-129 – Dependency Validation
+
+| Attribute        | Description                                                                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-129                                                                                                                                             |
+| Requirement Name | Dependency Validation                                                                                                                              |
+| Priority         | Critical                                                                                                                                           |
+| Description      | Sistem harus mencegah penghapusan Exchange Rate Type yang telah digunakan oleh Exchange Rate, Currency Conversion Policy, atau transaksi keuangan. |
+
+---
+
+## BR-130 – Exchange Rate Type Auditability
+
+| Attribute        | Description                                                                                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-130                                                                                                                                                                          |
+| Requirement Name | Exchange Rate Type Auditability                                                                                                                                                 |
+| Priority         | Critical                                                                                                                                                                        |
+| Description      | Seluruh perubahan konfigurasi Exchange Rate Type harus dicatat dalam Audit Trail lengkap dengan identitas pengguna, waktu perubahan, serta nilai sebelum dan sesudah perubahan. |
+
+---
+
+# 9.5.3.5.4 Business Rules
+
+| Business Rule ID | Description                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| BRule-ERT-001    | Setiap Exchange Rate Type harus memiliki kode unik.                                                               |
+| BRule-ERT-002    | Setiap Exchange Rate wajib mengacu pada satu Exchange Rate Type yang aktif.                                       |
+| BRule-ERT-003    | Satu Currency Pair dapat memiliki lebih dari satu Exchange Rate Type pada tanggal efektif yang sama.              |
+| BRule-ERT-004    | Hanya satu Exchange Rate Type yang dapat menjadi default untuk kombinasi ruang lingkup yang sama pada satu waktu. |
+| BRule-ERT-005    | Exchange Rate Type yang telah digunakan tidak boleh dihapus secara permanen.                                      |
+| BRule-ERT-006    | Perubahan konfigurasi Exchange Rate Type tidak boleh mengubah histori transaksi yang telah diposting.             |
+| BRule-ERT-007    | Seluruh perubahan konfigurasi wajib tercatat dalam Audit Trail.                                                   |
+
+---
+
+# 9.5.3.5.5 Data Attributes
+
+| Attribute                 | Description                                                           |
+| ------------------------- | --------------------------------------------------------------------- |
+| Exchange Rate Type ID     | Identitas unik sistem.                                                |
+| Type Code                 | Kode jenis kurs.                                                      |
+| Type Name                 | Nama jenis kurs.                                                      |
+| Description               | Deskripsi bisnis.                                                     |
+| Usage Context             | Transaction, Reporting, Consolidation, Treasury, Tax, Budget, Custom. |
+| Organization Scope        | Financial Organization terkait.                                       |
+| Ledger Scope              | Ledger terkait.                                                       |
+| Financial Book Scope      | Financial Book terkait.                                               |
+| Default Flag              | Penanda tipe kurs bawaan.                                             |
+| Effective From            | Tanggal mulai berlaku.                                                |
+| Effective To              | Tanggal akhir berlaku.                                                |
+| Status                    | Draft, Active, Suspended, Deprecated, Inactive, Archived.             |
+| Version                   | Nomor versi konfigurasi.                                              |
+| Remarks                   | Catatan bisnis.                                                       |
+| Created By / Created Date | Informasi pembuatan data.                                             |
+| Updated By / Updated Date | Informasi perubahan terakhir.                                         |
+
+---
+
+# 9.5.3.5.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                    |
+| -------------- | ------------------ | ----------- | --------------------------------- |
+| BR-121         | BO-009             | SH-003      | Exchange Rate Type Administration |
+| BR-122         | BO-009             | SH-003      | Rate Type Configuration           |
+| BR-123         | BO-010             | SH-003      | Business Process Assignment       |
+| BR-124         | BO-009             | SH-003      | Organization Scope Management     |
+| BR-125         | BO-010             | SH-003      | Default Rate Type Selection       |
+| BR-126         | BO-029             | SH-010      | Effective Date Governance         |
+| BR-127         | BO-029             | SH-010      | Version Management                |
+| BR-128         | BO-029             | SH-010      | Lifecycle Management              |
+| BR-129         | BO-029             | SH-010      | Dependency Validation             |
+| BR-130         | BO-029             | SH-010      | Audit & Compliance                |
+
+---
+
+# 9.5.3.5.7 Summary
+
+Exchange Rate Type merupakan lapisan konfigurasi yang memisahkan tujuan penggunaan kurs dari nilai tukarnya. Dengan desain ini, ERP mampu mendukung berbagai standar akuntansi, regulasi, dan kebijakan perusahaan tanpa menduplikasi data Exchange Rate. Setiap proses bisnis dapat memilih jenis kurs yang sesuai secara konsisten, sementara histori transaksi tetap terjaga dan dapat diaudit.
+
+Seluruh requirement pada bagian ini menjadi dasar bagi sub-domain **Exchange Rate**, **Currency Conversion Policy**, **Foreign Currency Revaluation**, **Currency Translation**, dan **Financial Consolidation**.

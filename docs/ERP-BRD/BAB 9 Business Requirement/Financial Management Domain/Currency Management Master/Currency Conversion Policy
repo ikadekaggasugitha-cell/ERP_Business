@@ -1,0 +1,215 @@
+# 9.5.3.9 Currency Conversion Policy Requirements
+
+---
+
+# 9.5.3.9.1 Overview
+
+Currency Conversion Policy merupakan konfigurasi bisnis yang mendefinisikan aturan pemilihan, validasi, dan penggunaan nilai tukar mata uang pada seluruh proses bisnis Enterprise Resource Planning (ERP).
+
+Policy ini menjadi penghubung antara kebutuhan bisnis dengan data Exchange Rate yang tersedia. Melalui Currency Conversion Policy, organisasi dapat menentukan provider yang diprioritaskan, jenis kurs yang digunakan, strategi pencarian kurs, toleransi terhadap data yang tidak tersedia, hingga aturan fallback apabila kurs utama tidak dapat digunakan.
+
+Dengan memisahkan kebijakan konversi dari data Exchange Rate, ERP dapat memenuhi kebutuhan multi-company, multi-country, multi-ledger, multi-GAAP, dan multi-currency tanpa mengubah data historis maupun struktur transaksi.
+
+---
+
+# 9.5.3.9.2 Business Capability
+
+Currency Conversion Policy menyediakan kapabilitas berikut:
+
+* Konfigurasi kebijakan konversi mata uang.
+* Penentuan Exchange Rate Type berdasarkan proses bisnis.
+* Penentuan Exchange Rate Provider prioritas.
+* Strategi fallback Exchange Rate.
+* Penentuan metode konversi.
+* Assignment ke Financial Organization, Ledger, Financial Book, Business Unit, maupun Legal Entity.
+* Effective dating.
+* Versioning.
+* Approval workflow.
+* Audit trail.
+* Rule evaluation engine.
+* Multi-country compliance.
+
+---
+
+# 9.5.3.9.3 Business Requirement Catalogue
+
+## BR-161 – Currency Conversion Policy Master
+
+| Attribute           | Description                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-161                                                                                                          |
+| Requirement Name    | Currency Conversion Policy Master                                                                               |
+| Category            | Currency Conversion Policy                                                                                      |
+| Priority            | Critical                                                                                                        |
+| Business Objective  | BO-009                                                                                                          |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                |
+| Description         | Sistem harus menyediakan master Currency Conversion Policy yang dapat dikonfigurasi tanpa perubahan aplikasi.   |
+| Business Value      | Memungkinkan organisasi mengelola kebijakan konversi mata uang secara terpusat.                                 |
+| Acceptance Criteria | Administrator dapat membuat, mengubah, mengaktifkan, dan menonaktifkan kebijakan konversi sesuai kewenangannya. |
+
+---
+
+## BR-162 – Business Process Assignment
+
+| Attribute        | Description                                                                                                                                                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-162                                                                                                                                                                                                                |
+| Requirement Name | Business Process Assignment                                                                                                                                                                                           |
+| Priority         | Critical                                                                                                                                                                                                              |
+| Description      | Policy harus dapat diterapkan pada proses bisnis tertentu seperti Accounts Payable, Accounts Receivable, General Ledger, Treasury, Procurement, Sales, Inventory, Payroll, Budgeting, Consolidation, dan Revaluation. |
+
+---
+
+## BR-163 – Exchange Rate Selection Rule
+
+| Attribute        | Description                                                                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-163                                                                                                                                                          |
+| Requirement Name | Exchange Rate Selection Rule                                                                                                                                    |
+| Priority         | Critical                                                                                                                                                        |
+| Description      | Sistem harus memilih Exchange Rate berdasarkan kombinasi Currency Pair, Exchange Rate Type, Provider, Source, Effective Date, dan Version sesuai aturan policy. |
+
+---
+
+## BR-164 – Provider Priority Rule
+
+| Attribute        | Description                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-164                                                                                                           |
+| Requirement Name | Provider Priority Rule                                                                                           |
+| Priority         | High                                                                                                             |
+| Description      | Policy harus mendukung urutan prioritas provider serta mekanisme failover apabila provider utama tidak tersedia. |
+
+---
+
+## BR-165 – Missing Exchange Rate Handling
+
+| Attribute        | Description                                                                                                                                                                                                            |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-165                                                                                                                                                                                                                 |
+| Requirement Name | Missing Exchange Rate Handling                                                                                                                                                                                         |
+| Priority         | Critical                                                                                                                                                                                                               |
+| Description      | Sistem harus mendukung konfigurasi tindakan ketika Exchange Rate tidak tersedia, seperti menggunakan kurs terakhir yang valid, menggunakan provider cadangan, menghentikan transaksi, atau meminta persetujuan manual. |
+
+---
+
+## BR-166 – Conversion Method
+
+| Attribute        | Description                                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-166                                                                                                                   |
+| Requirement Name | Conversion Method                                                                                                        |
+| Priority         | High                                                                                                                     |
+| Description      | Sistem harus mendukung metode konversi seperti Direct Rate, Inverse Rate, Cross Rate, Triangulation, dan Custom Formula. |
+
+---
+
+## BR-167 – Effective Dating
+
+| Attribute        | Description                                                                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-167                                                                                                                              |
+| Requirement Name | Effective Dating                                                                                                                    |
+| Priority         | High                                                                                                                                |
+| Description      | Setiap Currency Conversion Policy harus memiliki periode efektif sehingga perubahan kebijakan tidak memengaruhi transaksi historis. |
+
+---
+
+## BR-168 – Approval Workflow
+
+| Attribute        | Description                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-168                                                                                                               |
+| Requirement Name | Policy Approval Workflow                                                                                             |
+| Priority         | Critical                                                                                                             |
+| Description      | Perubahan Currency Conversion Policy harus melalui proses persetujuan sebelum diterapkan pada transaksi operasional. |
+
+---
+
+## BR-169 – Policy Versioning
+
+| Attribute        | Description                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-169                                                                                                          |
+| Requirement Name | Currency Conversion Policy Versioning                                                                           |
+| Priority         | High                                                                                                            |
+| Description      | Sistem harus mendukung versioning terhadap Currency Conversion Policy sehingga histori kebijakan tetap terjaga. |
+
+---
+
+## BR-170 – Currency Conversion Policy Auditability
+
+| Attribute        | Description                                                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-170                                                                                                                       |
+| Requirement Name | Currency Conversion Policy Auditability                                                                                      |
+| Priority         | Critical                                                                                                                     |
+| Description      | Seluruh perubahan kebijakan, proses persetujuan, publikasi, dan penonaktifan harus dicatat secara lengkap dalam Audit Trail. |
+
+---
+
+# 9.5.3.9.4 Business Rules
+
+| Business Rule ID | Description                                                                                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-CCP-001    | Setiap transaksi konversi mata uang harus dievaluasi menggunakan tepat satu Currency Conversion Policy yang aktif.                                    |
+| BRule-CCP-002    | Currency Conversion Policy dapat dibatasi berdasarkan Financial Organization, Legal Entity, Ledger, Financial Book, Business Unit, atau Process Type. |
+| BRule-CCP-003    | Policy harus memilih Exchange Rate dengan prioritas Provider, Source, dan Rate Type sesuai konfigurasi.                                               |
+| BRule-CCP-004    | Apabila Exchange Rate utama tidak tersedia, sistem harus menjalankan mekanisme fallback sesuai kebijakan.                                             |
+| BRule-CCP-005    | Perubahan Currency Conversion Policy tidak boleh mengubah hasil transaksi yang telah diposting.                                                       |
+| BRule-CCP-006    | Currency Conversion Policy yang telah digunakan tidak boleh dihapus secara permanen.                                                                  |
+| BRule-CCP-007    | Seluruh evaluasi policy harus dapat direkam untuk keperluan audit dan penelusuran.                                                                    |
+
+---
+
+# 9.5.3.9.5 Data Attributes
+
+| Attribute                     | Description                                                                                                                   |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Currency Conversion Policy ID | Identitas unik sistem.                                                                                                        |
+| Policy Code                   | Kode unik kebijakan.                                                                                                          |
+| Policy Name                   | Nama kebijakan.                                                                                                               |
+| Description                   | Deskripsi bisnis.                                                                                                             |
+| Financial Organization Scope  | Ruang lingkup organisasi keuangan.                                                                                            |
+| Legal Entity Scope            | Ruang lingkup entitas hukum.                                                                                                  |
+| Ledger Scope                  | Ruang lingkup ledger.                                                                                                         |
+| Financial Book Scope          | Ruang lingkup financial book.                                                                                                 |
+| Business Process              | AP, AR, GL, Treasury, Procurement, Sales, Inventory, Payroll, Budgeting, Consolidation, Revaluation, Project Accounting, dll. |
+| Preferred Exchange Rate Type  | Jenis kurs yang diprioritaskan.                                                                                               |
+| Preferred Provider            | Provider utama.                                                                                                               |
+| Preferred Source              | Sumber data utama.                                                                                                            |
+| Conversion Method             | Direct, Inverse, Cross, Triangulation, Custom Formula.                                                                        |
+| Fallback Strategy             | Last Valid Rate, Secondary Provider, Manual Approval, Reject Transaction.                                                     |
+| Rate Age Tolerance            | Usia maksimum kurs yang masih boleh digunakan.                                                                                |
+| Effective From                | Tanggal mulai berlaku.                                                                                                        |
+| Effective To                  | Tanggal akhir berlaku.                                                                                                        |
+| Approval Status               | Draft, Pending Approval, Approved, Published, Archived.                                                                       |
+| Version                       | Nomor versi kebijakan.                                                                                                        |
+| Status                        | Active, Suspended, Inactive, Archived.                                                                                        |
+| Created By / Created Date     | Informasi pembuatan data.                                                                                                     |
+| Updated By / Updated Date     | Informasi perubahan terakhir.                                                                                                 |
+
+---
+
+# 9.5.3.9.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                 |
+| -------------- | ------------------ | ----------- | ------------------------------ |
+| BR-161         | BO-009             | SH-003      | Policy Administration          |
+| BR-162         | BO-010             | SH-003      | Business Process Configuration |
+| BR-163         | BO-010             | SH-003      | Exchange Rate Resolution       |
+| BR-164         | BO-027             | SH-007      | Provider Selection             |
+| BR-165         | BO-029             | SH-010      | Missing Rate Handling          |
+| BR-166         | BO-010             | SH-003      | Currency Conversion            |
+| BR-167         | BO-029             | SH-010      | Effective Date Governance      |
+| BR-168         | BO-029             | SH-003      | Approval Workflow              |
+| BR-169         | BO-029             | SH-010      | Version Management             |
+| BR-170         | BO-029             | SH-010      | Audit & Compliance             |
+
+---
+
+# 9.5.3.9.7 Summary
+
+Currency Conversion Policy merupakan lapisan pengambilan keputusan (*decision layer*) yang mengendalikan bagaimana sistem memilih dan menggunakan Exchange Rate dalam setiap proses bisnis. Dengan memisahkan kebijakan dari data kurs, ERP memperoleh fleksibilitas untuk menerapkan aturan yang berbeda pada setiap organisasi, ledger, financial book, maupun proses bisnis tanpa mengubah histori transaksi atau konfigurasi Exchange Rate yang telah ada.
+
+Seluruh requirement pada bagian ini menjadi dasar implementasi **Foreign Currency Revaluation**, **Currency Translation**, **Intercompany Accounting**, **Financial Consolidation**, **Treasury Management**, **Cash Management**, dan seluruh modul ERP yang melakukan konversi mata uang.

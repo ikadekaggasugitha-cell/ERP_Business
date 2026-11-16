@@ -1,0 +1,587 @@
+# Table of Contents
+
+---
+
+## Cover
+
+## Revision History
+
+## Document Approval
+
+## Distribution List
+
+## Table of Contents
+
+## List of Figures
+
+## List of Tables
+
+## Glossary
+
+## Acronyms and Abbreviations
+
+---
+
+# BAB 1. Pendahuluan
+
+### 1.1 Purpose of Document
+
+### 1.2 Project Overview
+
+### 1.3 Business Background
+
+### 1.4 Business Problem Statement
+
+### 1.5 Business Opportunity
+
+### 1.6 Business Objectives
+
+### 1.7 Expected Business Value
+
+### 1.8 Scope of the Document
+
+### 1.9 Intended Audience
+
+### 1.10 References
+
+### 1.11 Definitions
+
+---
+
+# BAB 2. Business Background
+
+### 2.1 Overview
+
+### 2.2 Business Context
+
+### 2.3 Current Business Challenges
+
+### 2.4 Business Opportunity
+
+### 2.5 Strategic Direction
+
+### 2.6 Business Drivers
+
+### 2.7 Business Vision
+
+### 2.8 Expected Business Outcomes
+
+### 2.9 Business Principles
+
+---
+
+# BAB 3. Business Vision
+
+### 3.1 Vision Statement
+
+### 3.2 Mission Statement
+
+### 3.3 ERP Strategic Goals
+
+### 3.4 Enterprise Vision Principles
+
+### 3.5 Business Capability Vision
+
+### 3.6 Digital Transformation Vision
+
+### 3.7 Long-Term Vision
+
+### 3.8 Success Vision
+
+### 3.9 Vision Alignment
+
+---
+
+# BAB 4. Business Objective
+
+### 4.1 Overview
+
+### 4.2 Strategic Business Objectives
+
+### 4.3 Operational Business Objectives
+
+### 4.4 Organizational Objectives
+
+### 4.5 Financial Objectives
+
+### 4.6 Technology Objectives
+
+#### 4.6.1 Standar Tumpukan Teknologi (Standard Technology Stack)
+
+### 4.7 Business Value Objectives
+
+### 4.8 Key Success Indicators
+
+### 4.9 Objective Dependency
+
+### 4.10 Objective Summary
+
+---
+
+# BAB 5. Stakeholder Analysis
+
+### 5.1 Overview
+
+### 5.2 Stakeholder Classification
+
+### 5.3 Stakeholder Interest and Influence Matrix
+
+### 5.4 Stakeholder Responsibilities (RACI)
+
+### 5.5 Stakeholder Communication Matrix
+
+### 5.6 Stakeholder Expectations
+
+### 5.7 Stakeholder Requirement Ownership
+
+### 5.8 Stakeholder Traceability
+
+### 5.9 Stakeholder Summary
+
+---
+
+# BAB 6. Business Scope
+
+### 6.1 Overview
+
+### 6.2 Scope Principles
+
+### 6.3 Organization Scope
+
+### 6.4 Functional Scope
+
+### 6.5 Business Capability Scope
+
+### 6.6 Data Scope
+
+### 6.7 User Scope
+
+### 6.8 Integration Scope
+
+### 6.9 In Scope
+
+### 6.10 Out of Scope
+
+### 6.11 Project Deliverables
+
+### 6.12 Business Assumptions
+
+### 6.13 Business Constraints
+
+### 6.14 Scope Summary
+
+---
+
+# BAB 7. Current Business Process (As-Is)
+
+### 7.1 Overview
+
+### 7.2 Current Organization Landscape
+
+### 7.3 Current System Landscape
+
+### 7.4 Current Business Process
+
+### 7.5 Pain Points Analysis
+
+### 7.6 Current Business Rules
+
+### 7.7 Current Data Flow
+
+### 7.8 Current Organizational Challenges
+
+### 7.9 Gap Analysis
+
+### 7.10 Findings Summary
+
+---
+
+# BAB 8. Future Business Process (To-Be)
+
+### 8.1 Overview
+
+### 8.2 Future Business Principles
+
+### 8.3 Target Operating Model
+
+### 8.4 Future Organization Model
+
+### 8.5 Future Business Capability
+
+### 8.6 Target Business Process Characteristics
+
+### 8.7 Future Workflow Model
+
+### 8.8 Future Data Flow
+
+### 8.9 Target Reporting Model
+
+### 8.10 Target Governance Model
+
+### 8.11 Target Integration Model
+
+### 8.12 Future Business Benefits
+
+### 8.13 To-Be Process Success Criteria
+
+### 8.14 To-Be Process Summary
+
+---
+
+# BAB 9. Business Requirement
+
+### 9.1 Organization Management Requirements
+
+### 9.2 User Management Requirements
+
+### 9.3 Workflow Management Requirements
+
+### 9.4 Security Management Requirements
+
+### 9.5 Financial Management Domain — Foundation
+
+#### 9.5.1 Financial Organization
+
+#### 9.5.2 Fiscal Calendar
+
+#### 9.5.3 Currency Management Master (17 sub-domain: Currency Master, Currency Pair, Currency Precision, Currency Classification, Currency Rounding Rule, Currency Conversion Policy, Currency Translation, Currency Revaluation, Functional/Transaction/Presentation/Reporting Currency, Exchange Rate, Exchange Rate Type/Provider/Source/Version)
+
+#### 9.5.4 General Ledger
+
+#### 9.5.5 Accounts Payable
+
+#### 9.5.6 Accounts Receivable
+
+#### 9.5.7 Fixed Asset
+
+#### 9.5.8 Treasury
+
+#### 9.5.9 Cash and Bank
+
+#### 9.5.10 Cost Center
+
+#### 9.5.11 Profit Center
+
+#### 9.5.12 Budget Management
+
+#### 9.5.13 Tax Management
+
+#### 9.5.14 Financial Close
+
+#### 9.5.15 Financial Consolidation
+
+#### 9.5.16 Financial Reporting
+
+#### 9.5.17 Financial Analytics
+
+### 9.6 Chart of Accounts (25 sub-domain: Account Structure, Chart of Accounts Master, Account Category, Account Type, Account Class, Account Group, Segment, Segment Value, Financial Dimension, Account Hierarchy, Account Combination, Account Control, Account Validation Rule, Account Derivation Rule, Default Account Rule, Posting Rule, Account Closing Rule, Account Activation, Account Version, Account Security, Cost Center Mapping, Project Mapping, Intercompany Mapping, Tax Mapping, Financial Statement Mapping)
+
+### 9.7 Procurement Management Requirements
+
+### 9.8 Inventory Management Requirements
+
+### 9.9 Manufacturing Management Requirements
+
+### 9.10 Project Management Requirements
+
+### 9.11 Asset Management Requirements
+
+### 9.12 Human Resource Management Requirements
+
+### 9.13 Dashboard and Executive Reporting Requirements
+
+### 9.14 Sales Management Requirements
+
+### 9.15 Customer Relationship Management (CRM) Requirements
+
+### 9.16 Maintenance Management Requirements
+
+### 9.17 Payroll Management Requirements
+
+### 9.18 Master Data Management Requirements
+
+### 9.19 Localization and Multi Language Requirements
+
+### 9.20 Audit Trail Requirements
+
+---
+
+# BAB 10. Business Rules
+
+### 10.1 Overview
+
+### 10.2 General Business Rules
+
+### 10.3 Organization Rules
+
+### 10.4 Financial Rules
+
+### 10.5 Procurement Rules
+
+### 10.6 Inventory Rules
+
+### 10.7 HR Rules
+
+### 10.8 Approval Rules
+
+### 10.9 Security Rules
+
+### 10.10 Summary
+
+---
+
+# BAB 11. Functional Overview
+
+### 11.1 Overview
+
+### 11.2 Functional Architecture
+
+#### 11.2.1 Pemetaan Tumpukan Teknologi pada Arsitektur Berlapis
+
+### 11.3 Core Modules
+
+### 11.4 Supporting Modules — Financial Management Domain
+
+### 11.5 Supporting Modules — Operational
+
+### 11.6 High-Level Use Cases
+
+### 11.7 Module Interaction Overview
+
+### 11.8 Summary
+
+---
+
+# BAB 12. Non-Functional Requirements
+
+### 12.1 Overview
+
+### 12.2 Performance
+
+### 12.3 Availability
+
+### 12.4 Reliability
+
+### 12.5 Scalability
+
+### 12.6 Maintainability
+
+### 12.7 Security
+
+### 12.8 Compliance
+
+### 12.9 Localization
+
+### 12.10 Accessibility
+
+### 12.11 Disaster Recovery
+
+### 12.12 Realisasi Teknologi terhadap Non-Functional Requirements
+
+### 12.13 Non-Functional Requirement Traceability
+
+### 12.14 Summary
+
+---
+
+# BAB 13. Integration Requirements
+
+### 13.1 Overview
+
+### 13.2 Internal Integration
+
+### 13.3 External Integration
+
+### 13.4 Third-Party Services
+
+### 13.5 API Strategy
+
+### 13.6 Integration Architecture Principles
+
+### 13.7 Technology Stack Overview and Rationale
+
+### 13.8 System Architecture (Component View)
+
+### 13.9 Backend Service Architecture — Go (Golang)
+
+### 13.10 Event Streaming Architecture — Apache Kafka
+
+### 13.11 Data Architecture — PostgreSQL
+
+### 13.12 Frontend Presentation Architecture — Decoupled SPA (React 19 + Vite) (ADR-011)
+
+### 13.13 Deployment, CI/CD, and Observability
+
+### 13.14 Integration Requirement Traceability
+
+### 13.15 Enterprise Chrome Extension Companion (Manifest V3, ADR-012)
+
+### 13.16 Cortex Framework Data Products & SAP Coexistence (ADR-013)
+
+### 13.17 Summary
+
+---
+
+# BAB 14. Reporting Requirements
+
+### 14.1 Overview
+
+### 14.2 Operational Reports
+
+### 14.3 Executive Reports
+
+### 14.4 Financial Reports
+
+### 14.5 Audit Reports
+
+### 14.6 Dashboard Requirements
+
+### 14.7 Reporting Standards
+
+### 14.8 Reporting Requirement Traceability
+
+### 14.9 Summary
+
+---
+
+# BAB 15. Security Requirements
+
+### 15.1 Overview
+
+### 15.2 Authentication
+
+### 15.3 Authorization
+
+### 15.4 Data Protection
+
+### 15.5 Encryption
+
+### 15.6 Audit Logging
+
+### 15.7 Access Control
+
+### 15.8 Security Governance Principles
+
+### 15.9 Security Requirement Traceability
+
+### 15.10 Summary
+
+---
+
+# BAB 16. Risk Analysis
+
+### 16.1 Overview
+
+### 16.2 Business Risks
+
+### 16.3 Technical Risks
+
+### 16.4 Operational Risks
+
+### 16.5 Additional Risks
+
+### 16.6 Mitigation Strategy
+
+### 16.7 Risk Matrix
+
+### 16.8 Risk Monitoring
+
+### 16.9 Summary
+
+---
+
+# BAB 17. Assumptions
+
+### 17.1 Overview
+
+### 17.2 Organizational Assumptions
+
+### 17.3 Technical Assumptions
+
+### 17.4 Resource Assumptions
+
+### 17.5 Business Process Assumptions
+
+### 17.6 Assumption Register
+
+### 17.7 Summary
+
+---
+
+# BAB 18. Constraints
+
+### 18.1 Overview
+
+### 18.2 Project Constraints
+
+### 18.3 Technical Constraints
+
+### 18.4 Organizational Constraints
+
+### 18.5 Regulatory Constraints
+
+### 18.6 Constraint Register
+
+### 18.7 Summary
+
+---
+
+# BAB 19. Success Criteria
+
+### 19.1 Overview
+
+### 19.2 Business Success Metrics
+
+### 19.3 Project Success Metrics
+
+### 19.4 Operational Success Metrics
+
+### 19.5 Success Criteria Traceability
+
+### 19.6 Measurement Approach
+
+### 19.7 Summary
+
+---
+
+# BAB 20. Requirement Traceability Matrix
+
+### 20.1 Overview
+
+### 20.2 Requirement Mapping
+
+### 20.3 Requirement Coverage
+
+### 20.4 Requirement Status
+
+### 20.5 Cross-Domain Dependencies
+
+### 20.6 Traceability Governance
+
+### 20.7 Summary
+
+---
+
+# BAB 21. Appendix
+
+### 21.1 Overview
+
+### 21.2 Organization Structure Reference
+
+### 21.3 Business Process Diagram Reference
+
+### 21.4 Business Glossary
+
+### 21.5 Requirement Catalogue Index
+
+### 21.6 Reference Documents
+
+### 21.7 Acronyms and Abbreviations
+
+### 21.8 Revision Notes
+
+### 21.9 Document Closing Statement
+
+---
+
+# Index

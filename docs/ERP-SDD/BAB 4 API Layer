@@ -1,0 +1,197 @@
+# BAB 4. API Layer (REST via Kong)
+
+## 4.1 Overview
+
+Layer API menerjemahkan kontrak REST eksternal (**API Specification BAB 2–6**) menjadi handler Go. Klien tidak pernah menyentuh layanan langsung — semua request melewati **Kong** (ADR-003) yang menangani TLS, OAuth2/OIDC, rate limit, dan routing sebelum sampai ke layanan. Karena itu handler layanan berasumsi **request sudah terautentikasi** dan fokus pada: parsing/validasi bentuk, envelope respons, pemetaan error, header standar, lalu delegasi ke repository (BAB 5).
+
+> **SDD-010 — Kode HTTP tipis.** Handler tidak berisi SQL maupun aturan bisnis inti; ia adalah adaptor HTTP ↔ domain. Aturan bisnis di repository (BAB 5.5), penegakan baris di RLS (BAB 7.4).
+
+Handler ditempatkan pada paket `internal/httpapi` (per-service), memakai `net/http` + `http.ServeMux` (ADR-006, konsisten `gl-service/cmd/server/main.go`).
+
+## 4.2 Handler Structure and Routing
+
+Routing memetakan **Standard Resource Model** (API Spec 2.6) ke `ServeMux`. Resource dinamai **kebab-case, plural** (API Spec 2.2), mis. `/journal-entries`, `/purchase-orders`.
+
+```go
+// internal/httpapi/router.go
+func (s *Server) Routes() http.Handler {
+    mux := http.NewServeMux()
+    // pola Go 1.22+ method-in-pattern
+    mux.HandleFunc("GET /journal-entries",            s.listJournalEntries)
+    mux.HandleFunc("POST /journal-entries",           s.createJournalEntry)
+    mux.HandleFunc("GET /journal-entries/{id}",       s.getJournalEntry)
+    mux.HandleFunc("PUT /journal-entries/{id}",       s.updateJournalEntry)
+    mux.HandleFunc("DELETE /journal-entries/{id}",    s.deleteJournalEntry)
+    mux.HandleFunc("POST /journal-entries/{id}/post", s.postJournalEntry) // domain action
+    mux.HandleFunc("GET /healthz",                    s.healthz)          // BAB 8.2
+    mux.HandleFunc("GET /metrics",                    s.metrics)          // BAB 8.3 (Prometheus)
+    return s.withMiddleware(mux) // context, correlation, recover (4.8)
+}
+```
+
+> **SDD-011 — Base path & versioning ditangani Kong.** Kode **tidak** menyematkan `/v1` atau host; Kong me-route `https://api.{env}.erp.example/v1/journal-entries` (API Spec 2.2–2.3) ke layanan. Layanan cukup melayani path resource. Perubahan *breaking* menaikkan versi mayor di Kong (INT-014).
+
+## 4.3 Request/Response Envelope and Serialization
+
+Mengikuti **API Spec 2.7**:
+
+* `Content-Type: application/json; charset=utf-8`.
+* **Field JSON camelCase** (mis. `journalNo`, `postingDate`) — meski kolom DB `snake_case`; pemetaan dilakukan di DTO handler, bukan di `sqlc`.
+* **Objek resource tunggal** menyertakan `id`, `rowVersion`, dan metadata audit `createdAt`, `updatedAt`.
+* **Uang** sebagai objek `{ "amount": "1000.0000", "currency": "IDR" }`; **waktu** RFC 3339 UTC (BAB 3.6).
+
+```go
+type JournalEntryDTO struct {
+    ID         uuid.UUID `json:"id"`
+    JournalNo  string    `json:"journalNo"`
+    PostingDate string   `json:"postingDate"`            // RFC 3339 (date)
+    Status     string    `json:"status"`
+    RowVersion int64     `json:"rowVersion"`             // untuk If-Match (4.7)
+    CreatedAt  time.Time `json:"createdAt"`
+    UpdatedAt  time.Time `json:"updatedAt"`
+}
+```
+
+> **SDD-012 — DTO ≠ model DB.** DTO handler dipisahkan dari struct `sqlc` (`internal/<db>`). Ini mencegah bocornya kolom teknis (mis. `organization_id`, kolom partisi) ke kontrak dan menjaga camelCase. `organization_id` **tidak pernah** diterima di body (API Spec 2.5) — diturunkan dari konteks scope (BAB 7.4).
+
+## 4.4 Standard Resource Operations (CRUD + Domain Actions)
+
+Pemetaan verb → operasi repository → status sukses (API Spec 2.6, 2.13):
+
+| Operasi          | HTTP                              | Sukses | Catatan implementasi                                  |
+| ---------------- | --------------------------------- | :----: | ----------------------------------------------------- |
+| List             | `GET /{resource}`                 |  200   | Paginasi/filter/sort (4.5); envelope list.            |
+| Create           | `POST /{resource}`                |  201   | `Idempotency-Key` (4.7); validasi bentuk.             |
+| Retrieve         | `GET /{resource}/{id}`            |  200   | 404 juga untuk out-of-scope (jangan bocorkan eksistensi). |
+| Update (penuh)   | `PUT /{resource}/{id}`            |  200   | Optimistic lock via `If-Match` (4.7).                 |
+| Update (parsial) | `PATCH /{resource}/{id}`          |  200   | Idem.                                                 |
+| Delete           | `DELETE /{resource}/{id}`         |  204   | **Soft delete** (DBS-010).                            |
+| Domain action    | `POST /{resource}/{id}/{action}`  |  200   | mis. `post`, `approve`, `confirm`, `settle`.          |
+
+Aksi domain memanggil metode repository spesifik. Contoh `POST /journal-entries/{id}/post`:
+
+```go
+func (s *Server) postJournalEntry(w http.ResponseWriter, r *http.Request) {
+    id, err := uuid.Parse(r.PathValue("id"))
+    if err != nil { writeError(w, r, ErrBadRequest("id bukan UUID")); return }
+    rowVer, err := ifMatch(r) // header If-Match (4.7)
+    if err != nil { writeError(w, r, err); return }
+
+    scope := scopeFromContext(r.Context()) // dari JWT (BAB 7.4)
+    n, err := s.journals.Post(r.Context(), scope, gldb.PostJournalEntryParams{
+        ID: id, RowVersion: rowVer, UpdatedBy: userFromContext(r.Context()),
+    })
+    switch {
+    case err != nil:  writeError(w, r, mapDomainError(err))       // 4.6
+    case n == 0:      writeError(w, r, ErrConflict("stale/not draft")) // 409 (optimistic lock)
+    default:          writeJSON(w, http.StatusOK, okEnvelope(id))
+    }
+}
+```
+
+## 4.5 Pagination, Filtering, and Sorting
+
+Mengikuti **API Spec 2.8**:
+
+* **Paginasi** default `?page=1&size=25` (maks `size` 100); alternatif cursor `?cursor=…` untuk dataset besar. Query `sqlc` memakai `LIMIT/OFFSET` (lihat `ListJournalEntriesByPeriod`).
+* **Filtering** sintaks kurung: `?filter[status]=Posted&filter[postingDate][gte]=2026-01-01` (operator `gte`, `lte`, dst.).
+* **Sorting** `?sort=-postingDate,journalNo` (prefiks `-` = desc).
+* **Envelope list** (verbatim API Spec 2.8):
+
+```json
+{
+  "data": [ /* ...items... */ ],
+  "page": { "number": 1, "size": 25, "totalElements": 240, "totalPages": 10 }
+}
+```
+
+> **SDD-013 — Whitelist filter/sort.** Field filter & sort dipetakan dari daftar-putih ke kolom aman untuk mencegah SQL injection dan query non-terindeks; `sqlc` tetap statis (query bernama), pengurutan/filter dinamis dibangun hanya dari whitelist. Query rentang tanggal **wajib** memuat predikat tanggal agar *partition pruning* aktif (DBDD/benchmark).
+
+## 4.6 Error Model Mapping
+
+Bentuk error **verbatim** (API Spec 2.9); `error.code` stabil & programatik (katalog di API Spec 8.4), `correlationId` mengikuti header `X-Correlation-Id` (4.8):
+
+```json
+{
+  "error": {
+    "code": "GL_JOURNAL_UNBALANCED",
+    "message": "Total debit tidak sama dengan total kredit",
+    "correlationId": "b1f2a3c4-…",
+    "details": [ { "field": "lines", "issue": "debit=1000, credit=900" } ]
+  }
+}
+```
+
+Tabel pemetaan status (API Spec 2.13) yang wajib dipatuhi handler:
+
+| Status | Kapan                                   | Contoh `error.code`               |
+| :----: | --------------------------------------- | --------------------------------- |
+| 400    | Validasi bentuk/format                  | `VALIDATION_ERROR`                |
+| 401    | Token absen/invalid (ditolak di Kong)   | —                                 |
+| 403    | Permission/scope kurang                 | `FORBIDDEN_SCOPE`                 |
+| 404    | Tidak ditemukan **atau out-of-scope**   | `RESOURCE_NOT_FOUND`              |
+| 409    | Optimistic lock / state invalid         | `STALE_ROW_VERSION`, `PERIOD_LOCKED` |
+| 422    | Validasi bisnis (BR-xxx)                | `GL_JOURNAL_UNBALANCED`           |
+| 429    | Rate limit (di Kong)                    | —                                 |
+| 500    | Kesalahan internal                      | `INTERNAL_ERROR`                  |
+| 503    | Dependensi tak tersedia                 | `DEPENDENCY_UNAVAILABLE`          |
+
+> **SDD-014 — 404 untuk out-of-scope.** Karena RLS menyaring baris di luar scope, baris "tak terlihat" dikembalikan **404**, bukan 403, agar tidak membocorkan eksistensi (API Spec 2.13). Pelanggaran BR (mis. jurnal tak seimbang BR-556) → **422**; konflik optimistic lock (row_version basi) → **409** (dipicu `PostJournalEntry` mengembalikan 0 baris, BAB 5.4).
+
+## 4.7 Idempotency and Optimistic Locking
+
+* **Idempotency (API Spec 2.10, SAD 11.4):** operasi `POST` tak-aman/retriable menerima header `Idempotency-Key: <uuid>` — **wajib** untuk operasi finansial (posting jurnal, pembayaran). Server menyimpan hasil per-key; request ulang dengan key sama mengembalikan respons sama tanpa efek ganda. Implementasi: tabel idempotency per-DB (atau memanfaatkan registri nomor dokumen + `correlation_id`) memeriksa key sebelum mengeksekusi.
+* **Optimistic locking (API Spec 2.6, DBS-010):** mutasi mengirim `If-Match: <rowVersion>`; handler meneruskannya sebagai `row_version` ke query `UPDATE ... WHERE ... AND row_version = $n`. Bila 0 baris terpengaruh (basi) → **409** `STALE_ROW_VERSION` (lihat `PostJournalEntry` di `gl-service`).
+
+```go
+func ifMatch(r *http.Request) (int64, error) {
+    v := r.Header.Get("If-Match")
+    if v == "" { return 0, ErrPreconditionRequired("If-Match wajib untuk mutasi") }
+    return strconv.ParseInt(strings.Trim(v, `"`), 10, 64)
+}
+```
+
+## 4.8 Standard Headers and Correlation
+
+Header standar (API Spec 2.12, SAD 11.6) diproses oleh middleware bersama:
+
+| Header               | Arah      | Peran                                                        |
+| -------------------- | --------- | ------------------------------------------------------------ |
+| `Authorization`      | request   | Bearer JWT (OAuth2/OIDC) — divalidasi Kong (BAB 7.2).        |
+| `X-Correlation-Id`   | req/resp  | Korelasi lintas layanan; **dibuat bila absen**, diteruskan ke log/trace/outbox. |
+| `X-Organization-Id`  | request   | Penyempit scope (opsional; **harus subset** scope token).    |
+| `Idempotency-Key`    | request   | Idempotency `POST` (4.7).                                    |
+| `If-Match`           | request   | Optimistic locking `rowVersion` (4.7).                      |
+| `Deprecation`/`Sunset` | response | Penanda deprecation versi/endpoint (di Kong).               |
+| `RateLimit-*`/`Retry-After` | response | Info rate limit (di Kong, 429).                        |
+
+```go
+func (s *Server) withMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        cid := r.Header.Get("X-Correlation-Id")
+        if cid == "" { cid = uuid.NewString() }         // buat bila absen (SAD 11.6)
+        w.Header().Set("X-Correlation-Id", cid)
+        ctx := withCorrelation(r.Context(), cid)
+        ctx = withScope(ctx, parseScope(r))              // dari JWT + X-Organization-Id (BAB 7.4)
+        next.ServeHTTP(w, r.WithContext(ctx))            // + recover→500, akses-log (BAB 8.3)
+    })
+}
+```
+
+> **SDD-015 — `correlation_id` menembus semua lapisan.** Nilai `X-Correlation-Id` dibawa ke log terstruktur (BAB 8.3), trace OTel, kolom `correlation_id` pada baris outbox (BAB 6.2), dan field `error.correlationId`. Ini memungkinkan rekonstruksi alur bisnis (Saga INT-001) ujung-ke-ujung.
+
+## 4.9 OpenAPI Generation and Contract Governance
+
+Mengikuti **API Spec 2.14, INT-013**:
+
+* Setiap layanan menyediakan **OpenAPI 3.1**, dipublikasikan & diagregasi di gateway.
+* **API-First:** kontrak OpenAPI adalah turunan yang di-*review*; perubahan kontrak melewati **gerbang CI**: lint + deteksi *breaking change* (SAD BAB 10.6). Kompatibilitas skema event via Apicurio `BACKWARD` (BAB 6.4).
+* Konvensi: simpan `api/openapi.yaml` per layanan; CI menjalankan linter (mis. Spectral) dan detektor breaking (mis. `oasdiff`) sebelum deploy.
+
+> **SDD-016 — Kontrak sebagai gerbang, bukan sekadar dokumen.** Perubahan yang melanggar kompatibilitas menaikkan versi mayor di Kong (INT-014, NFR-014); versi mayor didukung minimal 12 bulan setelah penerus rilis (header `Deprecation`/`Sunset`).
+
+## 4.10 Summary
+
+Layer API adalah adaptor tipis di atas Kong: routing resource kebab-case, DTO camelCase terpisah dari model DB, envelope list & error model verbatim API Spec, idempotency + optimistic locking via header, dan `correlation_id` yang menembus seluruh lapisan. Aturan bisnis dan akses baris diserahkan ke BAB 5 dan BAB 7.
+
+---

@@ -1,0 +1,248 @@
+# BAB 16. Risk Analysis
+
+## 16.1 Overview
+
+Bab ini bertujuan untuk mengidentifikasi risiko-risiko yang berpotensi timbul selama proses pengembangan, implementasi, dan operasional **Enterprise Resource Planning (ERP)** yang bersifat modular, configurable, dan multi-organisasi (Holding/Sub Holding/Company/Branch). Mengingat implementasi dilakukan secara bertahap (*phased implementation*) dan integrasi API bergantung pada ketersediaan sistem sumber, risiko perlu dikelola secara terstruktur agar tidak menghambat pencapaian tujuan bisnis maupun jadwal proyek.
+
+Risk Analysis disusun untuk:
+
+* Mengidentifikasi risiko bisnis, teknis, operasional, dan risiko tambahan lainnya secara komprehensif.
+* Menilai tingkat kemungkinan (*likelihood*) dan dampak (*impact*) dari setiap risiko.
+* Menetapkan strategi mitigasi dan pihak yang bertanggung jawab (*owner*) atas penanganan risiko.
+* Menjadi dasar pemantauan risiko (*risk monitoring*) secara berkelanjutan selama siklus proyek.
+
+Setiap risiko didokumentasikan menggunakan skema identifikasi baku **RISK-xxx** (RISK-001 hingga RISK-015) agar dapat ditelusuri dan dikelola secara konsisten sepanjang proyek. Perubahan terhadap ruang lingkup proyek yang muncul sebagai dampak dari risiko-risiko ini tetap harus melalui mekanisme **Change Request (CR)** sesuai kebijakan *Change Management* proyek.
+
+---
+
+## 16.2 Business Risks
+
+### RISK-001
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-001                                                                                                                                                                 |
+| Risk Name          | Resistensi Perubahan (Change Resistance) dari User                                                                                                                      |
+| Category           | Business Risk                                                                                                                                                           |
+| Description        | Pengguna di berbagai level organisasi (Holding, Sub Holding, Company, Branch) berpotensi menolak perubahan proses kerja dari sistem lama menuju ERP baru karena kebiasaan kerja yang sudah lama terbentuk. |
+| Potential Impact   | Rendahnya tingkat adopsi sistem, penggunaan sistem yang tidak konsisten antar unit organisasi, serta menurunnya efektivitas manfaat yang diharapkan dari implementasi ERP. |
+
+### RISK-002
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-002                                                                                                                                                                 |
+| Risk Name          | Ketidaksesuaian Proses Bisnis Existing dengan Sistem Baru                                                                                                               |
+| Category           | Business Risk                                                                                                                                                           |
+| Description        | Proses bisnis yang berjalan saat ini (As-Is) pada masing-masing entitas organisasi mungkin tidak sepenuhnya kompatibel dengan konfigurasi standar ERP yang diusulkan (To-Be). |
+| Potential Impact   | Kebutuhan penyesuaian proses bisnis atau konfigurasi tambahan yang memicu potensi perubahan ruang lingkup (*scope*) dan penundaan jadwal implementasi.                  |
+
+### RISK-003
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-003                                                                                                                                                                 |
+| Risk Name          | Ketergantungan pada Key Person / Subject Matter Expert (SME)                                                                                                            |
+| Category           | Business Risk                                                                                                                                                           |
+| Description        | Pengetahuan proses bisnis dan kebutuhan fungsional sering kali terkonsentrasi pada individu tertentu (*key person*) di masing-masing unit bisnis atau modul.            |
+| Potential Impact   | Terhambatnya proses pengumpulan requirement, validasi konfigurasi, dan pengambilan keputusan apabila key person tidak tersedia atau berpindah peran selama proyek berlangsung. |
+
+---
+
+## 16.3 Technical Risks
+
+### RISK-004
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-004                                                                                                                                                                 |
+| Risk Name          | Kompleksitas Integrasi Multi-Modul dan Multi-Organisasi                                                                                                                 |
+| Category           | Technical Risk                                                                                                                                                          |
+| Description        | Arsitektur ERP yang modular dan mendukung struktur organisasi bertingkat (Holding/Sub Holding/Company/Branch) meningkatkan kompleksitas integrasi antar modul serta ketergantungan pada ketersediaan API pihak ketiga. |
+| Potential Impact   | Kegagalan atau keterlambatan integrasi antar modul dan sistem eksternal, yang dapat memperlambat rilis fase implementasi dan menimbulkan inkonsistensi data lintas organisasi. |
+
+### RISK-005
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-005                                                                                                                                                                 |
+| Risk Name          | Risiko Performa Sistem saat Skala Data Besar                                                                                                                            |
+| Category           | Technical Risk                                                                                                                                                          |
+| Description        | Seiring bertambahnya jumlah organisasi, transaksi, dan pengguna pada sistem multi-organisasi, volume data yang diproses dapat meningkat secara signifikan.              |
+| Potential Impact   | Penurunan performa sistem (*response time* lambat, proses batch tertunda) yang berdampak pada produktivitas pengguna dan keandalan pelaporan lintas organisasi.         |
+
+### RISK-006
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-006                                                                                                                                                                 |
+| Risk Name          | Risiko Kegagalan Migrasi Data dari Sistem Lama                                                                                                                           |
+| Category           | Technical Risk                                                                                                                                                          |
+| Description        | Proses migrasi data master dan transaksi dari sistem legacy ke ERP baru berpotensi mengalami kegagalan akibat perbedaan struktur data, kualitas data yang tidak konsisten, atau volume data yang besar. |
+| Potential Impact   | Data yang tidak lengkap, duplikat, atau tidak akurat pada sistem baru, yang dapat mengganggu kelangsungan operasional dan validitas pelaporan pasca go-live.            |
+
+### RISK-013
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-013                                                                                                                                                                 |
+| Risk Name          | Kompleksitas Operasional Arsitektur Event-Driven (Apache Kafka)                                                                                                          |
+| Category           | Technical Risk                                                                                                                                                          |
+| Description        | Adopsi arsitektur *event-driven* berbasis **Apache Kafka** (BAB 13.10) memperkenalkan kompleksitas baru: penjaminan *ordering* per-partisi, *idempotency* konsumen, penanganan *consumer lag*, *schema evolution*, serta pemahaman *eventual consistency* oleh tim. |
+| Potential Impact   | Duplikasi/ketertinggalan pemrosesan *event*, inkonsistensi data sementara yang salah ditangani, atau kegagalan *event* yang menumpuk di *Dead Letter Topic* apabila pola idempotensi dan *retry* tidak diterapkan dengan benar. |
+
+### RISK-014
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-014                                                                                                                                                                 |
+| Risk Name          | Konsistensi Data Terdistribusi pada Arsitektur Microservices                                                                                                            |
+| Category           | Technical Risk                                                                                                                                                          |
+| Description        | Pola **database-per-service** dan transaksi lintas-layanan melalui **Saga/Transactional Outbox** (BAB 13.9–13.11) menggantikan transaksi ACID tunggal dengan konsistensi *eventual*, sehingga rentan terhadap kesalahan desain *compensating transaction* pada alur kritikal keuangan (mis. INT-001, NFR-008). |
+| Potential Impact   | Ketidaksesuaian saldo antar-modul (mis. GL vs dokumen sumber), *compensating action* yang tidak lengkap, atau *state* Saga yang menggantung apabila pola konsistensi tidak dirancang dan diuji secara menyeluruh. |
+
+### RISK-015
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-015                                                                                                                                                                 |
+| Risk Name          | Ketersediaan dan Kematangan Kompetensi Tumpukan Teknologi                                                                                                               |
+| Category           | Technical Risk                                                                                                                                                          |
+| Description        | Keberhasilan implementasi bergantung pada ketersediaan talenta dengan kompetensi memadai pada tumpukan teknologi standar (**Go, React 19, Apache Kafka, PostgreSQL**; ASM-013), yang dapat menjadi tantangan apabila tim belum berpengalaman pada pola *microservices* dan *event-driven*. |
+| Potential Impact   | Kurva belajar memperlambat jadwal fase implementasi, menurunkan kualitas desain/kode, serta meningkatkan risiko *technical debt* dan kesalahan arsitektur pada tahap awal. |
+
+---
+
+## 16.4 Operational Risks
+
+### RISK-007
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-007                                                                                                                                                                 |
+| Risk Name          | Downtime saat Go-Live/Cutover                                                                                                                                           |
+| Category           | Operational Risk                                                                                                                                                        |
+| Description        | Proses transisi (*cutover*) dari sistem lama ke ERP baru pada tanggal go-live berpotensi menimbulkan gangguan layanan atau penghentian operasional sementara.           |
+| Potential Impact   | Terganggunya proses bisnis kritikal (transaksi keuangan, operasional gudang, penjualan) pada periode transisi, yang dapat menimbulkan kerugian operasional dan reputasional. |
+
+### RISK-008
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-008                                                                                                                                                                 |
+| Risk Name          | Kesalahan Konfigurasi Organisasi/Workflow yang Berdampak Luas (Cross-Module)                                                                                            |
+| Category           | Operational Risk                                                                                                                                                        |
+| Description        | Kesalahan konfigurasi struktur organisasi, hak akses, atau alur kerja (*workflow approval*) berpotensi memberikan dampak lintas modul karena sifat sistem yang saling terintegrasi. |
+| Potential Impact   | Kesalahan proses persetujuan, akses data yang tidak sesuai kewenangan, atau kegagalan proses bisnis lintas modul yang memerlukan penanganan dan koreksi konfigurasi secara menyeluruh. |
+
+### RISK-009
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-009                                                                                                                                                                 |
+| Risk Name          | Keterlambatan Pelatihan User                                                                                                                                             |
+| Category           | Operational Risk                                                                                                                                                        |
+| Description        | Jadwal pelatihan pengguna di berbagai level organisasi berpotensi tertunda akibat keterbatasan waktu, ketersediaan trainer, atau kesiapan materi pelatihan pada setiap fase implementasi. |
+| Potential Impact   | Pengguna belum siap mengoperasikan sistem baru pada saat go-live, meningkatkan risiko kesalahan input data dan menurunnya efisiensi operasional pada masa awal penggunaan. |
+
+---
+
+## 16.5 Additional Risks
+
+### RISK-010
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-010                                                                                                                                                                 |
+| Risk Name          | Risiko Keamanan Data Selama Masa Transisi                                                                                                                               |
+| Category           | Additional Risk                                                                                                                                                         |
+| Description        | Selama periode transisi antara sistem lama dan ERP baru, data organisasi berpindah dan tersimpan pada lebih dari satu sistem, meningkatkan permukaan risiko keamanan data (*data security exposure*). |
+| Potential Impact   | Potensi kebocoran data, akses tidak sah, atau ketidaksesuaian kontrol keamanan antar sistem yang dapat merugikan organisasi secara finansial maupun reputasional.       |
+
+### RISK-011
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-011                                                                                                                                                                 |
+| Risk Name          | Risiko Kepatuhan Regulasi Selama Periode Paralel Run                                                                                                                    |
+| Category           | Additional Risk                                                                                                                                                         |
+| Description        | Pada masa paralel run (menjalankan sistem lama dan ERP baru secara bersamaan), terdapat potensi ketidaksesuaian pelaporan terhadap ketentuan regulasi (perpajakan, keuangan, ketenagakerjaan). |
+| Potential Impact   | Ketidakpatuhan terhadap kewajiban pelaporan regulator, potensi sanksi administratif, serta kebutuhan rekonsiliasi tambahan antara kedua sistem.                        |
+
+### RISK-012
+
+| Attribute         | Description                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Risk ID            | RISK-012                                                                                                                                                                 |
+| Risk Name          | Risiko Scope Creep akibat Permintaan Modul Tambahan                                                                                                                     |
+| Category           | Additional Risk                                                                                                                                                         |
+| Description        | Selama proses implementasi bertahap, stakeholder berpotensi mengajukan permintaan modul atau fitur tambahan di luar ruang lingkup yang telah disepakati.                |
+| Potential Impact   | Perluasan ruang lingkup proyek yang tidak terkendali (*scope creep*), berdampak pada pembengkakan biaya, keterlambatan jadwal, dan penurunan fokus prioritas implementasi. |
+
+---
+
+## 16.6 Mitigation Strategy
+
+| Risk ID  | Mitigation Action                                                                                                         | Owner                          |
+| -------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| RISK-001 | Melakukan program *change management*, komunikasi manfaat sistem, serta melibatkan user representative sejak tahap awal proyek. | Project Sponsor / Change Management Team |
+| RISK-002 | Melakukan proses *fit-gap analysis* di awal proyek dan menyelaraskan proses bisnis melalui konfigurasi, bukan kustomisasi.  | Business Analyst / Process Owner |
+| RISK-003 | Mendokumentasikan pengetahuan proses bisnis secara tertulis dan menetapkan lebih dari satu narasumber (*backup SME*) per area proses. | Department Head / Project Manager |
+| RISK-004 | Menyusun arsitektur integrasi standar (API Gateway/middleware) dan melakukan pengujian integrasi bertahap per fase modul.  | Technical Architect / Integration Team |
+| RISK-005 | Melakukan *performance testing* dan *load testing* secara berkala serta merancang strategi *scalability* infrastruktur.    | Infrastructure Team / Technical Lead |
+| RISK-006 | Menyusun rencana migrasi data dengan tahapan *data cleansing*, *data mapping*, uji coba migrasi (*mock migration*), dan validasi data. | Data Migration Team |
+| RISK-013 | Menetapkan standar konsumen idempoten & *retry/DLQ*, memasang pemantauan *consumer lag* (Prometheus), menerapkan Schema Registry, serta pelatihan pola *event-driven* bagi tim. | Technical Architect / Platform Team |
+| RISK-014 | Merancang pola **Saga/Outbox** yang baku, menyediakan *reconciliation job* berkala lintas modul, dan menguji skenario *compensating transaction* secara menyeluruh sebelum go-live. | Technical Architect / Integration Team |
+| RISK-015 | Melakukan asesmen kompetensi, program *upskilling* Go/React/Kafka/PostgreSQL, menyediakan *coding standard* & *reference architecture*, serta melibatkan *technical lead* berpengalaman. | Technical Lead / HR / Project Manager |
+| RISK-007 | Menyusun *cutover plan* terperinci, jadwal go-live di luar jam operasional kritikal, serta menyiapkan *rollback plan*.     | Project Manager / IT Operations |
+| RISK-008 | Menerapkan proses *review* dan *approval* konfigurasi berjenjang serta melakukan pengujian konfigurasi lintas modul sebelum diterapkan pada environment produksi. | System Administrator / Configuration Team |
+| RISK-009 | Menyusun jadwal pelatihan yang selaras dengan rencana rilis per fase serta menyediakan materi pelatihan dan *user manual* lebih awal. | Training Coordinator / HR |
+| RISK-010 | Menerapkan kontrol keamanan tambahan (enkripsi, pembatasan akses, audit log) selama masa transisi data antar sistem.       | IT Security Team |
+| RISK-011 | Melakukan rekonsiliasi berkala antara sistem lama dan ERP baru serta melibatkan tim kepatuhan (*compliance*) dalam proses paralel run. | Finance & Compliance Team |
+| RISK-012 | Menerapkan mekanisme *Change Request (CR)* secara ketat untuk setiap permintaan di luar ruang lingkup yang telah disepakati. | Project Manager / Steering Committee |
+
+---
+
+## 16.7 Risk Matrix
+
+| Risk ID  | Likelihood | Impact | Risk Level  | Priority |
+| -------- | ---------- | ------ | ----------- | -------- |
+| RISK-001 | High       | Medium | High        | 1        |
+| RISK-002 | Medium     | Medium | Medium      | 2        |
+| RISK-003 | Medium     | Medium | Medium      | 2        |
+| RISK-004 | High       | High   | High        | 1        |
+| RISK-005 | Medium     | High   | High        | 1        |
+| RISK-006 | Medium     | High   | High        | 1        |
+| RISK-013 | Medium     | High   | High        | 1        |
+| RISK-014 | Medium     | High   | High        | 1        |
+| RISK-015 | Medium     | Medium | Medium      | 2        |
+| RISK-007 | Medium     | High   | High        | 1        |
+| RISK-008 | Medium     | High   | High        | 1        |
+| RISK-009 | Medium     | Medium | Medium      | 2        |
+| RISK-010 | Low        | High   | Medium      | 2        |
+| RISK-011 | Low        | Medium | Low         | 3        |
+| RISK-012 | High       | Medium | High        | 1        |
+
+Keterangan:
+
+* **Risk Level** merupakan kombinasi antara *Likelihood* dan *Impact* (Low, Medium, High).
+* **Priority** menentukan urutan penanganan risiko, di mana angka lebih kecil menunjukkan prioritas penanganan yang lebih tinggi.
+
+---
+
+## 16.8 Risk Monitoring
+
+Pemantauan risiko dilakukan secara berkelanjutan sepanjang siklus proyek dengan ketentuan sebagai berikut:
+
+* *Risk register* direview secara berkala (mingguan/bulanan sesuai fase proyek) untuk memastikan status risiko selalu mutakhir.
+* Risiko dengan tingkat dampak tinggi (*high-impact*) dieskalasikan kepada **Steering Committee** untuk mendapatkan keputusan dan dukungan penanganan lebih lanjut.
+* Status setiap risiko diperbarui pada setiap akhir fase proyek (*phase closure*), termasuk perubahan tingkat *likelihood*, *impact*, maupun status mitigasi.
+* Risiko baru yang teridentifikasi selama proyek berjalan didaftarkan ke dalam *risk register* dan mengikuti proses evaluasi yang sama.
+
+---
+
+## 16.9 Summary
+
+Bab Risk Analysis ini mengidentifikasi **15 (lima belas) risiko utama** yang dikelompokkan ke dalam empat kategori, yaitu Business Risk, Technical Risk, Operational Risk, dan Additional Risk — termasuk risiko teknis spesifik yang timbul dari adopsi tumpukan teknologi standar dan arsitektur *event-driven microservices* (RISK-013 s.d. RISK-015). Setiap risiko telah dilengkapi dengan deskripsi, potensi dampak, strategi mitigasi, penanggung jawab (*owner*), serta penilaian *likelihood* dan *impact* dalam bentuk Risk Matrix.
+
+Pengelolaan risiko yang konsisten dan terstruktur merupakan faktor penting dalam keberhasilan implementasi ERP yang bersifat modular, configurable, dan multi-organisasi. Dengan adanya mekanisme pemantauan risiko yang berkelanjutan serta jalur eskalasi yang jelas kepada Steering Committee, proyek diharapkan dapat mengelola ketidakpastian secara proaktif dan menjaga implementasi tetap sesuai dengan ruang lingkup, jadwal, dan kualitas yang telah disepakati.

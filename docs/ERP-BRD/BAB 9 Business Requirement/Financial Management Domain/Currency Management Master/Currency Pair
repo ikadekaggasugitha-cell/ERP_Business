@@ -1,0 +1,206 @@
+# 9.5.3.3 Currency Pair Requirements
+
+---
+
+# 9.5.3.3.1 Overview
+
+Currency Pair merupakan entitas referensi yang mendefinisikan hubungan antara dua mata uang yang dapat dikonversi dalam Enterprise Resource Planning (ERP).
+
+Currency Pair menjadi dasar bagi pengelolaan nilai tukar (Exchange Rate), kebijakan konversi, revaluasi, translasi mata uang, serta proses pelaporan dan konsolidasi keuangan.
+
+Dengan memisahkan Currency Pair dari Exchange Rate, sistem dapat mengelola konfigurasi pasangan mata uang secara independen dari nilai tukar yang berubah dari waktu ke waktu. Pendekatan ini meningkatkan fleksibilitas, konsistensi, dan kemampuan audit pada lingkungan enterprise.
+
+---
+
+# 9.5.3.3.2 Business Capability
+
+Currency Pair menyediakan kapabilitas berikut:
+
+* Pengelolaan pasangan mata uang.
+* Dukungan konversi dua arah (bidirectional).
+* Konfigurasi arah konversi (direct dan indirect).
+* Dukungan triangulation currency.
+* Assignment ke Financial Organization dan Ledger.
+* Effective dating.
+* Lifecycle management.
+* Versioning.
+* Integrasi dengan Exchange Rate Management.
+* Audit trail.
+
+---
+
+# 9.5.3.3.3 Business Requirement Catalogue
+
+## BR-101 – Currency Pair Master
+
+| Attribute           | Description                                                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-101                                                                                                                    |
+| Requirement Name    | Currency Pair Master                                                                                                      |
+| Category            | Currency Pair                                                                                                             |
+| Priority            | Critical                                                                                                                  |
+| Business Objective  | BO-009                                                                                                                    |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                          |
+| Description         | Sistem harus menyediakan master Currency Pair yang mendefinisikan pasangan mata uang yang valid untuk proses konversi.    |
+| Business Value      | Menjadi referensi tunggal bagi seluruh proses Exchange Rate dan Currency Conversion.                                      |
+| Acceptance Criteria | Administrator dapat membuat, mengubah, mengaktifkan, dan menonaktifkan Currency Pair tanpa memengaruhi histori transaksi. |
+
+---
+
+## BR-102 – Bidirectional Currency Pair
+
+| Attribute        | Description                                                                                                                                                            |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-102                                                                                                                                                                 |
+| Requirement Name | Bidirectional Currency Pair                                                                                                                                            |
+| Priority         | High                                                                                                                                                                   |
+| Description      | Sistem harus mendukung pasangan mata uang dua arah sehingga konversi dapat dilakukan dari mata uang asal ke tujuan maupun sebaliknya berdasarkan kebijakan organisasi. |
+
+---
+
+## BR-103 – Direct & Indirect Quotation
+
+| Attribute        | Description                                                                                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-103                                                                                                                                                |
+| Requirement Name | Direct & Indirect Quotation                                                                                                                           |
+| Priority         | Critical                                                                                                                                              |
+| Description      | Sistem harus mendukung metode penetapan kurs secara Direct Quote maupun Indirect Quote untuk memenuhi praktik bisnis dan regulasi di berbagai negara. |
+
+---
+
+## BR-104 – Triangulation Support
+
+| Attribute        | Description                                                                                                                                          |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-104                                                                                                                                               |
+| Requirement Name | Triangulation Currency                                                                                                                               |
+| Priority         | High                                                                                                                                                 |
+| Description      | Sistem harus mendukung konversi melalui mata uang perantara (triangulation currency) apabila pasangan mata uang tidak memiliki nilai tukar langsung. |
+
+---
+
+## BR-105 – Organization Assignment
+
+| Attribute        | Description                                                                                                                                                 |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-105                                                                                                                                                      |
+| Requirement Name | Organization Assignment                                                                                                                                     |
+| Priority         | High                                                                                                                                                        |
+| Description      | Currency Pair harus dapat dikaitkan dengan Financial Organization, Ledger, atau Financial Book tertentu apabila diperlukan kebijakan konversi yang berbeda. |
+
+---
+
+## BR-106 – Effective Dating
+
+| Attribute        | Description                                                                                                                             |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-106                                                                                                                                  |
+| Requirement Name | Effective Dating                                                                                                                        |
+| Priority         | High                                                                                                                                    |
+| Description      | Setiap Currency Pair harus memiliki tanggal mulai dan akhir berlaku sehingga perubahan konfigurasi tidak memengaruhi histori transaksi. |
+
+---
+
+## BR-107 – Currency Pair Lifecycle
+
+| Attribute        | Description                                                                                                            |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-107                                                                                                                 |
+| Requirement Name | Currency Pair Lifecycle                                                                                                |
+| Priority         | High                                                                                                                   |
+| Description      | Sistem harus mendukung status Draft, Active, Suspended, Deprecated, Inactive, dan Archived untuk setiap Currency Pair. |
+
+---
+
+## BR-108 – Dependency Validation
+
+| Attribute        | Description                                                                                                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-108                                                                                                                        |
+| Requirement Name | Dependency Validation                                                                                                         |
+| Priority         | Critical                                                                                                                      |
+| Description      | Sistem harus mencegah penghapusan Currency Pair yang telah digunakan oleh Exchange Rate, transaksi keuangan, atau modul lain. |
+
+---
+
+## BR-109 – Versioning Support
+
+| Attribute        | Description                                                                                                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-109                                                                                                                        |
+| Requirement Name | Currency Pair Versioning                                                                                                      |
+| Priority         | High                                                                                                                          |
+| Description      | Sistem harus mendukung versioning terhadap konfigurasi Currency Pair sehingga perubahan tidak memengaruhi transaksi historis. |
+
+---
+
+## BR-110 – Currency Pair Auditability
+
+| Attribute        | Description                                                                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-110                                                                                                                                                          |
+| Requirement Name | Currency Pair Auditability                                                                                                                                      |
+| Priority         | Critical                                                                                                                                                        |
+| Description      | Seluruh perubahan Currency Pair harus tercatat dalam Audit Trail lengkap dengan identitas pengguna, waktu perubahan, dan nilai sebelum serta sesudah perubahan. |
+
+---
+
+# 9.5.3.3.4 Business Rules
+
+| Business Rule ID | Description                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
+| BRule-CP-001     | Setiap Currency Pair terdiri dari tepat satu Base Currency dan satu Quote Currency.                                 |
+| BRule-CP-002     | Kombinasi Base Currency dan Quote Currency harus unik dalam satu ruang lingkup konfigurasi.                         |
+| BRule-CP-003     | Currency Pair dapat dikonfigurasi sebagai Direct Quote atau Indirect Quote.                                         |
+| BRule-CP-004     | Triangulation hanya boleh digunakan apabila tidak tersedia Exchange Rate langsung atau sesuai kebijakan organisasi. |
+| BRule-CP-005     | Currency Pair yang telah digunakan pada transaksi tidak boleh dihapus secara permanen.                              |
+| BRule-CP-006     | Perubahan konfigurasi Currency Pair tidak boleh mengubah histori transaksi yang telah diposting.                    |
+| BRule-CP-007     | Seluruh perubahan Currency Pair wajib tercatat pada Audit Trail.                                                    |
+
+---
+
+# 9.5.3.3.5 Data Attributes
+
+| Attribute                 | Description                                          |
+| ------------------------- | ---------------------------------------------------- |
+| Currency Pair ID          | Identitas unik sistem.                               |
+| Pair Code                 | Kode unik pasangan mata uang (misalnya USD-IDR).     |
+| Base Currency             | Mata uang dasar.                                     |
+| Quote Currency            | Mata uang pembanding.                                |
+| Quotation Method          | Direct atau Indirect Quote.                          |
+| Bidirectional Flag        | Menentukan apakah pasangan dapat digunakan dua arah. |
+| Triangulation Currency    | Mata uang perantara bila diperlukan.                 |
+| Organization Scope        | Financial Organization yang menggunakan pasangan.    |
+| Ledger Scope              | Ledger yang menggunakan pasangan.                    |
+| Financial Book Scope      | Financial Book terkait.                              |
+| Effective From            | Tanggal mulai berlaku.                               |
+| Effective To              | Tanggal akhir berlaku.                               |
+| Status                    | Draft, Active, Suspended, Inactive, Archived.        |
+| Version                   | Nomor versi konfigurasi.                             |
+| Remarks                   | Catatan bisnis.                                      |
+| Created By / Created Date | Informasi pembuatan data.                            |
+| Updated By / Updated Date | Informasi perubahan terakhir.                        |
+
+---
+
+# 9.5.3.3.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process               |
+| -------------- | ------------------ | ----------- | ---------------------------- |
+| BR-101         | BO-009             | SH-003      | Currency Pair Administration |
+| BR-102         | BO-009             | SH-003      | Bidirectional Conversion     |
+| BR-103         | BO-010             | SH-003      | Exchange Rate Quotation      |
+| BR-104         | BO-011             | SH-003      | Triangulation Processing     |
+| BR-105         | BO-009             | SH-003      | Organization Assignment      |
+| BR-106         | BO-029             | SH-010      | Effective Date Governance    |
+| BR-107         | BO-029             | SH-010      | Lifecycle Management         |
+| BR-108         | BO-029             | SH-010      | Dependency Validation        |
+| BR-109         | BO-029             | SH-010      | Configuration Versioning     |
+| BR-110         | BO-029             | SH-010      | Audit & Compliance           |
+
+---
+
+# 9.5.3.3.7 Summary
+
+Currency Pair merupakan fondasi bagi seluruh mekanisme Exchange Rate dan Currency Conversion. Dengan memisahkan konfigurasi pasangan mata uang dari data nilai tukar, ERP mampu mengelola perubahan kurs, kebijakan konversi, serta kebutuhan pelaporan dan konsolidasi secara lebih fleksibel, aman, dan dapat diaudit. Desain ini juga mendukung implementasi multi-negara, multi-ledger, dan multi-organisasi tanpa mengorbankan integritas data historis.

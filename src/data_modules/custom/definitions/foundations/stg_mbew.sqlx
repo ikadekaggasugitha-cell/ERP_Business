@@ -1,0 +1,23 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc", "s4"],
+  description: "SAP Material Valuation staging view with CDC deduplication"
+}
+
+SELECT
+  MANDT AS mandt,
+  MATNR AS material_number,
+  BWKEY AS valuation_area,
+  BWTAR AS valuation_type,
+  VPRSV AS price_control,
+  VERPR AS moving_avg_price,
+  STPRS AS standard_price,
+  LBKUM AS total_stock,
+  SALK3 AS total_value,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "mbew")}
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY MANDT, MATNR, BWKEY, BWTAR
+  ORDER BY recordstamp DESC
+) = 1

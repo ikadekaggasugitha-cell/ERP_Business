@@ -1,0 +1,166 @@
+# 9.16 Maintenance Management Requirements
+
+## 9.16.1 Overview
+
+Maintenance Management mengelola aktivitas pemeliharaan aset dan fasilitas operasional, mencakup pemeliharaan terjadwal (*preventive maintenance*), perbaikan akibat kerusakan (*corrective maintenance*), pengelolaan suku cadang (*spare part*), serta pencatatan biaya pemeliharaan.
+
+Modul ini terintegrasi dengan Asset Management sebagai sumber data aset yang dipelihara, dan dengan Inventory Management untuk pemakaian spare part dan material pemeliharaan. Maintenance Management memastikan aset dan fasilitas beroperasi secara optimal dengan downtime seminimal mungkin.
+
+ERP harus mendukung penjadwalan pemeliharaan berbasis waktu (*time-based*) maupun berbasis kondisi (*condition-based*), pengelolaan Work Order pemeliharaan, serta pelacakan riwayat perbaikan per aset untuk mendukung analisis keandalan (*reliability analysis*).
+
+---
+
+# 9.16.2 Business Requirement Catalogue
+
+## BR-786 – Maintenance Schedule Master
+
+| Attribute           | Description                                                                                                            |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-786                                                                                                              |
+| Requirement Name    | Maintenance Schedule Master                                                                                          |
+| Category            | Maintenance Management                                                                                               |
+| Priority            | Critical                                                                                                             |
+| Business Objective  | BO-009, BO-014                                                                                                       |
+| Stakeholder Owner   | SH-038 (Asset Management Department)                                                                                 |
+| Description         | Sistem harus menyediakan jadwal pemeliharaan preventif (*preventive maintenance*) berbasis waktu atau penggunaan aset. |
+| Business Rationale  | Pemeliharaan terjadwal mengurangi risiko kerusakan mendadak dan memperpanjang usia pakai aset.                        |
+| Business Value      | Mengurangi downtime tidak terencana dan biaya perbaikan darurat.                                                     |
+| Acceptance Criteria | Sistem dapat membuat Work Order pemeliharaan secara otomatis sesuai jadwal yang ditentukan.                          |
+
+---
+
+## BR-787 – Maintenance Work Order
+
+| Attribute        | Description                                                                                              |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-787                                                                                                   |
+| Requirement Name | Maintenance Work Order                                                                                    |
+| Priority         | Critical                                                                                                  |
+| Description      | Sistem harus mendukung pembuatan, penugasan, dan pemantauan status Work Order pemeliharaan dari awal hingga selesai. |
+
+---
+
+## BR-788 – Corrective Maintenance Request
+
+| Attribute        | Description                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-788                                                                                                     |
+| Requirement Name | Corrective Maintenance Request                                                                              |
+| Priority         | Critical                                                                                                    |
+| Description      | Sistem harus mendukung pengajuan permintaan perbaikan (*breakdown/corrective maintenance*) oleh pengguna aset kapan saja. |
+
+---
+
+## BR-789 – Spare Part and Material Usage
+
+| Attribute        | Description                                                                                                |
+| ---------------- | -------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-789                                                                                                  |
+| Requirement Name | Spare Part and Material Usage                                                                            |
+| Priority         | High                                                                                                    |
+| Description      | Sistem harus mencatat pemakaian spare part dan material pada setiap Work Order, terintegrasi dengan Inventory Management. |
+
+---
+
+## BR-790 – Maintenance Cost Tracking
+
+| Attribute        | Description                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-790                                                                                          |
+| Requirement Name | Maintenance Cost Tracking                                                                        |
+| Priority         | High                                                                                            |
+| Description      | Sistem harus mengakumulasi biaya pemeliharaan (tenaga kerja, spare part, vendor eksternal) per aset dan per periode. |
+
+---
+
+## BR-791 – Asset Downtime Recording
+
+| Attribute        | Description                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-791                                                                                     |
+| Requirement Name | Asset Downtime Recording                                                                    |
+| Priority         | High                                                                                        |
+| Description      | Sistem harus mencatat waktu mulai dan selesai downtime aset akibat pemeliharaan atau kerusakan. |
+
+---
+
+## BR-792 – Maintenance Vendor and Technician Assignment
+
+| Attribute        | Description                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-792                                                                                            |
+| Requirement Name | Maintenance Vendor and Technician Assignment                                                        |
+| Priority         | Medium                                                                                             |
+| Description      | Sistem harus mendukung penugasan teknisi internal maupun vendor eksternal pada Work Order pemeliharaan. |
+
+---
+
+## BR-793 – Maintenance Checklist and Standard Procedure
+
+| Attribute        | Description                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-793                                                                                            |
+| Requirement Name | Maintenance Checklist and Standard Procedure                                                        |
+| Priority         | Medium                                                                                             |
+| Description      | Sistem harus mendukung checklist standar pemeliharaan (SOP) yang harus diselesaikan sebelum Work Order ditutup. |
+
+---
+
+## BR-794 – Maintenance History per Asset
+
+| Attribute           | Description                                                                                  |
+| ------------------- | ---------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-794                                                                                       |
+| Requirement Name    | Maintenance History per Asset                                                                |
+| Priority            | High                                                                                         |
+| Description         | Sistem harus menyimpan riwayat lengkap seluruh aktivitas pemeliharaan pada masing-masing aset. |
+| Acceptance Criteria | Riwayat pemeliharaan dapat ditelusuri berdasarkan aset, periode, atau jenis pemeliharaan.     |
+
+---
+
+## BR-795 – Maintenance Reporting and KPI
+
+| Attribute        | Description                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-795                                                                                          |
+| Requirement Name | Maintenance Reporting and KPI                                                                      |
+| Priority         | Medium                                                                                            |
+| Description      | Sistem harus menyediakan indikator kinerja pemeliharaan seperti Mean Time To Repair (MTTR) dan Mean Time Between Failure (MTBF). |
+
+---
+
+# 9.16.3 Maintenance Business Rules Reference
+
+| Business Rule ID | Description                                                                                        |
+| ----------------- | -------------------------------------------------------------------------------------------------- |
+| BRule-MNT-001     | Work Order pemeliharaan tidak dapat ditutup sebelum checklist standar diselesaikan.                 |
+| BRule-MNT-002     | Setiap penggunaan spare part pada Work Order harus mengurangi stok pada Inventory secara otomatis.   |
+| BRule-MNT-003     | Corrective Maintenance Request wajib direview sebelum ditugaskan ke teknisi/vendor.                  |
+| BRule-MNT-004     | Downtime aset wajib dicatat sejak Work Order dibuka hingga dinyatakan selesai.                       |
+| BRule-MNT-005     | Seluruh biaya pemeliharaan wajib terekap dan dapat ditelusuri per aset.                               |
+| BRule-MNT-006     | Seluruh aktivitas pemeliharaan wajib tercatat pada Audit Trail.                                       |
+
+---
+
+# 9.16.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                |
+| -------------- | ------------------ | ----------- | -------------------------------- |
+| BR-786         | BO-009              | SH-038      | Preventive Maintenance Planning |
+| BR-787         | BO-009              | SH-038      | Work Order Execution             |
+| BR-788         | BO-014              | SH-038      | Corrective Maintenance            |
+| BR-789         | BO-014              | SH-032      | Spare Part Integration            |
+| BR-790         | BO-029              | SH-038      | Cost Tracking                     |
+| BR-791         | BO-014              | SH-038      | Downtime Management                |
+| BR-792         | BO-009              | SH-038      | Resource Assignment                |
+| BR-793         | BO-028              | SH-038      | Standard Procedure Compliance      |
+| BR-794         | BO-004              | SH-038      | Asset History                      |
+| BR-795         | BO-008              | SH-038      | Maintenance Analytics              |
+
+---
+
+# 9.16.5 Summary
+
+Modul **Maintenance Management** memastikan keandalan operasional aset melalui pemeliharaan terjadwal dan responsif, terintegrasi dengan Asset Management dan Inventory Management untuk pengelolaan biaya dan sumber daya pemeliharaan secara menyeluruh.
+
+Seluruh requirement pada bagian ini akan diturunkan lebih lanjut menjadi Functional Requirements, desain basis data, spesifikasi API, dan skenario pengujian pada dokumen lanjutan.

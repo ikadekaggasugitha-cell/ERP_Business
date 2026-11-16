@@ -1,0 +1,218 @@
+# BAB 5. Integration and Event Architecture
+
+## 5.1 Overview
+
+Bab ini mendefinisikan bagaimana komponen sistem (BAB 4) berkomunikasi — baik secara **sinkron** (REST melalui Kong, gRPC internal) maupun **asinkron** (*event-driven* melalui Apache Kafka) — serta bagaimana sistem terintegrasi dengan pihak eksternal. Arsitektur ini merealisasikan kebutuhan integrasi **INT-001 s.d. INT-016 (BRD BAB 13)** dan keputusan ADR-003, ADR-005, ADR-007, ADR-008.
+
+Dua kanal komunikasi digunakan secara komplementer:
+
+| Kanal        | Teknologi            | Kegunaan                                              | Keputusan |
+| ------------ | -------------------- | ---------------------------------------------------- | --------- |
+| Sinkron      | REST (Kong) / gRPC   | Query & command interaktif; panggilan internal latensi rendah | ADR-007   |
+| Asinkron     | Apache Kafka         | Integrasi antar-modul, *loose coupling*, resiliency  | ADR-005/008 |
+
+---
+
+## 5.2 Synchronous Integration (REST via Kong, gRPC Internal)
+
+### 5.2.1 REST (Eksternal & Klien)
+
+* Seluruh API publik/klien dipapar melalui **Kong** sebagai *single entry point*, didokumentasikan dengan **OpenAPI** (INT-013, API First).
+* **Versioning** (INT-014, NFR-014): versi mayor pada *path* (`/api/v1/...`); perubahan *non-breaking* pada versi minor; kebijakan *deprecation* minimum 12 bulan.
+* **Model error standar** (konsisten lintas layanan):
+
+```json
+{
+  "error": {
+    "code": "AR_INVOICE_NOT_FOUND",
+    "message": "Invoice tidak ditemukan",
+    "correlation_id": "b1f2...-...",
+    "details": []
+  }
+}
+```
+
+* **Idempotency**: operasi *command* yang tidak aman diulang menerima header `Idempotency-Key` yang divalidasi di layanan.
+* **Real-Time Push (SSE & WebSockets via Kong)** (ADR-011): Untuk menghindari polling berulang dari klien SPA backoffice, Kong memproksikan koneksi streaming **Server-Sent Events (SSE)** pada `/api/v1/stream/events` dan endpoint WebSocket terotentikasi. Event seperti `gl.journal.posted`, `inventory.stock.alert`, dan `workflow.approval.requested` di-push secara instan ke browser pengguna yang memiliki hak akses (*org scope*).
+
+### 5.2.2 gRPC (Internal)
+
+* Komunikasi sinkron antar-layanan internal menggunakan **gRPC** (Protobuf) untuk efisiensi & kontrak *strongly-typed* (ADR-007).
+* Digunakan hanya untuk *query* lintas layanan yang membutuhkan respons segera (mis. `coa-service` memvalidasi akun saat posting). Ketergantungan sinkron dijaga minimal untuk menghindari *coupling*; sebagian besar interaksi lintas-modul dilakukan asinkron.
+* **Resiliency**: setiap klien menerapkan *timeout*, *retry with backoff*, dan *circuit breaker* (ARC-006, NFR-009).
+
+---
+
+## 5.3 Asynchronous Integration (Apache Kafka)
+
+### 5.3.1 Konfigurasi Klaster (self-managed, ADR-004)
+
+* Minimum **3 broker** (mode KRaft); `replication.factor = 3`, `min.insync.replicas = 2`, produsen `acks = all` (durabilitas — NFR-009, ARC-006).
+* Dijalankan self-managed via *operator* **Strimzi** pada Kubernetes.
+* Retensi: *topic* transaksional 7–30 hari; *topic* audit/`compaction` untuk kebutuhan *replay* jangka panjang. PostgreSQL tetap *system of record* (CONS-014) — Kafka **bukan** sumber kebenaran.
+
+### 5.3.2 Konvensi Penamaan & Partisi
+
+* Format: `erp.<domain>.<entity>.<event>.v<versi>` (mis. `erp.sales.order.confirmed.v1`).
+* *Dead letter* & *retry*: sufiks `.dlq` dan `.retry`.
+* **Partition key** = `organization_id` (atau komposit `organization_id:aggregate_id`) untuk menjaga urutan kronologis (*strict in-order delivery*) per entitas bisnis (Organization Tree First, ADR-015). Skema ini memungkinkan penskalaan ke puluhan partisi broker Kafka paralel tanpa mengalami kemacetan *hot partition* saat memproses jutaan transaksi real-time lintas cabang dan negara.
+
+Katalog *topic* lengkap mengacu pada **BRD BAB 13.10.3** dan diperluas pada §5.4 dengan tata kelola skema.
+
+---
+
+## 5.4 Event Catalog and Schema Governance (Apicurio)
+
+### 5.4.1 Katalog Event (representatif)
+
+| Event (topic)                          | Produsen (SVC)            | Konsumen Utama                          | Delivery (ADR-005)      | Alur (INT)  |
+| -------------------------------------- | ------------------------- | ---------------------------------------- | ----------------------- | ----------- |
+| `erp.sales.order.confirmed.v1`         | SVC-015 sales             | inventory, reporting                     | At-Least-Once + idemp.  | INT-001     |
+| `erp.inventory.stock.reserved.v1`      | SVC-013 inventory         | sales, manufacturing                     | **Exactly-Once**        | INT-001     |
+| `erp.inventory.goods.issued.v1`        | SVC-013 inventory         | ar, gl                                   | **Exactly-Once**        | INT-001     |
+| `erp.ar.invoice.issued.v1`             | SVC-009 ar                | gl, tax                                  | **Exactly-Once**        | INT-001     |
+| `erp.procurement.goods.received.v1`    | SVC-012 procurement       | ap, inventory                            | At-Least-Once + idemp.  | INT-002     |
+| `erp.ap.invoice.recorded.v1`           | SVC-008 ap                | gl, treasury-cashbank                    | **Exactly-Once**        | INT-002     |
+| `erp.payroll.run.completed.v1`         | SVC-017 payroll           | gl, treasury-cashbank                    | **Exactly-Once**        | INT-003     |
+| `erp.gl.journal.posted.v1`             | SVC-007 gl                | reporting, audit                         | **Exactly-Once**        | Muara → GL  |
+| `erp.masterdata.*.upserted.v1`         | SVC-005 masterdata        | seluruh konsumen master data             | At-Least-Once + idemp.  | BO-010      |
+| `erp.workflow.approval.completed.v1`   | SVC-004 workflow          | modul asal dokumen                       | At-Least-Once + idemp.  | INT-004     |
+| `erp.audit.event.recorded.v1`          | seluruh layanan           | audit                                    | At-Least-Once + idemp.  | 9.20        |
+
+> Kolom *Delivery* menandai penerapan **Selective Exactly-Once** (ADR-005): *event* yang memicu efek finansial berkonsistensi absolut (reservasi stok, pengeluaran barang, penerbitan invoice, posting jurnal, payroll, pembayaran) menggunakan EOS; sisanya At-Least-Once + idempotensi.
+
+### 5.4.2 Tata Kelola Skema (Apicurio, ADR-003)
+
+* Seluruh *event* memiliki skema **Avro/Protobuf** terdaftar pada **Apicurio Registry**.
+* **Aturan kompatibilitas**: `BACKWARD` (default) untuk memastikan konsumen lama tetap dapat memproses *event* versi baru; perubahan *breaking* menaikkan versi mayor *topic* (`.v2`) — memenuhi NFR-014.
+* *CI pipeline* memvalidasi skema terhadap registry sebelum *deploy* (mencegah *breaking change* tak sengaja).
+
+---
+
+## 5.5 Delivery Semantics — Selective Exactly-Once
+
+Penerapan operasional ADR-005:
+
+| Aspek                | Proses Finansial Absolut (EOS)                             | Proses Lain (At-Least-Once + Idempotensi)          |
+| -------------------- | ---------------------------------------------------------- | --------------------------------------------------- |
+| Cakupan              | General Ledger, Journal Posting, Payment, Inventory Reservation | Reporting, Dashboard, Notification, Audit Log, mayoritas operasional |
+| Mekanisme produsen   | Kafka transactions (`transactional.id`, `acks=all`)        | Producer idempoten (`enable.idempotence=true`)      |
+| Mekanisme konsumen   | `isolation.level=read_committed`, commit offset transaksional | Deduplikasi berbasis `event_id`/`correlation_id`   |
+| Penanganan gagal     | Rollback transaksi + retry terkendali                       | `.retry` → `.dlq` setelah batas percobaan           |
+| Trade-off            | Throughput lebih rendah demi konsistensi absolut            | Throughput & ketersediaan lebih tinggi              |
+
+**Idempotensi wajib** pada seluruh konsumen (kedua mode) sebagai *safety net*: setiap *event* yang telah diproses dicatat (mis. tabel `processed_events`) untuk mencegah efek ganda.
+
+---
+
+## 5.6 Transactional Outbox and Change Data Capture (ADR-008)
+
+Untuk menjamin *event* konsisten dengan perubahan basis data (menghindari *dual-write*):
+
+```text
+1. Layanan menulis perubahan data + baris `outbox` dalam SATU transaksi PostgreSQL (atomik).
+2. Komponen CDC (mis. Debezium) membaca WAL / tabel outbox.
+3. Event dipublikasikan ke Kafka (validasi skema via Apicurio).
+4. Baris outbox ditandai terkirim / dibersihkan.
+```
+
+* Menjamin **exactly-once dari sisi produsen** untuk publikasi *event* finansial (mendukung EOS end-to-end bersama §5.5).
+* *Lag* publikasi outbox→Kafka dipantau sebagai metrik (ADR-010).
+* Alternatif *poller* tabel outbox digunakan bila CDC tidak tersedia untuk suatu layanan.
+
+---
+
+## 5.7 Saga and Distributed Transaction Patterns
+
+Transaksi lintas layanan (mis. INT-001 Sales→Inventory→AR→GL) dijalankan sebagai **Saga berbasis *choreography*** melalui *event*, dengan *compensating action* bila salah satu langkah gagal — memenuhi klausul *compensating transaction* pada NFR-008.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant S as sales-service
+  participant I as inventory-service
+  participant AR as ar-service
+  participant GL as gl-service
+  S->>S: Simpan Sales Order (tx + outbox)
+  S-->>I: erp.sales.order.confirmed.v1
+  alt Stok tersedia
+    I->>I: Reservasi & keluarkan stok (EOS, tx + outbox)
+    I-->>AR: erp.inventory.goods.issued.v1
+    AR->>AR: Terbitkan invoice piutang (EOS, tx + outbox)
+    AR-->>GL: erp.ar.invoice.issued.v1
+    GL->>GL: Posting jurnal piutang & pendapatan (EOS)
+    GL-->>S: erp.gl.journal.posted.v1 (konfirmasi)
+  else Stok tidak tersedia
+    I-->>S: erp.inventory.reservation.failed.v1
+    S->>S: Kompensasi — batalkan/hold Sales Order
+  end
+```
+
+**Prinsip Saga:**
+
+* Setiap langkah bersifat *local transaction* (ACID di dalam layanan) + *event* keluaran (outbox).
+* Kegagalan memicu *event* kompensasi yang membalikkan efek langkah sebelumnya.
+* Orkestrasi *choreography* dipilih sebagai default (loose coupling); untuk alur sangat kompleks, *orchestration* berbasis `workflow-service` dapat diterapkan.
+* Konsistensi akhir divalidasi oleh *reconciliation job* berkala (mitigasi RISK-014).
+
+---
+
+## 5.8 External System Integration
+
+Integrasi eksternal menerapkan pola **Anti-Corruption Layer (ACL)** — sebuah *adapter* di dalam layanan terkait yang menerjemahkan model eksternal ke model domain internal, mengisolasi sistem dari perubahan pihak ketiga (CONS-004, ASM-005).
+
+| Integrasi (INT)            | Layanan Pemilik          | Pola                                   | Catatan                                        |
+| -------------------------- | ------------------------ | -------------------------------------- | ---------------------------------------------- |
+| INT-005 Bank/Payment GW    | treasury-cashbank        | ACL + REST/host-to-host + rekonsiliasi | Payment bersifat EOS; rekonsiliasi via event.  |
+| INT-006 e-Faktur/DJP       | tax-service              | ACL + REST + Chrome Helper (ADR-012)   | Format & status faktur sesuai DJP / tax authority. |
+| INT-007 BPJS               | payroll/hr               | ACL + API/file                         | Ekspor iuran sesuai format lembaga.            |
+| INT-012 Identity Provider  | security/user + Kong     | OIDC/SAML (SSO)                        | Autentikasi via Kong; token diteruskan (PKCE). |
+| INT-009/010/011 Notifikasi | via `notification` (event)| Event-driven → adapter SMS/WA/Email   | Konsumsi `*.notification.requested`.           |
+| INT-008 Legacy & SAP       | Cortex V7 (ADR-013)      | Replikasi DDIC + Dataform (.js)        | Replikasi BKPF/ACDOCA & koeksistensi (CONS-006).|
+| In-Context Browser Actions | Chrome Extension (ADR-012)| OAuth PKCE + Side Panel + DOM bridge  | Quick approvals, e-statement scraping, scanner.|
+
+* Panggilan eksternal dibungkus *timeout*, *retry*, dan *circuit breaker*; kegagalan tidak menghentikan proses inti (fallback/queue).
+* Kredensial & rahasia dikelola melalui *secret manager* (dielaborasi BAB 7, Fase 2).
+
+---
+
+## 5.9 API Gateway Architecture (Kong)
+
+**Kong** (ADR-003) sebagai *single entry point* menegakkan kebijakan lintas layanan sebelum permintaan mencapai layanan Go:
+
+| Fungsi Kong                | Realisasi                                                        | Kebutuhan        |
+| -------------------------- | ---------------------------------------------------------------- | ---------------- |
+| Autentikasi & Otorisasi    | OAuth2/OIDC (integrasi IdP), validasi token/JWT                  | INT-015, NFR-016 |
+| Scope-based (coarse)       | Enforcement scope tingkat gateway; fine-grained di layanan & RLS | ARC-008          |
+| Rate Limiting & Throttling | Plugin rate-limiting per konsumen/klien                          | INT-016          |
+| API Versioning & Routing   | Routing berbasis path/versi; header versi                       | INT-014, NFR-014 |
+| Observability              | Korelasi `correlation_id`, metrik & log ke stack observability   | ADR-010          |
+| Keamanan tambahan          | TLS termination, IP restriction, request validation             | NFR-016          |
+
+Kong berjalan HA (multi-replica) sebagai komponen kritikal (ADR-004); kegagalan Kong dimitigasi dengan redundansi dan *health check* (ARC-003).
+
+---
+
+## 5.10 Integration Traceability
+
+| INT ID (BRD)          | Realisasi Arsitektur (SAD)                             | Bagian     |
+| --------------------- | ------------------------------------------------------ | ---------- |
+| INT-001/002/003       | Saga event-driven + EOS pada langkah finansial         | §5.5, §5.7 |
+| INT-004               | Kafka publish/subscribe + Outbox + DLQ                 | §5.3, §5.6 |
+| INT-005/006/007/008   | ACL + adapter eksternal                                | §5.8       |
+| INT-009/010/011       | Notifikasi event-driven                                | §5.8       |
+| INT-012               | OIDC/SSO via Kong                                       | §5.9       |
+| INT-013               | REST/OpenAPI (Go) via Kong; gRPC internal              | §5.2       |
+| INT-014               | Versioning Kong + kompatibilitas skema Apicurio        | §5.2, §5.4 |
+| INT-015               | OAuth2/OIDC di Kong                                     | §5.9       |
+| INT-016               | Rate limiting/throttling Kong                          | §5.9       |
+
+---
+
+## 5.11 Summary
+
+Bab ini mendefinisikan arsitektur integrasi dua-kanal: **sinkron** (REST via Kong + gRPC internal, ADR-007) dan **asinkron** (Apache Kafka, ADR-005/008). Katalog *event* dengan tata kelola skema Apicurio (ADR-003), penerapan **Selective Exactly-Once** (EOS untuk proses finansial absolut; At-Least-Once + idempotensi untuk selebihnya), **Transactional Outbox + CDC**, serta pola **Saga** menjamin konsistensi lintas layanan sesuai NFR-008. Integrasi eksternal menerapkan **Anti-Corruption Layer** untuk isolasi terhadap perubahan pihak ketiga, dan **Kong** menegakkan keamanan, versioning, serta rate limiting terpusat. Seluruh kebutuhan integrasi INT-001 s.d. INT-016 tertaut ke realisasi arsitekturnya, menjaga keterlacakan penuh dari BRD ke SAD.
+
+Bab ini menutup **Fase 1 (BAB 1–5)** SAD. **Fase 2 (BAB 6–13)** akan menjabarkan Data Architecture, Security Architecture, Deployment/Infrastructure, Observability & Operations, CI/CD, Cross-Cutting Concerns, Quality Attribute Scenarios, serta Architecture Risks & Appendix.
+
+---

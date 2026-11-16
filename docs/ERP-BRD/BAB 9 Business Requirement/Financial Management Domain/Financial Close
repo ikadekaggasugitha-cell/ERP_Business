@@ -1,0 +1,177 @@
+# 9.5.14 Financial Close Requirements
+
+---
+
+# 9.5.14.1 Overview
+
+Financial Close merupakan proses penutupan periode keuangan (period-end dan year-end closing) yang memastikan seluruh transaksi telah tercatat lengkap, saldo antar sub-ledger telah selaras dengan General Ledger, jurnal penyesuaian telah diposting, dan periode akuntansi dikunci sebelum laporan keuangan final diterbitkan.
+
+Proses Financial Close bersifat lintas modul dan lintas organisasi mengingat struktur organisasi dapat berjenjang tanpa batas (Holding, Sub Holding, Company, Business Unit, Branch, Department, Warehouse, Project Site). Oleh karena itu, sistem harus menyediakan checklist penutupan yang configurable, validasi saldo otomatis, mekanisme penguncian periode berbasis scope organisasi, serta koordinasi terstruktur antara sub-ledger (Accounts Payable, Accounts Receivable, Fixed Asset, Cash & Bank, Inventory) dengan General Ledger.
+
+Financial Close juga menjadi titik kendali utama bagi integritas data keuangan dan audit trail, sehingga seluruh aktivitas penutupan harus tercatat, dapat ditelusuri, dan dapat direview oleh fungsi audit internal maupun eksternal.
+
+---
+
+# 9.5.14.2 Business Requirement Catalogue
+
+## BR-656 – Period-End Closing Checklist
+
+| Attribute           | Description                                                                                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-656                                                                                                                                                                                           |
+| Requirement Name    | Period-End Closing Checklist                                                                                                                                                                    |
+| Category            | Financial Close                                                                                                                                                                                 |
+| Priority            | Critical                                                                                                                                                                                        |
+| Business Objective  | BO-022, BO-028                                                                                                                                                                                  |
+| Stakeholder Owner   | SH-003 (CFO), SH-010 (Internal Audit)                                                                                                                                                           |
+| Description         | Sistem harus menyediakan checklist penutupan periode yang configurable, mencakup daftar tugas wajib (task list) yang harus diselesaikan sebelum periode dapat ditutup, mengikuti setiap scope organisasi. |
+| Business Rationale  | Penutupan periode yang tidak terstruktur berisiko meninggalkan transaksi yang belum tercatat atau belum direkonsiliasi, sehingga laporan keuangan tidak akurat.                                 |
+| Business Value      | Meningkatkan kedisiplinan dan konsistensi proses penutupan periode di seluruh entitas organisasi.                                                                                               |
+| Acceptance Criteria | Administrator dapat mendefinisikan template checklist penutupan per Financial Organization; sistem menampilkan status penyelesaian tiap task dan mencegah penutupan periode apabila task wajib belum selesai. |
+
+---
+
+## BR-657 – Sub-Ledger to General Ledger Reconciliation
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-657                                                                                                                                                                          |
+| Requirement Name  | Sub-Ledger to General Ledger Reconciliation                                                                                                                                    |
+| Priority          | Critical                                                                                                                                                                        |
+| Description       | Sistem harus menyediakan fungsi rekonsiliasi otomatis antara saldo sub-ledger (Accounts Payable, Accounts Receivable, Fixed Asset, Cash & Bank, Inventory) dengan saldo akun kontrol pada General Ledger sebelum periode ditutup. |
+| Acceptance Criteria | Sistem menampilkan laporan selisih (variance report) apabila saldo sub-ledger tidak sesuai dengan akun kontrol General Ledger, dan penutupan periode tidak dapat dilanjutkan hingga selisih diselesaikan atau disetujui melalui exception approval. |
+
+---
+
+## BR-658 – Closing Adjustment Journal Entry
+
+| Attribute        | Description                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-658                                                                                                                                                          |
+| Requirement Name  | Closing Adjustment Journal Entry                                                                                                                                |
+| Priority          | Critical                                                                                                                                                       |
+| Description       | Sistem harus menyediakan jenis jurnal khusus "Closing Adjustment" yang hanya dapat diposting dalam tahapan penutupan periode, dengan approval workflow terpisah dari jurnal transaksi reguler. |
+| Business Value    | Menjaga integritas data transaksi reguler sekaligus memungkinkan penyesuaian akhir periode yang terkontrol.                                                     |
+
+---
+
+## BR-659 – Period Locking & Status Control
+
+| Attribute        | Description                                                                                                                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-659                                                                                                                                                                            |
+| Requirement Name  | Period Locking & Status Control                                                                                                                                                  |
+| Priority          | Critical                                                                                                                                                                          |
+| Description       | Sistem harus mendukung status periode (Open, Pending Close, Closed, Locked) yang dikelola per scope organisasi dan per modul, sehingga posting transaksi ke periode yang berstatus Closed atau Locked dapat dicegah secara otomatis. |
+| Acceptance Criteria | Sistem menolak seluruh transaksi baru maupun perubahan transaksi pada periode yang berstatus Closed atau Locked, kecuali melalui mekanisme reopening yang diotorisasi. |
+
+---
+
+## BR-660 – Multi-Level Closing Sequence
+
+| Attribute        | Description                                                                                                                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-660                                                                                                                                                                              |
+| Requirement Name  | Multi-Level Closing Sequence                                                                                                                                                        |
+| Priority          | High                                                                                                                                                                                |
+| Description       | Sistem harus mendukung urutan penutupan berjenjang mengikuti hierarki organisasi (Branch/Department ditutup terlebih dahulu, diikuti Company, kemudian Sub Holding, dan Holding), sesuai konfigurasi tanpa perubahan source code. |
+| Business Value    | Memastikan konsolidasi laporan keuangan lintas entitas hanya dilakukan setelah seluruh entitas anak selesai ditutup.                                                               |
+
+---
+
+## BR-661 – Closing Task Assignment & Approval Workflow
+
+| Attribute        | Description                                                                                                                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID    | BR-661                                                                                                                                                |
+| Requirement Name  | Closing Task Assignment & Approval Workflow                                                                                                          |
+| Priority          | High                                                                                                                                                  |
+| Description       | Sistem harus memungkinkan penugasan setiap task closing kepada pemilik proses (task owner) tertentu, dilengkapi dengan workflow approval berjenjang untuk konfirmasi penyelesaian tiap tahap sebelum periode dinyatakan closed. |
+| Acceptance Criteria | Sistem mengirimkan notifikasi kepada task owner dan approver, serta mencatat waktu penyelesaian dan approval setiap task closing. |
+
+---
+
+## BR-662 – Trial Balance Validation
+
+| Attribute        | Description                                                                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-662                                                                                                                                                            |
+| Requirement Name  | Trial Balance Validation Before Closing                                                                                                                          |
+| Priority          | Critical                                                                                                                                                          |
+| Description       | Sistem harus menghasilkan Trial Balance secara otomatis dan memvalidasi keseimbangan debit-kredit pada level akun, cost center, dan currency sebelum periode dapat ditutup. |
+| Acceptance Criteria | Penutupan periode ditolak apabila Trial Balance tidak seimbang (out of balance) pada salah satu dimensi validasi. |
+
+---
+
+## BR-663 – Year-End Closing & Retained Earnings Rollover
+
+| Attribute        | Description                                                                                                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-663                                                                                                                                                            |
+| Requirement Name  | Year-End Closing & Retained Earnings Rollover                                                                                                                    |
+| Priority          | Critical                                                                                                                                                          |
+| Description       | Sistem harus menyediakan proses penutupan tahun buku (year-end closing) yang secara otomatis memindahkan saldo akun Nominal (Income Statement) ke akun Retained Earnings pada awal periode buku berikutnya, sesuai konfigurasi Fiscal Calendar. |
+| Business Value    | Menjamin kesinambungan saldo akun neraca antar tahun buku secara akurat dan konsisten. |
+
+---
+
+## BR-664 – Controlled Period Reopening
+
+| Attribute        | Description                                                                                                                                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-664                                                                                                                                                                 |
+| Requirement Name  | Controlled Period Reopening                                                                                                                                           |
+| Priority          | High                                                                                                                                                                   |
+| Description       | Sistem harus menyediakan mekanisme pembukaan kembali (reopening) periode yang telah closed atau locked hanya melalui approval khusus dengan justifikasi tertulis, dan tercatat sebagai exception. |
+| Acceptance Criteria | Setiap reopening periode mencatat identitas pemohon, approver, alasan, waktu, serta transaksi yang diposting selama periode dibuka kembali. |
+
+---
+
+## BR-665 – Closing Audit Trail & Closing Report
+
+| Attribute        | Description                                                                                                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-665                                                                                                                                                                  |
+| Requirement Name  | Closing Audit Trail & Closing Report                                                                                                                                   |
+| Priority          | Critical                                                                                                                                                                |
+| Description       | Sistem harus mencatat seluruh aktivitas proses closing (checklist completion, rekonsiliasi, jurnal penyesuaian, approval, dan penguncian periode) ke dalam audit trail, serta menyediakan Closing Report yang dapat diakses oleh fungsi audit. |
+| Acceptance Criteria | Closing Report mencakup ringkasan status seluruh task, daftar jurnal penyesuaian, hasil rekonsiliasi, dan riwayat approval per periode dan per scope organisasi. |
+
+---
+
+# 9.5.14.3 Financial Close Business Rules
+
+| Business Rule ID | Description                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-FCL-001     | Periode tidak dapat ditutup (Closed) apabila terdapat task wajib pada checklist penutupan yang belum berstatus selesai.                       |
+| BRule-FCL-002     | Saldo sub-ledger wajib direkonsiliasi dengan akun kontrol General Ledger sebelum periode dinyatakan Pending Close.                            |
+| BRule-FCL-003     | Jurnal Closing Adjustment hanya dapat diposting pada status periode Pending Close, tidak pada status Open maupun Closed.                       |
+| BRule-FCL-004     | Penutupan periode pada level organisasi anak (child) harus selesai terlebih dahulu sebelum penutupan pada level organisasi induk (parent) dapat dilakukan. |
+| BRule-FCL-005     | Transaksi pada periode berstatus Closed atau Locked tidak dapat diposting, diubah, atau dihapus tanpa proses reopening yang diotorisasi.       |
+| BRule-FCL-006     | Reopening periode wajib melalui approval berjenjang dan dicatat sebagai exception pada audit trail.                                            |
+| BRule-FCL-007     | Proses year-end closing hanya dapat dijalankan setelah seluruh periode bulanan dalam tahun buku berjalan berstatus Closed.                     |
+
+---
+
+# 9.5.14.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder      | Future Process                          |
+| -------------- | ------------------- | ---------------- | ---------------------------------------- |
+| BR-656         | BO-022, BO-028       | SH-003, SH-010    | Period-End Closing Administration        |
+| BR-657         | BO-022               | SH-003, SH-028    | Sub-Ledger Reconciliation                |
+| BR-658         | BO-022, BO-028       | SH-003, SH-028    | Closing Journal Adjustment               |
+| BR-659         | BO-028               | SH-003, SH-010    | Period Status Control                    |
+| BR-660         | BO-022               | SH-003, SH-007    | Multi-Entity Closing Coordination        |
+| BR-661         | BO-028               | SH-003, SH-028    | Closing Task & Workflow Management       |
+| BR-662         | BO-022               | SH-003, SH-010    | Trial Balance Validation                 |
+| BR-663         | BO-022               | SH-003, SH-028    | Year-End Closing Administration          |
+| BR-664         | BO-028               | SH-003, SH-010    | Period Reopening Governance              |
+| BR-665         | BO-028               | SH-010, SH-003    | Closing Audit & Reporting                |
+
+---
+
+# 9.5.14.5 Summary
+
+Financial Close Requirements menetapkan kebutuhan bisnis untuk memastikan proses penutupan periode dan tahun buku berjalan secara terstruktur, terkendali, dan dapat ditelusuri di seluruh entitas organisasi. Checklist penutupan, validasi saldo, jurnal penyesuaian, penguncian periode, serta koordinasi lintas sub-ledger menjadi fondasi utama bagi keakuratan laporan keuangan dan integritas audit trail.
+
+Seluruh requirement pada bagian ini akan menjadi dasar bagi desain proses closing lanjutan, termasuk integrasi dengan Financial Reporting dan Financial Consolidation pada dokumen berikutnya.

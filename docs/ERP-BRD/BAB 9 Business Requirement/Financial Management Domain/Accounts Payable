@@ -1,0 +1,175 @@
+# 9.5.5 Accounts Payable Requirements
+
+---
+
+# 9.5.5.1 Overview
+
+Accounts Payable (AP) merupakan domain yang mengelola pengakuan dan penyelesaian kewajiban pembayaran (utang usaha) perusahaan kepada vendor atas pengadaan barang dan/atau jasa. Domain ini mencakup pencatatan vendor invoice, pencocokan invoice dengan dokumen sumber pengadaan (Purchase Order dan Goods Receipt) melalui mekanisme three-way matching, pengelolaan jadwal pembayaran, retensi kontrak, uang muka kepada vendor, hingga rekonsiliasi saldo utang dengan vendor.
+
+Accounts Payable dirancang agar terintegrasi penuh dengan modul Procurement, Inventory, dan General Ledger, sehingga setiap kewajiban yang tercatat dapat ditelusuri ke dokumen sumbernya (traceable) dan mencerminkan posisi keuangan perusahaan secara akurat. Seluruh proses AP tunduk pada prinsip Scope-Based Everything, sehingga kebijakan matching, toleransi, termin pembayaran, dan approval dapat dikonfigurasi berbeda pada setiap level organisasi (Company, Business Unit, Branch) tanpa memerlukan perubahan source code.
+
+---
+
+# 9.5.5.2 Business Requirement Catalogue
+
+## BR-566 – Vendor Invoice Recording
+
+| Attribute           | Description                                                                                                                                                                                             |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-566                                                                                                                                                                                                   |
+| Requirement Name    | Vendor Invoice Recording                                                                                                                                                                                 |
+| Category            | Accounts Payable                                                                                                                                                                                         |
+| Priority            | Critical                                                                                                                                                                                                 |
+| Business Objective  | BO-003, BO-022                                                                                                                                                                                           |
+| Stakeholder Owner   | SH-028 (Accounting Department), SH-003 (CFO)                                                                                                                                                            |
+| Description         | Sistem harus menyediakan mekanisme pencatatan vendor invoice yang terhubung dengan Purchase Order dan Goods Receipt terkait, mencakup nomor invoice, tanggal invoice, jumlah tagihan, pajak, mata uang, dan termin pembayaran. |
+| Business Rationale  | Pencatatan invoice yang terstruktur dan terintegrasi dengan dokumen sumber diperlukan untuk memastikan validitas kewajiban pembayaran kepada vendor serta mendukung proses matching dan pelaporan keuangan yang akurat. |
+| Business Value      | Mengurangi risiko pencatatan utang usaha yang tidak valid dan mempercepat proses verifikasi invoice.                                                                                                    |
+| Acceptance Criteria | Pengguna dapat mencatat vendor invoice dengan referensi ke PO/GR, sistem melakukan validasi duplikasi invoice number per vendor, dan invoice yang tercatat otomatis tersedia untuk proses matching serta penjadwalan pembayaran. |
+
+---
+
+## BR-567 – Three-Way Matching (PO, GR, Invoice)
+
+| Attribute           | Description                                                                                                                                                              |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-567                                                                                                                                                                   |
+| Requirement Name    | Three-Way Matching (PO, GR, Invoice)                                                                                                                                     |
+| Priority            | Critical                                                                                                                                                                 |
+| Description         | Sistem harus melakukan pencocokan otomatis (three-way matching) antara Purchase Order, Goods Receipt, dan Vendor Invoice sebelum invoice disetujui untuk pembayaran, mencakup pencocokan kuantitas, harga, dan nilai total. |
+| Business Value      | Memastikan pembayaran hanya dilakukan atas barang/jasa yang benar-benar diterima sesuai kesepakatan pembelian.                                                          |
+| Acceptance Criteria | Sistem menampilkan status matched/unmatched beserta detail selisih kuantitas dan harga pada setiap invoice yang diproses.                                               |
+
+---
+
+## BR-568 – Matching Tolerance & Exception Handling
+
+| Attribute           | Description                                                                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-568                                                                                                                                                                 |
+| Requirement Name    | Matching Tolerance & Exception Handling                                                                                                                               |
+| Priority            | High                                                                                                                                                                   |
+| Description         | Sistem harus menyediakan konfigurasi toleransi selisih (persentase atau nilai nominal) untuk kuantitas dan harga dalam proses matching, serta workflow approval untuk invoice yang melebihi toleransi. |
+| Acceptance Criteria | Invoice dengan selisih di luar toleransi yang dikonfigurasi diarahkan ke workflow approval eksepsi sebelum dapat diproses lebih lanjut.                              |
+
+---
+
+## BR-569 – Non-PO Invoice & Direct Expense Invoice Handling
+
+| Attribute           | Description                                                                                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-569                                                                                                                                                          |
+| Requirement Name    | Non-PO Invoice & Direct Expense Invoice Handling                                                                                                                |
+| Priority            | High                                                                                                                                                             |
+| Description         | Sistem harus mendukung pencatatan vendor invoice yang tidak memiliki referensi Purchase Order (non-PO invoice), seperti tagihan jasa atau biaya operasional, dengan jalur approval tersendiri. |
+| Acceptance Criteria | Non-PO invoice dapat diarahkan ke akun biaya/GL yang sesuai dan tetap melalui approval workflow berdasarkan nilai dan kategori transaksi.                       |
+
+---
+
+## BR-570 – Payment Schedule & Due Date Management
+
+| Attribute           | Description                                                                                                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-570                                                                                                                                                        |
+| Requirement Name    | Payment Schedule & Due Date Management                                                                                                                        |
+| Priority            | High                                                                                                                                                          |
+| Description         | Sistem harus menghasilkan jadwal pembayaran vendor invoice secara otomatis berdasarkan termin pembayaran (payment terms) yang berlaku, termasuk dukungan pembayaran bertahap (installment). |
+| Acceptance Criteria | Sistem menampilkan proyeksi jadwal pembayaran per vendor dan invoice berdasarkan due date yang dihitung otomatis dari tanggal invoice dan termin pembayaran.  |
+
+---
+
+## BR-571 – Retention (Retainage) Management
+
+| Attribute           | Description                                                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-571                                                                                                                                                             |
+| Requirement Name    | Retention (Retainage) Management                                                                                                                                  |
+| Priority            | High                                                                                                                                                               |
+| Description         | Sistem harus mendukung perhitungan dan pencatatan retensi (retention) atas invoice vendor, khususnya untuk kontrak proyek/konstruksi, termasuk persentase retensi, periode penahanan, dan syarat pelepasan retensi. |
+| Business Value      | Memastikan kepatuhan terhadap ketentuan kontrak terkait jaminan kualitas pekerjaan vendor.                                                                        |
+| Acceptance Criteria | Sistem menahan sejumlah nilai retensi sesuai konfigurasi kontrak dan memungkinkan pelepasan retensi setelah syarat terpenuhi dan disetujui.                       |
+
+---
+
+## BR-572 – Vendor Advance Payment (Down Payment) Management
+
+| Attribute           | Description                                                                                                                                                    |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-572                                                                                                                                                        |
+| Requirement Name    | Vendor Advance Payment (Down Payment) Management                                                                                                              |
+| Priority            | High                                                                                                                                                          |
+| Description         | Sistem harus mendukung pencatatan uang muka (advance/down payment) kepada vendor yang terhubung dengan Purchase Order atau kontrak terkait, termasuk validasi batas maksimum uang muka sesuai kebijakan. |
+| Acceptance Criteria | Uang muka yang dicatat tersimpan sebagai saldo advance vendor dan dapat ditelusuri ke PO/kontrak sumbernya.                                                   |
+
+---
+
+## BR-573 – Advance Offsetting Against Vendor Invoice
+
+| Attribute           | Description                                                                                                                                                |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-573                                                                                                                                                     |
+| Requirement Name    | Advance Offsetting Against Vendor Invoice                                                                                                                  |
+| Priority            | High                                                                                                                                                        |
+| Description         | Sistem harus menyediakan mekanisme pemotongan (offsetting) saldo uang muka vendor terhadap invoice yang diterima, baik secara otomatis maupun manual dengan approval. |
+| Acceptance Criteria | Pada saat invoice diproses, sistem menampilkan saldo advance yang tersedia dan mengurangi saldo tersebut sesuai nilai offset yang disetujui.               |
+
+---
+
+## BR-574 – Vendor Statement Reconciliation
+
+| Attribute           | Description                                                                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-574                                                                                                                                                       |
+| Requirement Name    | Vendor Statement Reconciliation                                                                                                                              |
+| Priority            | Medium                                                                                                                                                        |
+| Description         | Sistem harus mendukung proses rekonsiliasi saldo utang vendor antara catatan internal sistem dengan vendor statement, termasuk identifikasi selisih dan tindak lanjut penyesuaian. |
+| Acceptance Criteria | Pengguna dapat menginput data vendor statement dan sistem menghasilkan laporan perbandingan beserta selisih yang teridentifikasi.                            |
+
+---
+
+## BR-575 – AP Aging & Outstanding Balance Report
+
+| Attribute           | Description                                                                                                                                            |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-575                                                                                                                                                  |
+| Requirement Name    | AP Aging & Outstanding Balance Report                                                                                                                   |
+| Priority            | Medium                                                                                                                                                   |
+| Description         | Sistem harus menyediakan laporan aging utang usaha (AP Aging) yang mengelompokkan outstanding invoice berdasarkan rentang jatuh tempo per vendor, mata uang, dan organisasi. |
+| Acceptance Criteria | Laporan AP Aging dapat difilter berdasarkan periode, vendor, dan scope organisasi, serta menampilkan total outstanding per kategori umur utang.          |
+
+---
+
+# 9.5.5.3 Business Rules Reference
+
+| Business Rule ID | Description                                                                                                                                        |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-AP-001      | Vendor invoice yang memiliki referensi Purchase Order wajib melalui proses three-way matching sebelum dapat disetujui untuk pembayaran.              |
+| BRule-AP-002      | Selisih hasil matching yang melebihi batas toleransi yang dikonfigurasi wajib melalui workflow approval eksepsi sebelum invoice dapat diproses lebih lanjut. |
+| BRule-AP-003      | Nilai retensi dihitung otomatis berdasarkan persentase yang ditetapkan pada kontrak/PO dan tidak dapat dibayarkan sebelum syarat pelepasan retensi terpenuhi. |
+| BRule-AP-004      | Saldo uang muka vendor tidak boleh melebihi batas maksimum yang ditetapkan terhadap nilai Purchase Order/kontrak terkait.                             |
+| BRule-AP-005      | Pemotongan uang muka terhadap invoice tidak boleh melebihi saldo advance yang tersedia untuk vendor dan PO/kontrak yang bersangkutan.                  |
+| BRule-AP-006      | Jadwal pembayaran invoice mengikuti payment terms yang berlaku pada vendor atau kontrak, dan perubahan jadwal memerlukan approval sesuai kebijakan otorisasi. |
+| BRule-AP-007      | Rekonsiliasi saldo vendor wajib dilakukan secara periodik, dan setiap selisih yang teridentifikasi harus ditindaklanjuti serta didokumentasikan.       |
+
+---
+
+# 9.5.5.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                              |
+| -------------- | ------------------- | ----------- | -------------------------------------------- |
+| BR-566         | BO-003, BO-022       | SH-028      | Vendor Invoice Administration                 |
+| BR-567         | BO-003, BO-022       | SH-028      | Three-Way Matching Processing                |
+| BR-568         | BO-003               | SH-028      | Matching Exception Approval                   |
+| BR-569         | BO-003               | SH-028      | Non-PO Invoice Processing                     |
+| BR-570         | BO-022               | SH-003      | Payment Scheduling & Disbursement Planning    |
+| BR-571         | BO-022               | SH-003      | Retention Tracking & Release                  |
+| BR-572         | BO-022               | SH-003      | Vendor Advance Payment Administration         |
+| BR-573         | BO-022               | SH-028      | Advance Offsetting Processing                 |
+| BR-574         | BO-022               | SH-028      | Vendor Statement Reconciliation Processing    |
+| BR-575         | BO-022               | SH-003      | AP Aging & Liability Reporting                |
+
+---
+
+# 9.5.5.5 Summary
+
+Accounts Payable Requirements menetapkan kerangka pengelolaan utang usaha kepada vendor secara menyeluruh, mulai dari pencatatan invoice yang terhubung dengan dokumen pengadaan, validasi melalui three-way matching, penanganan retensi dan uang muka, hingga penjadwalan pembayaran dan rekonsiliasi saldo vendor. Seluruh requirement pada bagian ini menjadi dasar bagi desain proses dan sistem lanjutan pada domain Financial Management, khususnya dalam memastikan keakuratan pencatatan kewajiban serta integrasi erat dengan modul Procurement dan General Ledger.

@@ -1,0 +1,10 @@
+{
+  "name": "@erp/chrome-companion",
+  "version": "1.0.0",
+  "description": "Chrome Companion Extension for ERP Enterprise",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
+

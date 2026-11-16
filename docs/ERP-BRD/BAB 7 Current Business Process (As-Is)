@@ -1,0 +1,212 @@
+# BAB 7. Current Business Process (As-Is)
+
+## 7.1 Overview
+
+Bab ini mendokumentasikan kondisi proses bisnis yang berjalan saat ini (*As-Is Business Process*) sebagai dasar analisis untuk pengembangan Enterprise Resource Planning (ERP).
+
+Tujuan utama analisis As-Is adalah:
+
+* Memahami proses bisnis yang sedang berjalan.
+* Mengidentifikasi ketidakefisienan dan hambatan operasional.
+* Menemukan peluang standardisasi dan otomatisasi.
+* Menjadi dasar penyusunan desain proses bisnis masa depan (*To-Be*).
+* Memastikan bahwa seluruh kebutuhan bisnis berasal dari kondisi nyata organisasi.
+
+Analisis dilakukan pada tingkat enterprise sehingga dapat diterapkan pada organisasi dengan struktur Holding, Sub Holding, Company, Business Unit, Branch, Department, Warehouse, Plant, maupun Project Site.
+
+---
+
+# 7.2 Current Organization Landscape
+
+Saat ini organisasi memiliki struktur yang terus berkembang dan terdiri atas berbagai entitas bisnis dengan karakteristik operasional yang berbeda.
+
+Karakteristik utama:
+
+* Struktur organisasi bertingkat.
+* Banyak unit bisnis memiliki proses yang berbeda.
+* Setiap perusahaan menggunakan kebijakan operasional masing-masing.
+* Tidak seluruh unit menggunakan sistem informasi yang sama.
+* Sebagian proses masih dilakukan secara manual.
+
+Kondisi tersebut menyebabkan kompleksitas dalam pengelolaan organisasi dan data.
+
+---
+
+# 7.3 Current System Landscape
+
+Sistem yang digunakan saat ini terdiri atas beberapa aplikasi yang berjalan secara terpisah.
+
+| Business Area | Current Condition                                        |
+| ------------- | -------------------------------------------------------- |
+| Finance       | Aplikasi keuangan terpisah.                              |
+| Accounting    | Tidak terintegrasi penuh dengan modul lain.              |
+| Procurement   | Sebagian masih menggunakan dokumen manual.               |
+| Inventory     | Data stok tidak selalu tersinkronisasi secara real-time. |
+| Warehouse     | Pengelolaan gudang dilakukan secara terpisah.            |
+| HR            | Data karyawan tersimpan pada sistem berbeda.             |
+| Payroll       | Perhitungan dilakukan menggunakan aplikasi terpisah.     |
+| Sales         | Data pelanggan dan penjualan belum terintegrasi.         |
+| Reporting     | Konsolidasi dilakukan secara manual.                     |
+
+Akibatnya, informasi tersebar di berbagai aplikasi dan sulit dikonsolidasikan.
+
+---
+
+# 7.4 Current Business Process
+
+Secara umum, proses bisnis yang berjalan saat ini meliputi:
+
+1. Pengelolaan organisasi.
+2. Pengelolaan pengguna.
+3. Pengelolaan master data.
+4. Pengadaan barang dan jasa.
+5. Pembelian.
+6. Pengelolaan persediaan.
+7. Pengelolaan gudang.
+8. Penjualan.
+9. Pengelolaan pelanggan.
+10. Pengelolaan SDM.
+11. Penggajian.
+12. Akuntansi.
+13. Keuangan.
+14. Pengelolaan aset.
+15. Manajemen proyek.
+16. Pelaporan.
+
+Masing-masing proses memiliki variasi implementasi antar perusahaan sehingga belum terdapat standar operasional yang seragam.
+
+---
+
+# 7.5 Pain Points Analysis
+
+Hasil identifikasi menunjukkan beberapa permasalahan utama.
+
+## PP-001 Fragmented Systems
+
+Data tersebar pada berbagai aplikasi sehingga diperlukan rekonsiliasi secara manual.
+
+**Business Impact**
+
+* Informasi tidak konsisten.
+* Proses menjadi lambat.
+* Risiko kesalahan meningkat.
+
+---
+
+## PP-002 Manual Approval Process
+
+Sebagian besar persetujuan masih dilakukan melalui email, dokumen fisik, atau komunikasi informal.
+
+**Business Impact**
+
+* Sulit dipantau.
+* Tidak memiliki audit trail.
+* Proses persetujuan memerlukan waktu lama.
+
+---
+
+## PP-003 Duplicate Master Data
+
+Master data pelanggan, vendor, produk, maupun organisasi disimpan pada berbagai sistem.
+
+**Business Impact**
+
+* Redundansi data.
+* Inkonsistensi informasi.
+* Sulit melakukan sinkronisasi.
+
+---
+
+## PP-004 Limited Organization Support
+
+Sistem yang ada belum mendukung perubahan struktur organisasi secara dinamis.
+
+**Business Impact**
+
+* Penambahan entitas memerlukan konfigurasi yang kompleks atau perubahan aplikasi.
+* Skalabilitas organisasi menjadi terbatas.
+
+---
+
+## PP-005 Limited Reporting
+
+Laporan manajemen masih memerlukan penggabungan data dari berbagai sumber.
+
+**Business Impact**
+
+* Pengambilan keputusan menjadi lambat.
+* Risiko kesalahan pelaporan meningkat.
+
+---
+
+# 7.6 Current Business Rules
+
+Beberapa aturan bisnis yang berlaku saat ini antara lain:
+
+* Persetujuan mengikuti struktur organisasi masing-masing perusahaan.
+* Master data dikelola oleh unit kerja terkait.
+* Laporan keuangan disusun per perusahaan sebelum dilakukan konsolidasi.
+* Hak akses diberikan berdasarkan jabatan dan unit organisasi.
+* Setiap perusahaan dapat memiliki kebijakan operasional yang berbeda.
+
+Sebagian besar aturan tersebut belum terdokumentasi secara formal sehingga implementasinya tidak selalu konsisten.
+
+---
+
+# 7.7 Current Data Flow
+
+Secara umum, aliran data saat ini memiliki karakteristik berikut:
+
+1. Data dibuat pada masing-masing unit kerja.
+2. Data diproses oleh aplikasi yang berbeda.
+3. Pertukaran data dilakukan secara manual atau melalui impor/ekspor.
+4. Konsolidasi dilakukan pada akhir periode.
+5. Laporan disusun setelah proses rekonsiliasi selesai.
+
+Model ini menyebabkan keterlambatan dalam penyediaan informasi bagi manajemen.
+
+---
+
+# 7.8 Current Organizational Challenges
+
+Tantangan utama yang dihadapi organisasi meliputi:
+
+| Challenge ID | Description                                 | Business Impact                   |
+| ------------ | ------------------------------------------- | --------------------------------- |
+| CH-001       | Struktur organisasi berubah secara dinamis. | Sistem sulit mengikuti perubahan. |
+| CH-002       | Banyak perusahaan dalam satu grup.          | Konsolidasi menjadi kompleks.     |
+| CH-003       | Variasi proses bisnis antar entitas.        | Sulit melakukan standardisasi.    |
+| CH-004       | Banyak aplikasi yang berdiri sendiri.       | Integrasi data rendah.            |
+| CH-005       | Ketergantungan pada proses manual.          | Produktivitas menurun.            |
+| CH-006       | Pelaporan lintas perusahaan lambat.         | Keputusan bisnis tertunda.        |
+
+---
+
+# 7.9 Gap Analysis
+
+Perbandingan antara kondisi saat ini dan kondisi yang diharapkan.
+
+| Area         | Current State (As-Is)         | Desired State (To-Be)                                       |
+| ------------ | ----------------------------- | ----------------------------------------------------------- |
+| Organization | Struktur organisasi terbatas. | Struktur organisasi tidak terbatas dan dapat dikonfigurasi. |
+| Data         | Master data tersebar.         | Single Source of Truth.                                     |
+| Workflow     | Manual.                       | Workflow digital yang dapat dikonfigurasi.                  |
+| Approval     | Tidak seragam.                | Standar dan terdokumentasi.                                 |
+| Reporting    | Manual dan periodik.          | Real-time dan konsolidasi.                                  |
+| Security     | Berbasis aplikasi.            | Role-Based dan Scope-Based Access Control.                  |
+| Integration  | Terbatas.                     | API-First dan terintegrasi.                                 |
+
+---
+
+# 7.10 Findings Summary
+
+Berdasarkan analisis proses bisnis saat ini, diperoleh beberapa temuan utama:
+
+1. Proses bisnis belum terstandarisasi di seluruh entitas organisasi.
+2. Data masih tersebar pada berbagai sistem sehingga menghambat konsolidasi.
+3. Perubahan struktur organisasi sulit diakomodasi oleh sistem yang ada.
+4. Workflow dan persetujuan masih banyak dilakukan secara manual.
+5. Pelaporan lintas perusahaan memerlukan rekonsiliasi yang memakan waktu.
+6. Pengelolaan hak akses belum sepenuhnya mengikuti ruang lingkup organisasi.
+
+Temuan-temuan tersebut menjadi dasar penyusunan **BAB 8 – Future Business Process (To-Be)**, yang akan mendefinisikan proses bisnis target dan kapabilitas ERP yang diperlukan untuk mendukung transformasi digital organisasi.

@@ -1,0 +1,167 @@
+# BAB 1. Introduction
+
+## 1.1 Purpose of Document
+
+Software Architecture Document (SAD) ini mendefinisikan **arsitektur perangkat lunak** platform Enterprise Resource Planning (ERP) multi-organisasi sebagaimana kebutuhannya telah ditetapkan pada **Business Requirement Document (BRD)**. SAD berfungsi sebagai **acuan teknis utama** yang menerjemahkan kebutuhan bisnis (BR-xxx), kebutuhan non-fungsional (NFR-xxx), kebutuhan integrasi (INT-xxx), serta keputusan arsitektur (ADR-xxx) ke dalam desain sistem yang dapat diimplementasikan, diuji, dioperasikan, dan dipelihara.
+
+Tujuan spesifik dokumen ini adalah:
+
+* Menyediakan pandangan arsitektur yang koheren (logical, integration, data, security, deployment) bagi seluruh tim teknis.
+* Mendokumentasikan keputusan arsitektur (*Architecture Decision Records*) beserta konteks, konsekuensi, dan alternatif yang dipertimbangkan.
+* Menjaga keterlacakan (*traceability*) dari kebutuhan bisnis dan non-fungsional pada BRD menuju elemen arsitektur konkret.
+* Menjadi dasar penyusunan artefak turunan berikutnya: **Database Design** (ERD, Data Dictionary, desain fisik), **Technical Design/Detailed Design** per layanan, dan **Test Architecture**.
+
+SAD **tidak menggantikan** BRD. BRD tetap menjadi sumber kebenaran untuk *apa* dan *mengapa* (kebutuhan bisnis), sedangkan SAD menjawab *bagaimana* kebutuhan tersebut direalisasikan secara teknis.
+
+---
+
+## 1.2 Scope of the SAD
+
+### 1.2.1 In Scope
+
+* Arsitektur logis dan dekomposisi layanan (*microservices*) berbasis domain.
+* Arsitektur integrasi sinkron (REST/gRPC) dan asinkron (*event-driven* dengan Apache Kafka).
+* Arsitektur presentasi decoupled Single-Page Application (SPA) dan Enterprise Chrome Extension Companion.
+* Tata kelola integrasi data analitik enterprise (Cortex Framework V7 & koeksistensi sistem SAP).
+* Tata kelola *event* dan skema (Apicurio Registry), semantik pengiriman, serta pola konsistensi terdistribusi (Saga, Transactional Outbox).
+* Arsitektur data tingkat logis (strategi multi-tenancy, tri-currency real-time accounting, partisi komposit, kepemilikan data per layanan), keamanan, deployment, observability, dan CI/CD.
+* Keputusan arsitektur (ADR-001 s.d. ADR-015) dan skenario atribut kualitas (*quality attribute scenarios*).
+
+### 1.2.2 Out of Scope
+
+* Desain fisik basis data terperinci (ERD lengkap, Data Dictionary kolom demi kolom, indeks, strategi partisi fisik) — didokumentasikan pada artefak **Database Design**.
+* Desain antarmuka pengguna terperinci (*wireframe*, *design system*, *component library*) — didokumentasikan pada artefak **UI/UX Design**.
+* Spesifikasi API terperinci per *endpoint* (kontrak OpenAPI/Protobuf final) — didokumentasikan pada artefak **API Specification**.
+* Konfigurasi infrastruktur spesifik vendor dan *Infrastructure as Code* — didokumentasikan pada artefak **Deployment/Operations**.
+
+Batasan ini menjaga SAD tetap fokus pada keputusan dan struktur arsitektur tingkat sistem, sementara detail implementasi terdokumentasi pada artefak khusus yang lebih mudah dipelihara secara terpisah.
+
+---
+
+## 1.3 Relationship to BRD and Other Artifacts
+
+SAD merupakan simpul tengah dalam rantai keterlacakan dokumentasi proyek. Hubungan antar-artefak digambarkan sebagai berikut:
+
+```text
+Business Goal (BO-xxx)  ──►  Business Requirement (BR-xxx)  ──►  Functional Overview (BAB 11 BRD)
+        │                          │                                   │
+        ▼                          ▼                                   ▼
+  Non-Functional (NFR-xxx) ─►  Integration Req (INT-xxx) ─►  Architecture Decisions (ADR-xxx)
+        │                          │                                   │
+        └──────────────┬───────────┴───────────────────┬──────────────┘
+                       ▼                                 ▼
+             ►►  SOFTWARE ARCHITECTURE DOCUMENT (SAD — dokumen ini)  ◄◄
+                       │                                 │
+        ┌──────────────┼─────────────────┬──────────────┼───────────────┐
+        ▼              ▼                 ▼              ▼               ▼
+  Database Design  API Spec     Technical Design   Test Architecture  Ops/Runbook
+```
+
+Tabel berikut merangkum artefak sumber dan turunan beserta relasinya dengan SAD:
+
+| Artefak                       | Peran terhadap SAD              | Referensi Identifier         |
+| ----------------------------- | ------------------------------- | ---------------------------- |
+| Business Requirement Document | Sumber kebutuhan (input utama)  | BO-xxx, BR-xxx, NFR-xxx, INT-xxx, CONS-xxx, ASM-xxx, RISK-xxx, ADR-xxx |
+| Software Architecture Document | Dokumen ini                    | ARC-xxx, ADR-xxx             |
+| Database Design               | Turunan (detail data fisik)     | DB-xxx                       |
+| API Specification             | Turunan (kontrak endpoint)      | API-xxx                      |
+| Technical/Detailed Design     | Turunan (desain per layanan)    | TD-xxx                       |
+| Test Architecture / Test Plan | Turunan (verifikasi arsitektur) | TC-xxx                       |
+
+Keputusan arsitektur utama (**ADR-001 s.d. ADR-005**) telah ditetapkan dan disetujui pada **BRD BAB 13.7.1**; SAD mengelaborasi keputusan tersebut secara penuh pada BAB 3 dan menambahkan keputusan turunan (ADR-006 dan seterusnya).
+
+---
+
+## 1.4 Intended Audience
+
+| Audiens                        | Kepentingan terhadap SAD                                                        | Bab Relevan            |
+| ------------------------------ | ------------------------------------------------------------------------------- | ---------------------- |
+| Solution / Software Architect  | Keputusan arsitektur, struktur sistem, trade-off                                | Seluruh bab            |
+| Technical Lead / Senior Engineer | Dekomposisi layanan, pola integrasi, standar teknis                           | BAB 3, 4, 5            |
+| Backend Engineer (Go)          | Struktur layanan, kontrak, event, konsistensi data                              | BAB 4, 5               |
+| Frontend Engineer (React 19 SPA) | Arsitektur SPA, state management, kontrak API, integrasi gateway, Chrome MV3    | BAB 4, 5               |
+| Platform / DevOps Engineer     | Deployment, observability, CI/CD, infrastruktur self-managed                    | BAB 8, 9, 10           |
+| Security Engineer              | Kontrol keamanan, autentikasi/otorisasi, enkripsi, ekstensi browser             | BAB 5, 7               |
+| QA Lead / Test Architect       | Skenario atribut kualitas, keterujian arsitektur                                | BAB 2, 12              |
+| Data Engineer / DBA            | Kepemilikan data, multi-tenancy, Cortex Framework, partisi komposit, DBDD       | BAB 4, 6               |
+| Project Manager / PMO          | Ketertelusuran keputusan, risiko arsitektur, kesiapan implementasi              | BAB 2, 3, 13           |
+
+---
+
+## 1.5 Definitions, Acronyms, and Abbreviations
+
+| Istilah / Akronim | Definisi                                                                                     |
+| ----------------- | -------------------------------------------------------------------------------------------- |
+| SAD               | Software Architecture Document — dokumen ini.                                                 |
+| BRD               | Business Requirement Document — dokumen sumber kebutuhan.                                     |
+| ADR               | Architecture Decision Record — catatan keputusan arsitektur.                                  |
+| ASR               | Architecturally Significant Requirement — kebutuhan yang secara signifikan membentuk arsitektur. |
+| NFR               | Non-Functional Requirement.                                                                   |
+| INT               | Integration Requirement.                                                                      |
+| C4 Model          | Notasi diagram arsitektur berlapis: Context, Container, Component, Code.                      |
+| Microservice      | Layanan mandiri yang menangani satu *bounded context*, dapat di-*deploy* independen.          |
+| Bounded Context   | Batas domain (DDD) tempat sebuah model dan bahasa berlaku konsisten.                          |
+| Event-Driven      | Pola integrasi berbasis peristiwa (*publish/subscribe*) yang bersifat *loose coupling*.       |
+| Saga              | Pola konsistensi transaksi terdistribusi melalui rangkaian langkah dan *compensating action*. |
+| Outbox            | Pola penerbitan *event* konsisten dengan perubahan basis data dalam satu transaksi.           |
+| CDC               | Change Data Capture — penangkapan perubahan data untuk diaruskan sebagai *event*.             |
+| EOS               | Exactly-Once Semantics — jaminan pemrosesan tepat satu kali.                                  |
+| RLS               | Row-Level Security — kontrol akses pada level baris di PostgreSQL.                            |
+| CQRS              | Command Query Responsibility Segregation — pemisahan model tulis dan baca.                    |
+| Go (Golang)       | Bahasa & runtime backend layanan.                                                            |
+| React 19          | Library frontend modern berbasis SPA dengan Vite, TanStack Router & Query.                   |
+| Kafka             | Apache Kafka — platform *event streaming*.                                                    |
+| Kong              | API Gateway yang ditetapkan (ADR-003).                                                        |
+| Apicurio          | Schema Registry yang ditetapkan (ADR-003).                                                    |
+
+Glossary lengkap istilah bisnis mengacu pada **BRD BAB 21.4 Business Glossary** dan tidak diduplikasi di sini.
+
+---
+
+## 1.6 References
+
+| No | Dokumen / Standar                                            | Keterangan                                        |
+| -- | ------------------------------------------------------------ | ------------------------------------------------- |
+| 1  | Business Requirement Document (BRD) ERP                      | Sumber kebutuhan bisnis & non-fungsional utama.   |
+| 2  | BRD BAB 3 — Business Vision                                  | Prinsip arsitektur (Cloud Ready, API First, dll). |
+| 3  | BRD BAB 11 — Functional Overview                             | Arsitektur fungsional & peta modul.               |
+| 4  | BRD BAB 12 — Non-Functional Requirements                    | NFR-001 s.d. NFR-030.                             |
+| 5  | BRD BAB 13 — Integration Requirements                        | INT-001 s.d. INT-016 & cetak biru teknologi.      |
+| 6  | BRD BAB 13.7.1 — Key Architecture Decisions                 | ADR-001 s.d. ADR-005 (disetujui).                 |
+| 7  | ISO/IEC/IEEE 42010                                           | Rujukan praktik *architecture description*.        |
+| 8  | C4 Model (Simon Brown)                                       | Notasi diagram arsitektur.                        |
+
+---
+
+## 1.7 Document Conventions and Identifier Schemes
+
+Untuk menjaga keterlacakan lintas dokumen, SAD menggunakan skema identifier berikut:
+
+| Prefix   | Makna                                   | Contoh   | Sumber/Definisi          |
+| -------- | --------------------------------------- | -------- | ------------------------ |
+| ADR-xxx  | Architecture Decision Record            | ADR-002  | BAB 3 (SAD), BRD 13.7.1  |
+| ARC-xxx  | Architecture Requirement / Constraint arsitektur | ARC-001 | BAB 2 (SAD)         |
+| QAS-xxx  | Quality Attribute Scenario              | QAS-001  | BAB 12 (SAD, Fase 2)     |
+| SVC-xxx  | Service (layanan pada Service Catalog)  | SVC-007  | BAB 4 (SAD)              |
+| NFR-xxx  | Non-Functional Requirement (dari BRD)   | NFR-008  | BRD BAB 12               |
+| INT-xxx  | Integration Requirement (dari BRD)      | INT-001  | BRD BAB 13               |
+| BO-xxx   | Business Objective (dari BRD)           | BO-004   | BRD BAB 4                |
+
+Ketentuan penulisan:
+
+* Bahasa utama **Bahasa Indonesia**, dengan istilah teknis dalam Bahasa Inggris ditulis apa adanya (konsisten dengan BRD).
+* Nama produk yang **mengikat** (Go, React 19, Apache Kafka, PostgreSQL, Kong, Apicurio, Kubernetes) ditulis sesuai ADR-003/ADR-004/ADR-006.
+* Diagram menggunakan **C4 Model** dengan notasi **Mermaid**; diagram teks (ASCII) digunakan untuk topologi sederhana.
+
+---
+
+## 1.8 How to Read This Document
+
+* Pembaca yang memerlukan **konteks & alasan** keputusan arsitektur mulai dari **BAB 2 (Drivers)** dan **BAB 3 (Decisions)**.
+* Pembaca yang memerlukan **struktur sistem** langsung ke **BAB 4 (Logical/Component View)**.
+* Pembaca yang menangani **integrasi & event** fokus pada **BAB 5 (Integration & Event Architecture)**.
+* Setiap bab diakhiri dengan **Summary** dan, jika relevan, **tabel traceability** ke identifier BRD.
+
+Dokumen ini disusun bertahap. **Fase 1 (BAB 1–5)** mencakup fondasi arsitektur, keputusan, struktur logis, dan integrasi. **Fase 2 (BAB 6–13)** akan menambahkan data, keamanan, deployment, observability, CI/CD, cross-cutting concerns, skenario kualitas, serta risiko arsitektur.
+
+---

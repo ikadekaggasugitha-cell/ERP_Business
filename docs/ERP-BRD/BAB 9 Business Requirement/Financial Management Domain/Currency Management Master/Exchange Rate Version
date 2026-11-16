@@ -1,0 +1,203 @@
+# 9.5.3.7 Exchange Rate Version Requirements
+
+---
+
+# 9.5.3.7.1 Overview
+
+Exchange Rate Version merupakan komponen tata kelola (*governance*) yang mengelola siklus hidup perubahan terhadap Exchange Rate. Setiap perubahan nilai tukar, metode perhitungan, sumber data, maupun atribut terkait direpresentasikan sebagai versi baru tanpa mengubah data historis yang telah digunakan oleh transaksi keuangan.
+
+Dengan memisahkan Exchange Rate Version dari Exchange Rate, sistem dapat menjaga integritas histori, mendukung audit dan kepatuhan regulasi, memungkinkan proses persetujuan (*approval workflow*), publikasi (*publication*), rollback, serta memastikan bahwa setiap transaksi selalu dapat ditelusuri ke versi kurs yang digunakan pada saat transaksi diproses.
+
+---
+
+# 9.5.3.7.2 Business Capability
+
+Exchange Rate Version menyediakan kapabilitas berikut:
+
+* Version management.
+* Draft dan working version.
+* Approval workflow per versi.
+* Publication management.
+* Effective dating.
+* Version comparison.
+* Rollback ke versi sebelumnya.
+* Snapshot reference untuk transaksi.
+* Immutable historical version.
+* Audit trail lengkap.
+
+---
+
+# 9.5.3.7.3 Business Requirement Catalogue
+
+## BR-141 – Exchange Rate Version Repository
+
+| Attribute           | Description                                                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-141                                                                                                                                         |
+| Requirement Name    | Exchange Rate Version Repository                                                                                                               |
+| Category            | Exchange Rate Version                                                                                                                          |
+| Priority            | Critical                                                                                                                                       |
+| Business Objective  | BO-029                                                                                                                                         |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                                               |
+| Description         | Sistem harus menyediakan repositori versi untuk setiap Exchange Rate sehingga seluruh perubahan dapat ditelusuri tanpa mengubah data historis. |
+| Business Value      | Menjamin integritas histori dan mendukung audit.                                                                                               |
+| Acceptance Criteria | Setiap perubahan Exchange Rate menghasilkan Exchange Rate Version baru.                                                                        |
+
+---
+
+## BR-142 – Immutable Historical Version
+
+| Attribute        | Description                                                                                                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-142                                                                                                                                                                       |
+| Requirement Name | Immutable Historical Version                                                                                                                                                 |
+| Priority         | Critical                                                                                                                                                                     |
+| Description      | Versi Exchange Rate yang telah dipublikasikan dan digunakan pada transaksi tidak boleh diubah secara langsung. Perubahan hanya dapat dilakukan melalui pembuatan versi baru. |
+
+---
+
+## BR-143 – Version Comparison
+
+| Attribute        | Description                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-143                                                                                                                                      |
+| Requirement Name | Version Comparison                                                                                                                          |
+| Priority         | High                                                                                                                                        |
+| Description      | Sistem harus menyediakan kemampuan membandingkan dua atau lebih versi Exchange Rate untuk mengidentifikasi perubahan nilai maupun metadata. |
+
+---
+
+## BR-144 – Approval per Version
+
+| Attribute        | Description                                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-144                                                                                                         |
+| Requirement Name | Version Approval Workflow                                                                                      |
+| Priority         | Critical                                                                                                       |
+| Description      | Setiap Exchange Rate Version harus melalui proses persetujuan sesuai matriks otorisasi sebelum dipublikasikan. |
+
+---
+
+## BR-145 – Publication Management
+
+| Attribute        | Description                                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-145                                                                                                                                     |
+| Requirement Name | Publication Management                                                                                                                     |
+| Priority         | Critical                                                                                                                                   |
+| Description      | Sistem harus mendukung publikasi Exchange Rate Version sehingga hanya versi yang telah dipublikasikan yang dapat digunakan oleh transaksi. |
+
+---
+
+## BR-146 – Rollback Support
+
+| Attribute        | Description                                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-146                                                                                                                  |
+| Requirement Name | Rollback Support                                                                                                        |
+| Priority         | High                                                                                                                    |
+| Description      | Sistem harus memungkinkan organisasi mengaktifkan kembali versi sebelumnya tanpa mengubah histori versi yang telah ada. |
+
+---
+
+## BR-147 – Effective Version Control
+
+| Attribute        | Description                                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-147                                                                                                                               |
+| Requirement Name | Effective Version Control                                                                                                            |
+| Priority         | High                                                                                                                                 |
+| Description      | Setiap Exchange Rate Version harus memiliki periode efektif sehingga sistem dapat menentukan versi yang berlaku pada waktu tertentu. |
+
+---
+
+## BR-148 – Transaction Snapshot Reference
+
+| Attribute        | Description                                                                                                                                                                |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-148                                                                                                                                                                     |
+| Requirement Name | Transaction Snapshot Reference                                                                                                                                             |
+| Priority         | Critical                                                                                                                                                                   |
+| Description      | Setiap transaksi yang menggunakan Exchange Rate harus menyimpan referensi ke Exchange Rate Version yang digunakan agar histori transaksi dapat direproduksi secara akurat. |
+
+---
+
+## BR-149 – Version Dependency Validation
+
+| Attribute        | Description                                                                                                                              |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-149                                                                                                                                   |
+| Requirement Name | Version Dependency Validation                                                                                                            |
+| Priority         | Critical                                                                                                                                 |
+| Description      | Sistem harus mencegah penghapusan Exchange Rate Version yang telah digunakan oleh transaksi, jurnal, revaluasi, atau proses konsolidasi. |
+
+---
+
+## BR-150 – Exchange Rate Version Auditability
+
+| Attribute        | Description                                                                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-150                                                                                                                                                           |
+| Requirement Name | Exchange Rate Version Auditability                                                                                                                               |
+| Priority         | Critical                                                                                                                                                         |
+| Description      | Seluruh aktivitas pembuatan, perubahan, persetujuan, publikasi, rollback, dan penonaktifan Exchange Rate Version harus dicatat secara lengkap dalam Audit Trail. |
+
+---
+
+# 9.5.3.7.4 Business Rules
+
+| Business Rule ID | Description                                                                                                                             |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-ERV-001    | Setiap Exchange Rate wajib memiliki minimal satu Exchange Rate Version.                                                                 |
+| BRule-ERV-002    | Nomor versi harus unik untuk setiap Exchange Rate.                                                                                      |
+| BRule-ERV-003    | Versi yang telah dipublikasikan tidak boleh diubah.                                                                                     |
+| BRule-ERV-004    | Hanya satu Exchange Rate Version yang dapat berstatus Published dan Active untuk kombinasi Exchange Rate dan periode efektif yang sama. |
+| BRule-ERV-005    | Rollback harus menghasilkan aktivasi ulang versi terdahulu tanpa menghapus versi yang lebih baru.                                       |
+| BRule-ERV-006    | Transaksi harus selalu mereferensikan Exchange Rate Version yang digunakan saat proses posting.                                         |
+| BRule-ERV-007    | Seluruh perubahan versi wajib terdokumentasi pada Audit Trail beserta alasan bisnisnya.                                                 |
+
+---
+
+# 9.5.3.7.5 Data Attributes
+
+| Attribute                 | Description                                                         |
+| ------------------------- | ------------------------------------------------------------------- |
+| Exchange Rate Version ID  | Identitas unik versi.                                               |
+| Exchange Rate ID          | Referensi ke Exchange Rate.                                         |
+| Version Number            | Nomor versi.                                                        |
+| Version Name              | Nama versi.                                                         |
+| Version Description       | Deskripsi perubahan.                                                |
+| Change Reason             | Alasan bisnis perubahan.                                            |
+| Publication Status        | Draft, Pending Approval, Approved, Published, Superseded, Archived. |
+| Effective From            | Tanggal dan waktu mulai berlaku.                                    |
+| Effective To              | Tanggal dan waktu akhir berlaku.                                    |
+| Previous Version ID       | Referensi ke versi sebelumnya.                                      |
+| Published By              | Pengguna yang mempublikasikan versi.                                |
+| Published Date            | Tanggal publikasi.                                                  |
+| Approval Reference        | Referensi ke dokumen atau workflow persetujuan.                     |
+| Snapshot Eligible         | Menandakan apakah versi dapat digunakan untuk snapshot transaksi.   |
+| Created By / Created Date | Informasi pembuatan versi.                                          |
+| Updated By / Updated Date | Informasi perubahan terakhir.                                       |
+
+---
+
+# 9.5.3.7.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process              |
+| -------------- | ------------------ | ----------- | --------------------------- |
+| BR-141         | BO-029             | SH-010      | Version Administration      |
+| BR-142         | BO-029             | SH-010      | Historical Preservation     |
+| BR-143         | BO-029             | SH-010      | Version Comparison          |
+| BR-144         | BO-029             | SH-003      | Approval Workflow           |
+| BR-145         | BO-029             | SH-003      | Publication Management      |
+| BR-146         | BO-029             | SH-010      | Rollback Management         |
+| BR-147         | BO-011             | SH-003      | Effective Version Selection |
+| BR-148         | BO-011             | SH-003      | Transaction Processing      |
+| BR-149         | BO-029             | SH-010      | Dependency Validation       |
+| BR-150         | BO-029             | SH-010      | Audit & Compliance          |
+
+---
+
+# 9.5.3.7.7 Summary
+
+Exchange Rate Version menyediakan mekanisme pengelolaan perubahan nilai tukar yang terstruktur dan dapat diaudit. Dengan memisahkan versi dari entitas Exchange Rate, sistem memastikan bahwa setiap perubahan mengikuti proses tata kelola yang jelas, tidak mengubah histori transaksi, dan selalu dapat ditelusuri kembali ke versi yang berlaku pada saat transaksi diproses. Pendekatan ini mendukung kepatuhan terhadap standar audit, regulasi, serta kebutuhan operasional perusahaan multinasional.

@@ -1,0 +1,80 @@
+# Table Optimization & Partitioning Configuration (ADR-013, ADR-015)
+# Organized by SAP coexistence versions (ecc / s4) and holding data products.
+
+dataProducts:
+  custom:
+    ecc:
+      - tableName: stg_bkpf
+        materializationType: view
+        tags: [foundation, sap_ddic, ecc, s4]
+      - tableName: stg_bseg
+        materializationType: view
+        tags: [foundation, sap_ddic, ecc]
+        excludedFields:
+          - _dataaging
+    s4:
+      - tableName: stg_acdoca
+        materializationType: view
+        tags: [foundation, sap_ddic, s4hana]
+        excludedFields:
+          - _dataaging
+    products:
+      - tableName: dim_organization
+        materializationType: table
+        tags: [dimension, cortex_v7, organization]
+        clusterDetails:
+          columns: [org_type, country_code]
+      - tableName: dim_organization_closure
+        materializationType: table
+        tags: [dimension, cortex_v7, organization]
+        clusterDetails:
+          columns: [ancestor_id, descendant_id]
+      - tableName: dim_currency
+        materializationType: table
+        tags: [dimension, cortex_v7, tri_currency]
+        partitionDetails:
+          column: rate_date
+          partitionType: TIME
+          timeGrain: MONTH
+        clusterDetails:
+          columns: [from_currency, to_currency]
+      - tableName: dim_fiscal_period
+        materializationType: table
+        tags: [dimension, cortex_v7, multi_country]
+        clusterDetails:
+          columns: [country_code, fiscal_year]
+      - tableName: dim_chart_of_accounts
+        materializationType: table
+        tags: [dimension, cortex_v7, chart_of_accounts]
+        clusterDetails:
+          columns: [account_type, is_active]
+      - tableName: fact_gl_transaction
+        materializationType: incremental
+        uniqueKey: [gl_journal_id, line_number]
+        tags: [fact, cortex_v7, gl, tri_currency]
+        partitionDetails:
+          column: posting_date
+          partitionType: TIME
+          timeGrain: MONTH
+        clusterDetails:
+          columns: [org_id, account_code]
+      - tableName: fact_sales_order
+        materializationType: incremental
+        uniqueKey: [order_id, line_number]
+        tags: [fact, cortex_v7, sales, tri_currency]
+        partitionDetails:
+          column: order_date
+          partitionType: TIME
+          timeGrain: MONTH
+        clusterDetails:
+          columns: [org_id, customer_id]
+      - tableName: fact_inventory_snapshot
+        materializationType: incremental
+        uniqueKey: [snapshot_date, material_id, warehouse_id, org_id]
+        tags: [fact, cortex_v7, inventory, tri_currency]
+        partitionDetails:
+          column: snapshot_date
+          partitionType: TIME
+          timeGrain: DAY
+        clusterDetails:
+          columns: [org_id, material_id]

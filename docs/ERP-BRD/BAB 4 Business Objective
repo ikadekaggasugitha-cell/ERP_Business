@@ -1,0 +1,222 @@
+# BAB 4. Business Objectives
+
+## 4.1 Overview
+
+Business Objectives mendefinisikan sasaran strategis yang ingin dicapai melalui implementasi **Enterprise Resource Planning (ERP)**. Seluruh tujuan bisnis pada dokumen ini menjadi dasar dalam penyusunan kebutuhan bisnis (Business Requirements), desain solusi, implementasi sistem, serta pengukuran keberhasilan proyek.
+
+Setiap Business Objective diberikan **Objective ID (BO-xxx)** untuk memastikan keterlacakan (*traceability*) terhadap Requirement ID (BR-xxx), Functional Requirement (FR-xxx), Test Case (TC-xxx), dan Key Performance Indicator (KPI).
+
+---
+
+# 4.2 Strategic Business Objectives
+
+| Objective ID | Business Objective                                                        | Priority |
+| ------------ | ------------------------------------------------------------------------- | -------- |
+| BO-001       | Membangun platform ERP terintegrasi untuk seluruh entitas organisasi.     | Critical |
+| BO-002       | Mendukung struktur organisasi bertingkat tanpa batas melalui konfigurasi. | Critical |
+| BO-003       | Mengintegrasikan seluruh proses bisnis dalam satu platform.               | Critical |
+| BO-004       | Menyediakan Single Source of Truth untuk seluruh data perusahaan.         | Critical |
+| BO-005       | Mendukung ekspansi organisasi tanpa perubahan source code.                | Critical |
+| BO-006       | Menyediakan arsitektur modular yang mudah dikembangkan.                   | High     |
+| BO-007       | Meningkatkan tata kelola dan transparansi organisasi.                     | High     |
+| BO-008       | Mendukung pengambilan keputusan berbasis data secara real-time.           | High     |
+
+---
+
+# 4.3 Operational Business Objectives
+
+### BO-009
+
+Mengotomatisasi proses bisnis lintas departemen untuk mengurangi pekerjaan manual dan meningkatkan efisiensi operasional.
+
+---
+
+### BO-010
+
+Mengurangi duplikasi data melalui pengelolaan Master Data yang terpusat dan terstandarisasi.
+
+---
+
+### BO-011
+
+Menyediakan workflow yang dapat dikonfigurasi sesuai struktur organisasi dan kebijakan perusahaan.
+
+---
+
+### BO-012
+
+Meningkatkan kecepatan proses persetujuan (*approval*) melalui mekanisme workflow digital.
+
+---
+
+### BO-013
+
+Menyediakan dashboard operasional yang menampilkan kondisi bisnis secara real-time.
+
+---
+
+### BO-014
+
+Meningkatkan konsistensi data antar modul melalui integrasi yang terstandarisasi.
+
+---
+
+# 4.4 Organizational Objectives
+
+### BO-015
+
+Mendukung organisasi dengan jumlah level yang tidak terbatas.
+
+---
+
+### BO-016
+
+Mendukung struktur Holding, Sub Holding, Company, Business Unit, Branch, Department, Warehouse, Plant, Project Site, dan level organisasi lainnya melalui konfigurasi.
+
+---
+
+### BO-017
+
+Mendukung perubahan struktur organisasi tanpa perubahan aplikasi.
+
+---
+
+### BO-018
+
+Menyediakan mekanisme Scope-Based Access Control berdasarkan struktur organisasi.
+
+---
+
+### BO-019
+
+Mendukung Shared Master Data dan Isolated Master Data sesuai kebutuhan bisnis.
+
+---
+
+# 4.5 Financial Objectives
+
+### BO-020
+
+Menyediakan konsolidasi laporan keuangan lintas perusahaan dalam satu platform.
+
+---
+
+### BO-021
+
+Mendukung pengelolaan Multi Currency dan konsolidasi keuangan.
+
+---
+
+### BO-022
+
+Meningkatkan akurasi laporan keuangan melalui integrasi data.
+
+---
+
+### BO-023
+
+Mengurangi biaya operasional akibat penggunaan berbagai aplikasi yang terpisah.
+
+---
+
+# 4.6 Technology Objectives
+
+### BO-024
+
+Mengembangkan ERP dengan arsitektur modular sehingga setiap modul dapat dikembangkan secara independen.
+
+---
+
+### BO-025
+
+Menyediakan API sebagai mekanisme utama integrasi sistem.
+
+---
+
+### BO-026
+
+Mendukung deployment pada lingkungan cloud maupun on-premises.
+
+---
+
+### BO-027
+
+Menyediakan platform yang mudah diperluas dengan modul baru.
+
+---
+
+### BO-028
+
+Menjamin keamanan, audit trail, dan integritas data sebagai bagian dari desain sistem.
+
+---
+
+## 4.6.1 Standar Tumpukan Teknologi (Standard Technology Stack)
+
+Untuk mewujudkan Technology Objectives di atas (BO-024 s.d. BO-028) secara konsisten lintas seluruh modul dan entitas organisasi, organisasi menetapkan **tumpukan teknologi standar (standard technology stack)** berikut sebagai acuan pengembangan dan implementasi. Standar ini bersifat mengikat; penyimpangan darinya wajib melalui mekanisme **Change Request (CR)** sebagaimana ditetapkan pada BAB 18 Constraints (CONS-013).
+
+| Layer / Peran                         | Teknologi Standar                    | Objective Terkait   | Prinsip Arsitektur                          |
+| ------------------------------------- | ------------------------------------- | ------------------- | -------------------------------------------- |
+| Backend / Microservices               | **Go (Golang)**                      | BO-024, BO-025      | Modular & Extensible, API First              |
+| Frontend / Presentation               | **React 19 + Vite + TanStack Query** | BO-027            | Modular & Extensible, Accessibility          |
+| Event Streaming / Messaging           | **Apache Kafka**                     | BO-003, BO-024      | Event-Driven, Loose Coupling                 |
+| Database / System of Record           | **PostgreSQL**                       | BO-004, BO-028      | Single Source of Truth, Multi-Tenant Ready   |
+| Deployment / Runtime                  | **Container (Docker) + Kubernetes**  | BO-026              | Cloud Ready, Horizontal Scaling              |
+
+Pemilihan tumpukan teknologi ini selaras dengan prinsip arsitektur yang ditetapkan pada BAB 3 Business Vision (*Configuration over Customization, Organization Tree First, Scope-Based Everything, Cloud Ready, API First, Multi-Tenant Ready*). Rincian arsitektur teknologi dan cetak biru implementasi tumpukan ini dijabarkan lebih lanjut pada **BAB 11.2 Functional Architecture** (tingkat High-Level Design) serta **BAB 13.7 s.d. BAB 13.13** (tingkat HLD/LLD-lite: dekomposisi layanan Golang, katalog *topic* Kafka, strategi skema PostgreSQL, arsitektur frontend React 19 SPA, serta deployment, CI/CD, dan observability).
+
+---
+
+# 4.7 Business Value Objectives
+
+Implementasi ERP diharapkan memberikan nilai bisnis berikut.
+
+| Objective ID | Expected Business Value                                          |
+| ------------ | ---------------------------------------------------------------- |
+| BO-029       | Meningkatkan efisiensi operasional organisasi.                   |
+| BO-030       | Mengurangi waktu pemrosesan transaksi bisnis.                    |
+| BO-031       | Meningkatkan kualitas pengambilan keputusan.                     |
+| BO-032       | Meningkatkan transparansi proses bisnis.                         |
+| BO-033       | Mendukung pertumbuhan organisasi secara berkelanjutan.           |
+| BO-034       | Meningkatkan kepuasan pengguna melalui sistem yang terintegrasi. |
+
+---
+
+# 4.8 Key Success Indicators
+
+Keberhasilan implementasi Business Objectives akan diukur melalui indikator berikut.
+
+| Objective ID | Success Indicator                                                              |
+| ------------ | ------------------------------------------------------------------------------ |
+| BO-001       | Seluruh entitas organisasi menggunakan satu platform ERP.                      |
+| BO-002       | Penambahan organisasi baru dilakukan melalui konfigurasi tanpa perubahan kode. |
+| BO-003       | Seluruh modul utama saling terintegrasi.                                       |
+| BO-004       | Tidak terjadi duplikasi Master Data antar perusahaan.                          |
+| BO-005       | Struktur organisasi dapat diubah secara dinamis.                               |
+| BO-006       | Modul baru dapat ditambahkan tanpa memengaruhi modul lain.                     |
+| BO-008       | Dashboard eksekutif menampilkan informasi secara real-time.                    |
+| BO-020       | Laporan konsolidasi keuangan tersedia sesuai periode yang ditentukan.          |
+
+---
+
+# 4.9 Objective Dependency
+
+Business Objectives memiliki hubungan dengan artefak proyek lainnya.
+
+| Business Objective | Related Requirement | Related KPI | Related Test |
+| ------------------ | ------------------- | ----------- | ------------ |
+| BO-001             | BR-001 – BR-020     | KPI-001     | TC-001       |
+| BO-002             | BR-021 – BR-050     | KPI-002     | TC-015       |
+| BO-003             | BR-051 – BR-120     | KPI-003     | TC-040       |
+| BO-004             | BR-121 – BR-160     | KPI-004     | TC-072       |
+| BO-005             | BR-161 – BR-210     | KPI-005     | TC-110       |
+
+Tabel ini akan diperluas seiring bertambahnya Requirement ID dan artefak proyek lainnya.
+
+---
+
+# 4.10 Objective Summary
+
+Business Objectives pada dokumen ini menjadi acuan utama dalam penyusunan seluruh Business Requirements. Setiap kebutuhan bisnis yang akan didefinisikan pada bab berikutnya harus memberikan kontribusi yang jelas terhadap satu atau lebih Business Objectives.
+
+Dengan pendekatan ini, seluruh kebutuhan, desain solusi, implementasi, dan pengujian dapat ditelusuri kembali ke tujuan bisnis yang mendasarinya sehingga memastikan bahwa pengembangan ERP selalu berorientasi pada nilai bisnis (*business value*) dan mendukung visi jangka panjang organisasi.

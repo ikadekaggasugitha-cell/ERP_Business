@@ -1,0 +1,196 @@
+# BAB 5. Stakeholder Analysis
+
+## 5.1 Overview
+
+Stakeholder Analysis bertujuan untuk mengidentifikasi seluruh pihak yang memiliki kepentingan, tanggung jawab, maupun pengaruh terhadap pengembangan, implementasi, dan operasional **Enterprise Resource Planning (ERP) System**.
+
+Analisis ini memastikan bahwa kebutuhan setiap stakeholder terdokumentasi dengan baik sehingga sistem yang dibangun mampu mendukung tujuan bisnis organisasi secara menyeluruh.
+
+Setiap stakeholder diberikan **Stakeholder ID (SH-xxx)** untuk menjaga *traceability* terhadap Business Objectives (BO-xxx), Business Requirements (BR-xxx), serta artefak proyek lainnya.
+
+---
+
+# 5.2 Stakeholder Classification
+
+Stakeholder dikelompokkan berdasarkan tingkat organisasi.
+
+## Executive Level
+
+| Stakeholder ID | Stakeholder                          | Primary Responsibility                |
+| -------------- | ------------------------------------ | ------------------------------------- |
+| SH-001         | Board of Directors                   | Menentukan arah strategis organisasi. |
+| SH-002         | Chief Executive Officer (CEO)        | Sponsor utama implementasi ERP.       |
+| SH-003         | Chief Financial Officer (CFO)        | Tata kelola keuangan dan pelaporan.   |
+| SH-004         | Chief Operating Officer (COO)        | Efisiensi operasional perusahaan.     |
+| SH-005         | Chief Human Resources Officer (CHRO) | Strategi SDM dan organisasi.          |
+| SH-006         | Chief Information Officer (CIO)      | Strategi TI dan transformasi digital. |
+
+---
+
+## Corporate Management
+
+| Stakeholder ID | Stakeholder        | Primary Responsibility                  |
+| -------------- | ------------------ | --------------------------------------- |
+| SH-007         | Business Owner     | Menetapkan kebutuhan bisnis.            |
+| SH-008         | Product Owner      | Prioritas pengembangan produk ERP.      |
+| SH-009         | Steering Committee | Pengambilan keputusan strategis proyek. |
+| SH-010         | Internal Audit     | Kepatuhan dan tata kelola.              |
+| SH-011         | Compliance Officer | Kepatuhan terhadap regulasi.            |
+
+---
+
+## Project Organization
+
+| Stakeholder ID | Stakeholder           | Primary Responsibility              |
+| -------------- | --------------------- | ----------------------------------- |
+| SH-012         | Project Sponsor       | Pendanaan dan dukungan proyek.      |
+| SH-013         | Project Manager       | Pengelolaan proyek.                 |
+| SH-014         | PMO                   | Tata kelola proyek dan dokumentasi. |
+| SH-015         | Lead Business Analyst | Analisis kebutuhan bisnis.          |
+| SH-016         | Business Analyst      | Penyusunan Business Requirement.    |
+| SH-017         | Enterprise Architect  | Arsitektur enterprise.              |
+| SH-018         | Solution Architect    | Arsitektur solusi.                  |
+| SH-019         | Technical Lead        | Koordinasi teknis pengembangan.     |
+
+---
+
+## Engineering Team
+
+| Stakeholder ID | Stakeholder            | Primary Responsibility           |
+| -------------- | ---------------------- | -------------------------------- |
+| SH-020         | Backend Developer      | Pengembangan layanan bisnis.     |
+| SH-021         | Frontend Developer     | Pengembangan antarmuka pengguna. |
+| SH-022         | Mobile Developer       | Pengembangan aplikasi mobile.    |
+| SH-023         | QA Engineer            | Pengujian sistem.                |
+| SH-024         | DevOps Engineer        | Deployment dan CI/CD.            |
+| SH-025         | Database Administrator | Pengelolaan basis data.          |
+| SH-026         | Security Engineer      | Keamanan aplikasi.               |
+
+---
+
+## Business Users
+
+| Stakeholder ID | Stakeholder                 |
+| -------------- | --------------------------- |
+| SH-027         | Finance Department          |
+| SH-028         | Accounting Department       |
+| SH-029         | Human Resource Department   |
+| SH-030         | Procurement Department      |
+| SH-031         | Purchasing Department       |
+| SH-032         | Inventory Department        |
+| SH-033         | Warehouse Department        |
+| SH-034         | Sales Department            |
+| SH-035         | Customer Service            |
+| SH-036         | Manufacturing Department    |
+| SH-037         | Project Management Office   |
+| SH-038         | Asset Management Department |
+| SH-039         | Branch Management           |
+| SH-040         | Regional Management         |
+
+---
+
+# 5.3 Stakeholder Interest and Influence Matrix
+
+| Stakeholder        | Interest  | Influence | Engagement Strategy    |
+| ------------------ | --------- | --------- | ---------------------- |
+| Board of Directors | High      | Very High | Executive Review       |
+| CEO                | Very High | Very High | Continuous Engagement  |
+| Business Owner     | Very High | High      | Requirement Validation |
+| Project Sponsor    | High      | High      | Steering Review        |
+| Project Manager    | High      | High      | Daily Coordination     |
+| Business Analyst   | Very High | Medium    | Requirement Management |
+| Development Team   | High      | Medium    | Sprint Planning        |
+| End Users          | High      | Low       | Workshop & UAT         |
+| Internal Audit     | Medium    | High      | Compliance Review      |
+
+---
+
+# 5.4 Stakeholder Responsibilities (RACI)
+
+| Activity             | Sponsor | Business Owner |  PM |  BA | Architect | Dev |  QA | User |
+| -------------------- | :-----: | :------------: | :-: | :-: | :-------: | :-: | :-: | :--: |
+| Business Requirement |    A    |        R       |  C  |  R  |     C     |  I  |  I  |   C  |
+| Solution Design      |    I    |        C       |  C  |  C  |    A/R    |  C  |  I  |   I  |
+| Development          |    I    |        I       |  C  |  C  |     C     | A/R |  I  |   I  |
+| Testing              |    I    |        C       |  C  |  C  |     C     |  C  | A/R |   R  |
+| User Acceptance Test |    I    |        A       |  C  |  C  |     I     |  I  |  C  |   R  |
+| Go-Live              |    A    |        C       |  R  |  C  |     C     |  R  |  R  |   I  |
+
+**Legend**
+
+* **R** – Responsible
+* **A** – Accountable
+* **C** – Consulted
+* **I** – Informed
+
+---
+
+# 5.5 Stakeholder Communication Matrix
+
+| Stakeholder          | Communication              | Frequency           | Owner                 |
+| -------------------- | -------------------------- | ------------------- | --------------------- |
+| Executive Management | Steering Committee Meeting | Monthly             | Project Manager       |
+| Business Owner       | Requirement Review         | Weekly              | Lead Business Analyst |
+| Project Team         | Project Status Meeting     | Weekly              | Project Manager       |
+| Development Team     | Sprint Planning            | Bi-Weekly           | Technical Lead        |
+| QA Team              | Test Coordination          | Weekly              | QA Lead               |
+| End Users            | UAT Workshop               | Sesuai Tahap Proyek | Business Analyst      |
+
+---
+
+# 5.6 Stakeholder Expectations
+
+| Stakeholder          | Expected Outcome                               |
+| -------------------- | ---------------------------------------------- |
+| Executive Management | Dashboard strategis dan laporan konsolidasi.   |
+| Business Owner       | Proses bisnis terstandarisasi dan fleksibel.   |
+| Finance              | Laporan keuangan yang akurat dan real-time.    |
+| HR                   | Pengelolaan SDM yang terintegrasi.             |
+| Procurement          | Workflow pengadaan yang efisien.               |
+| Warehouse            | Visibilitas stok secara real-time.             |
+| Sales                | Integrasi data pelanggan dan penjualan.        |
+| IT Department        | Sistem yang mudah dipelihara dan dikembangkan. |
+
+---
+
+# 5.7 Stakeholder Requirement Ownership
+
+Setiap kebutuhan bisnis harus memiliki pemilik (*Requirement Owner*) yang bertanggung jawab atas validitas dan prioritas requirement.
+
+| Requirement Category    | Requirement Owner    |
+| ----------------------- | -------------------- |
+| Organization Management | Business Owner       |
+| User Management         | CIO / IT Department  |
+| Finance                 | CFO                  |
+| Accounting              | CFO                  |
+| Human Resource          | CHRO                 |
+| Procurement             | Procurement Manager  |
+| Inventory               | Supply Chain Manager |
+| Warehouse               | Warehouse Manager    |
+| Manufacturing           | Production Manager   |
+| Project Management      | PMO                  |
+| Asset Management        | Asset Manager        |
+
+---
+
+# 5.8 Stakeholder Traceability
+
+Seluruh stakeholder akan dihubungkan dengan artefak proyek melalui mekanisme *traceability*.
+
+| Stakeholder ID | Related Business Objective | Related Requirement |
+| -------------- | -------------------------- | ------------------- |
+| SH-007         | BO-001, BO-003             | BR-001 – BR-150     |
+| SH-015         | BO-002                     | BR-001 – BR-300     |
+| SH-027         | BO-020                     | BR-500 – BR-650     |
+| SH-029         | BO-024                     | BR-700 – BR-820     |
+| SH-032         | BO-014                     | BR-300 – BR-420     |
+
+Matriks ini akan diperbarui secara berkala seiring bertambahnya Business Requirements.
+
+---
+
+# 5.9 Stakeholder Summary
+
+Keberhasilan implementasi ERP sangat bergantung pada keterlibatan aktif seluruh stakeholder sejak tahap analisis kebutuhan hingga operasional sistem. Oleh karena itu, setiap stakeholder memiliki peran, tanggung jawab, serta mekanisme komunikasi yang terdokumentasi dengan jelas.
+
+Pendekatan ini memastikan bahwa setiap Business Requirement memiliki pemilik yang bertanggung jawab, mendukung proses pengambilan keputusan yang transparan, serta menjaga keterlacakan (*traceability*) dari kebutuhan bisnis hingga implementasi sistem.

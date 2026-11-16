@@ -1,0 +1,245 @@
+# BAB 3. Architecture Decisions
+
+## 3.1 Overview and ADR Process
+
+Bab ini mendokumentasikan keputusan arsitektur dalam format **Architecture Decision Record (ADR)**. Setiap ADR menangkap konteks yang mendasari keputusan, keputusan yang diambil, konsekuensinya (positif dan negatif), serta alternatif yang dipertimbangkan namun tidak dipilih.
+
+**ADR-001 s.d. ADR-005** telah **disetujui** dan ditetapkan pada **BRD BAB 13.7.1**; bab ini mengelaborasinya secara penuh. **ADR-006 s.d. ADR-010** merupakan keputusan turunan tingkat arsitektur yang ditetapkan pada SAD.
+
+Status ADR: `Proposed` → `Accepted` → `Superseded/Deprecated`. Perubahan terhadap ADR ber-status *Accepted* tunduk pada mekanisme **Change Request (CR)** sesuai CONS-013.
+
+---
+
+## 3.2 ADR Catalog
+
+### ADR-001 — Domain-Driven Microservices + Database-per-Service
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (BRD 13.7.1) |
+| Konteks | Sistem mencakup puluhan modul dengan siklus rilis dan kebutuhan skala yang berbeda; NFR-013 menuntut *independent deployment*, NFR-010/012 menuntut *scaling* dan isolasi selektif. |
+| Keputusan | Sistem didekomposisi menjadi *microservices* per **bounded context** (DDD). Setiap layanan memiliki basis data PostgreSQL sendiri (**database-per-service**); tidak ada akses lintas-basis-data langsung — pertukaran data melalui API atau *event*. |
+| Konsekuensi (+) | Rilis & skala per modul independen; batas domain jelas; kegagalan terisolasi; selaras Configuration over Customization. |
+| Konsekuensi (−) | Kompleksitas terdistribusi (konsistensi *eventual*, observability lintas layanan) — memunculkan RISK-013/014. |
+| Alternatif | *Monolith modular* (ditolak: tidak memenuhi independent deployment & scaling selektif); *shared database* (ditolak: kopling erat, melanggar bounded context). |
+| Terkait | ARC-002, ARC-005, NFR-010, NFR-012, NFR-013, BO-006 |
+
+### ADR-002 — Hybrid Multi-Tenancy
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (BRD 13.7.1) |
+| Konteks | Platform melayani banyak entitas (Holding/Sub Holding/Company/Branch) dengan kebutuhan isolasi berbeda; sebagian entitas (mis. di bawah pengawasan OJK) memerlukan segregasi data kuat (NFR-012, NFR-020). |
+| Keputusan | Menerapkan **Hybrid Multi-Tenancy**: *schema-per-tenant* untuk tenant/Holding berisolasi kuat/regulatorik; *shared-schema* + `organization_id` + **Row-Level Security (RLS)** untuk mayoritas tenant. Penetapan mode adalah keputusan konfigurasi. |
+| Konsekuensi (+) | Keseimbangan isolasi & efisiensi sumber daya; *backup/restore* per tenant untuk isolasi kuat; RLS sebagai *defense-in-depth*. |
+| Konsekuensi (−) | Dua pola tenancy menambah kompleksitas migrasi & pengujian; *routing* tenant harus konsisten. |
+| Alternatif | *Silo* (database per tenant) murni (ditolak: mahal & sulit dikelola pada skala besar); *shared* murni (ditolak: isolasi kurang untuk entitas regulatorik). |
+| Terkait | ARC-004, NFR-012, NFR-020, Organization Tree First |
+
+### ADR-003 — Kong API Gateway dan Apicurio Registry
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (BRD 13.7.1) |
+| Konteks | Diperlukan *single entry point* dengan autentikasi/otorisasi, *rate limiting*, dan *API versioning* (INT-013/014/015/016), serta tata kelola skema *event* (NFR-014). |
+| Keputusan | Menetapkan **Kong** sebagai API Gateway dan **Apicurio Registry** sebagai *schema registry* untuk *event* (Avro/Protobuf) dengan aturan kompatibilitas *backward/forward*. |
+| Konsekuensi (+) | Kontrol akses & kebijakan terpusat; evolusi skema aman; ekosistem *plugin* Kong matang. |
+| Konsekuensi (−) | Kong & Apicurio menjadi komponen kritikal yang wajib HA; menambah tanggung jawab operasional (self-managed). |
+| Alternatif | APISIX / gateway lain (ditolak pada tahap ini demi standardisasi); Confluent Schema Registry (tidak dipilih; Apicurio ditetapkan). |
+| Terkait | ARC-008, ARC-009, INT-013–016, NFR-014 |
+
+### ADR-004 — Infrastruktur Self-Managed
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (BRD 13.7.1) |
+| Konteks | Kebutuhan kendali penuh dan kedaulatan/kepatuhan data (UU PDP, PSAK, OJK), serta batasan kapasitas berbasis kontrak (CONS-005). |
+| Keputusan | PostgreSQL, Apache Kafka, Kong, dan Apicurio dijalankan **self-managed** melalui *operator* Kubernetes (mis. Strimzi untuk Kafka, CloudNativePG/Zalando untuk PostgreSQL) pada infrastruktur milik organisasi — **bukan** *managed service*. |
+| Konsekuensi (+) | Kendali penuh atas data, jaringan, tuning, dan kepatuhan; portabilitas antar-lingkungan. |
+| Konsekuensi (−) | Tanggung jawab operasional (*patching*, *tuning*, *capacity planning*, HA/DR) berada pada Platform Team — prasyarat ASM-014, mitigasi via kompetensi (ASM-013). |
+| Alternatif | *Managed service* (mis. cloud-managed Kafka/PostgreSQL) — ditolak demi kendali & kedaulatan data. |
+| Terkait | ARC-003, CONS-005, ASM-013, ASM-014, NFR-004/005/028 |
+
+### ADR-005 — Selective Exactly-Once Delivery
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (BRD 13.7.1) |
+| Konteks | NFR-008 menuntut konsistensi transaksi; namun *Exactly-Once Semantics* (EOS) menyeluruh berbiaya kinerja & kompleksitas tinggi pada arsitektur event-driven. |
+| Keputusan | Menerapkan **Selective Exactly-Once**: **EOS** (Kafka transactions) hanya untuk proses finansial berkonsistensi absolut — **General Ledger, Journal Posting, Payment, Inventory Reservation**; **At-Least-Once + idempotensi** untuk Reporting, Dashboard, Notification, Audit Log, dan mayoritas *event* operasional. |
+| Konsekuensi (+) | Konsistensi absolut di titik finansial kritikal; keseimbangan performa & kompleksitas di domain lain. |
+| Konsekuensi (−) | Dua model *delivery* menuntut kejelasan klasifikasi *event* & disiplin idempotensi; risiko salah klasifikasi (mitigasi via katalog event, BAB 5). |
+| Alternatif | EOS menyeluruh (ditolak: biaya kinerja/kompleksitas); At-Least-Once menyeluruh (ditolak: tak cukup untuk GL/Payment). |
+| Terkait | ARC-001, ARC-006, NFR-008 |
+
+### ADR-006 — Standard Technology Stack Baseline
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (SAD; menetapkan CONS-013) |
+| Konteks | Standardisasi teknologi diperlukan untuk konsistensi, efisiensi pemeliharaan, dan kejelasan kompetensi tim (CONS-013, RISK-015). |
+| Keputusan | Menetapkan baseline: **Go 1.22+** (backend), **React 19 + Vite + TanStack** (frontend SPA), **Apache Kafka 3.x (KRaft)** (event streaming), **PostgreSQL 15+** (system of record), di atas **Docker + Kubernetes**. |
+| Konsekuensi (+) | Konsistensi lintas layanan; *tooling* & standar seragam; onboarding lebih mudah. |
+| Konsekuensi (−) | Ketergantungan pada ketersediaan kompetensi stack (ASM-013); penyimpangan butuh CR. |
+| Alternatif | Polyglot per tim (ditolak: fragmentasi & biaya pemeliharaan). |
+| Terkait | CONS-013, ASM-013, RISK-015, NFR-013 |
+
+### ADR-007 — API Style: REST (External) + gRPC (Internal)
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (SAD) |
+| Konteks | Dibutuhkan kontrak eksternal yang interoperabel & terdokumentasi (INT-013, API First) serta komunikasi internal berlatensi rendah. |
+| Keputusan | **REST + OpenAPI** untuk API eksternal/klien (melalui Kong); **gRPC** untuk komunikasi sinkron antar-layanan internal; **Kafka** untuk komunikasi asinkron (ADR-001). |
+| Konsekuensi (+) | Interoperabilitas eksternal + efisiensi internal; kontrak eksplisit & tergenerasi. |
+| Konsekuensi (−) | Dua gaya API menambah *tooling* & disiplin kontrak; perlu konsistensi model error. |
+| Alternatif | REST menyeluruh (ditolak: kurang efisien internal); GraphQL (tidak dipilih sebagai standar utama). |
+| Terkait | ARC-009, ARC-010, INT-013, NFR-014 |
+
+### ADR-008 — Transactional Outbox dengan Change Data Capture (CDC)
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (SAD) |
+| Konteks | Penerbitan *event* harus konsisten dengan perubahan basis data untuk menghindari *dual-write* (ARC-001, NFR-009). |
+| Keputusan | Menerapkan pola **Transactional Outbox**: perubahan data & baris *outbox* ditulis satu transaksi PostgreSQL, lalu dipublikasikan ke Kafka melalui **CDC** (mis. Debezium) atau *poller*. |
+| Konsekuensi (+) | Jaminan konsistensi data↔event; *replay* & audit lebih andal. |
+| Konsekuensi (−) | Infrastruktur CDC menambah komponen operasional; *lag* publikasi harus dipantau. |
+| Alternatif | *Dual-write* langsung (ditolak: rawan inkonsistensi); *event sourcing* penuh (tidak dipilih sebagai default). |
+| Terkait | ARC-001, ARC-006, NFR-008, NFR-009 |
+
+### ADR-009 — CQRS Read Model untuk Reporting & Dashboard
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (SAD) |
+| Konteks | Dashboard/laporan menuntut kinerja render tinggi (NFR-003) & agregasi lintas domain tanpa membebani basis data transaksional. |
+| Keputusan | Menerapkan **CQRS**: `reporting-service` membangun *read model* terdenormalisasi dari *event* Kafka (At-Least-Once + idempotensi), disajikan melalui *materialized view*/read replica PostgreSQL. |
+| Konsekuensi (+) | Kinerja baca tinggi; isolasi beban baca dari tulis; fleksibilitas model laporan. |
+| Konsekuensi (−) | *Eventual consistency* pada laporan (jeda singkat); duplikasi data baca. |
+| Alternatif | Query langsung lintas layanan (ditolak: kopling & beban); *data warehouse* terpisah (untuk analitik lanjutan, di luar scope inti). |
+| Terkait | ARC-007, NFR-003 |
+
+### ADR-010 — Observability Stack Berbasis OpenTelemetry
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (SAD) |
+| Konteks | Arsitektur terdistribusi memerlukan visibilitas *end-to-end* untuk memenuhi SLA & respons insiden (NFR-004, NFR-018). |
+| Keputusan | Menetapkan **OpenTelemetry** untuk *tracing* (dengan `correlation_id` melintasi REST/gRPC/Kafka), **Prometheus/Grafana** untuk metrik, dan *log* terstruktur yang diaruskan via Kafka ke penyimpanan terpusat. |
+| Konsekuensi (+) | Korelasi lintas layanan; deteksi & diagnosis lebih cepat; standar vendor-netral. |
+| Konsekuensi (−) | Instrumentasi menambah *effort* pengembangan; biaya penyimpanan telemetri. |
+| Alternatif | Solusi APM proprietary tunggal (tidak dipilih demi netralitas & self-managed). |
+| Terkait | ARC-003, NFR-004, NFR-018 |
+
+### ADR-011 — Decoupled Single-Page Application (SPA) untuk Enterprise Backoffice
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (SAD) |
+| Konteks | Modul operasional dan akuntansi enterprise (GL, AP, AR, Inventory) menuntut interaksi data padat (*heavy data-grid*), latensi navigasi nol, auth-gated, filter URL persisten, dan update real-time tanpa overhead server-side rendering. |
+| Keputusan | Memisahkan antarmuka backoffice menjadi **Decoupled SPA** berbasis Vite, TanStack Router (file-based type-safe), TanStack Query v5 (server state caching, optimistic updates), Zustand (client UI state), virtual scrolling table (`@tanstack/react-virtual`), serta Server-Sent Events (SSE)/WebSockets melalui Kong. SSR hanya digunakan untuk portal publik. Asset statis di-deploy ke Edge/CDN. |
+| Konsekuensi (+) | Responsivitas sekelas aplikasi desktop; beban render server CPU/RAM nol; navigasi instan; shareable filtered URL. |
+| Konsekuensi (−) | Initial bundle size perlu diawasi via code-splitting; token OIDC PKCE harus dikelola aman di memori browser. |
+| Alternatif | Full SSR (ditolak: overhead compute server per request & latensi interaksi form berat); MPA (ditolak: reload halaman lambat). |
+| Terkait | ARC-007, ADR-003, ADR-006, NFR-001, NFR-003, NFR-022–027 |
+
+### ADR-012 — Enterprise Chrome Extension Companion (Manifest V3)
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (SAD) |
+| Konteks | Staf pajak, treasury, dan manajer cabang sering berpindah antara ERP dan portal eksternal (DJP e-Faktur, portal internet banking B2B, persetujuan cepat PO). Pengisian manual rentan kesalahan dan lambat. |
+| Keputusan | Membangun **Enterprise Chrome Extension Companion** resmi berbasis **Manifest V3**: Side Panel (`chrome.sidePanel`) untuk workflow approval cepat; content scripts ber-scope ketat untuk otomasi e-Faktur dan e-statement bank; Web Serial/HID bridge untuk scanner barcode/RFID gudang; ephemeral service worker (`chrome.storage.session`); OAuth2 PKCE via `chrome.identity`; audit log ber-tag `chrome-extension`. |
+| Konsekuensi (+) | Eliminasi kesalahan input e-Faktur/bank; percepatan approval workflow manajer; integrasi scanner tanpa driver desktop berat. |
+| Konsekuensi (−) | Pemeliharaan rutin jika tata letak DOM portal eksternal berubah; mengikuti kebijakan review Chrome Web Store Enterprise. |
+| Alternatif | Aplikasi desktop tambahan (ditolak: instalasi berat per PC cabang); bookmarklet (ditolak: tidak aman & tidak mematuhi CSP). |
+| Terkait | ADR-003, INT-005, INT-006, NFR-016, NFR-019 |
+
+### ADR-013 — Cortex Framework Data Products & SAP DDIC Coexistence
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (SAD) |
+| Konteks | Konsolidasi grup holding dan transisi bertahap menuntut integrasi data dari sistem SAP legacy (ECC 6.0 / S/4HANA) tanpa membebani klaster OLTP PostgreSQL transaksional dengan query analitik tahunan yang masif. |
+| Keputusan | Mengadopsi standar **Cortex Framework V7**: mereplikasi tabel SAP DDIC (`DD02L`, `DD03L`, `BKPF`, `BSEG`, `ACDOCA`, `MARC`) ke lakehouse BigQuery; menggunakan arsitektur 3 lapis (Foundations, Annotations, Products) berbasis Dataform (.js); skema bintang terpadu (`dim_organization`, `dim_currency`, `dim_fiscal_period`, `fact_gl_transaction`); penegakan namespace kustom (`custom`/`sinergi`); konfirmasi tegas versi target (ECC vs S4). |
+| Konsekuensi (+) | Single Source of Truth analitik holding; query agregasi tahunan super cepat; OLTP terlindungi dari beban analitik. |
+| Konsekuensi (−) | Memerlukan pipeline sinkronisasi CDC/ETL ke data lakehouse; jeda waktu konsistensi eventual (sub-menit). |
+| Alternatif | Query langsung lintas basis data / federasi SQL (ditolak: membebani OLTP dan mematahkan isolasi bounded context). |
+| Terkait | ADR-001, ADR-009, CONS-006, CONS-014, NFR-002, NFR-011 |
+
+### ADR-014 — Tri-Currency & Multi-Country Real-Time Accounting Engine
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (SAD) |
+| Konteks | Cabang dan anak perusahaan enterprise beroperasi lintas negara dengan mata uang transaksi berbeda, mata uang statutori berbeda, dan mata uang pelaporan holding berbeda. Rekalkulasi kurs saat pelaporan memperlambat query secara dramatis. |
+| Keputusan | Menerapkan arsitektur **Tri-Currency** pada setiap baris jurnal dan invoice: mencatat `Transaction Currency`, `Functional Currency` (beserta kurs), dan `Presentation Currency` (beserta kurs) saat penulisan; mesin triangulasi kurs real-time ber-cache in-memory/Redis; otomasi selisih kurs bulanan (PSAK 10 / IAS 21) berstatus auto-reversing; tagging kalender fiskal ganda (`local_fiscal_period_id` dan `group_fiscal_period_id`) untuk anak perusahaan di negara dengan kalender non-Januari. |
+| Konsekuensi (+) | Pelaporan keuangan holding instan tanpa konversi kurs runtime; kepatuhan audit PSAK/IAS 21 terjamin; presisi moneter `numeric(20,4)`. |
+| Konsekuensi (−) | Ukuran baris tabel finansial bertambah; ketergantungan pada ketersediaan kurs aktif di cache (dimitigasi fallback spot rate). |
+| Alternatif | Single currency dengan konversi saat query (ditolak: performa hancur pada jutaan transaksi); konversi periodik batch murni (ditolak: tidak real-time). |
+| Terkait | ADR-001, ADR-005, BRD 9.18, NFR-001, NFR-003, NFR-022 |
+
+### ADR-015 — Composite Partitioning, Read Replicas & Connection Pooling untuk Jutaan Transaksi
+
+| Atribut | Isi |
+| --- | --- |
+| Status | Accepted (SAD) |
+| Konteks | Volume transaksi mencapai jutaan baris per bulan dari ratusan cabang. Tabel monolitik menyebabkan bloat indeks dan I/O tinggi. Ribuan pod service berisiko menghabiskan connection pool basis data. |
+| Keputusan | Menerapkan partisi komposit: **RANGE bulanan** berdasarkan tanggal (`posting_date`, `created_at`) + **HASH sub-partitioning** berdasarkan `organization_id`; penegakan disiplin *partition pruning* wajib di semua query repository; pemeliharaan partisi otomatis 3 bulan ke depan via `ensure_future_partitions()`; pengarsipan transparan via `DETACH PARTITION`; connection pooling berlapis via **PgBouncer (Transaction Mode)**; pemisahan mutasi tulis ke Primary (`erp_app_rw`) dan query baca ke Read Replicas (`erp_app_ro`); partisi Kafka ber-key `organization_id`. |
+| Konsekuensi (+) | Kapasitas throughput stabil > 500 tx/sec; latensi P95 < 2 detik; isolasi scan hanya ke 1 partisi fisik; koneksi DB terlindungi hingga 10.000 klien. |
+| Konsekuensi (−) | Disiplin ketat pada penulisan query (wajib menyertakan tanggal dan scope); pemeliharaan rutin skrip partisi. |
+| Alternatif | Sharding database terdistribusi penuh (Citus/Spanner) — tidak dipilih pada tahap ini demi portabilitas self-managed PostgreSQL murni. |
+| Terkait | ADR-001, ADR-002, ADR-005, NFR-001, NFR-002, NFR-010, NFR-011 |
+
+---
+
+## 3.3 Decision Log
+
+| ADR ID  | Judul                                        | Status   | Sumber       |
+| ------- | --------------------------------------------- | -------- | ------------ |
+| ADR-001 | Domain-Driven Microservices + DB-per-Service  | Accepted | BRD 13.7.1   |
+| ADR-002 | Hybrid Multi-Tenancy                          | Accepted | BRD 13.7.1   |
+| ADR-003 | Kong API Gateway + Apicurio Registry          | Accepted | BRD 13.7.1   |
+| ADR-004 | Infrastruktur Self-Managed                    | Accepted | BRD 13.7.1   |
+| ADR-005 | Selective Exactly-Once Delivery               | Accepted | BRD 13.7.1   |
+| ADR-006 | Standard Technology Stack Baseline            | Accepted | SAD          |
+| ADR-007 | API Style REST + gRPC                         | Accepted | SAD          |
+| ADR-008 | Transactional Outbox + CDC                    | Accepted | SAD          |
+| ADR-009 | CQRS Read Model                               | Accepted | SAD          |
+| ADR-010 | Observability (OpenTelemetry)                 | Accepted | SAD          |
+| ADR-011 | Decoupled SPA untuk Enterprise Backoffice     | Accepted | SAD (2026)   |
+| ADR-012 | Enterprise Chrome Extension Companion (MV3)  | Accepted | SAD (2026)   |
+| ADR-013 | Cortex Data Products & SAP DDIC Coexistence   | Accepted | SAD (2026)   |
+| ADR-014 | Tri-Currency & Multi-Country Engine           | Accepted | SAD (2026)   |
+| ADR-015 | Composite Partitioning & Read Replicas        | Accepted | SAD (2026)   |
+
+---
+
+## 3.4 Decision Traceability (ADR ↔ Driver ↔ NFR)
+
+| ADR ID  | Driver (ARC/BO/CONS)          | NFR Terkait                 |
+| ------- | ------------------------------ | --------------------------- |
+| ADR-001 | ARC-002, ARC-005, BO-006       | NFR-010, NFR-012, NFR-013   |
+| ADR-002 | ARC-004                        | NFR-012, NFR-020            |
+| ADR-003 | ARC-008, ARC-009               | NFR-014, NFR-016            |
+| ADR-004 | ARC-003, CONS-005              | NFR-004, NFR-005, NFR-028   |
+| ADR-005 | ARC-001, ARC-006               | NFR-008                     |
+| ADR-006 | CONS-013, BO-024/025           | NFR-013                     |
+| ADR-007 | ARC-009, ARC-010               | NFR-014                     |
+| ADR-008 | ARC-001, ARC-006               | NFR-008, NFR-009            |
+| ADR-009 | ARC-007                        | NFR-003                     |
+| ADR-010 | ARC-003                        | NFR-004, NFR-018            |
+| ADR-011 | ARC-007, BO-027                | NFR-001, NFR-003, NFR-025   |
+| ADR-012 | ARC-008, INT-005/006           | NFR-016, NFR-019            |
+| ADR-013 | ARC-002, CONS-006, BO-004      | NFR-002, NFR-011            |
+| ADR-014 | ARC-001, BO-008, CONS-010      | NFR-001, NFR-003, NFR-022   |
+| ADR-015 | ARC-002, ARC-007, BO-005      | NFR-001, NFR-002, NFR-010   |
+
+---
+
+## 3.5 Summary
+
+Bab ini mendokumentasikan **15 keputusan arsitektur (ADR-001 s.d. ADR-015)** dalam format terstruktur yang menangkap konteks, keputusan, konsekuensi, dan alternatif. Keputusan ini mencakup dekomposisi layanan, tata kelola data, gateway, event delivery, presentasi decoupled SPA, ekstensi browser resmi, integrasi analitik Cortex & koeksistensi SAP, mesin tri-currency multi-negara, serta strategi partisi komposit dan pooling koneksi untuk jutaan transaksi real-time. Seluruh keputusan tertaut ke pendorong (BAB 2) dan NFR BRD, memastikan konsistensi justifikasi. Keputusan-keputusan ini menjadi landasan struktur logis (BAB 4) dan arsitektur integrasi (BAB 5).
+
+---

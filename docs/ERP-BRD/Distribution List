@@ -1,0 +1,131 @@
+# Distribution List
+
+## Purpose
+
+Bagian **Distribution List** mendefinisikan daftar pihak yang berhak menerima, mengakses, meninjau, atau menggunakan **Business Requirement Document (BRD)** sebagai referensi resmi selama siklus hidup proyek **Enterprise Resource Planning (ERP)**.
+
+Distribusi dokumen dilakukan untuk memastikan bahwa seluruh stakeholder yang memiliki tanggung jawab terhadap analisis, desain, pengembangan, implementasi, pengujian, operasional, dan tata kelola proyek menggunakan versi dokumen yang sama (*Single Source of Truth*).
+
+---
+
+# Distribution Matrix
+
+| No. | Role                   | Department / Organization | Access Level   | Distribution Type |
+| --: | ---------------------- | ------------------------- | -------------- | ----------------- |
+|   1 | Project Sponsor        | Executive Management      | Read Only      | Controlled Copy   |
+|   2 | Steering Committee     | Executive Management      | Read Only      | Controlled Copy   |
+|   3 | Business Owner         | Business Unit             | Read Only      | Controlled Copy   |
+|   4 | Product Owner          | Product Management        | Read Only      | Controlled Copy   |
+|   5 | Project Manager        | PMO                       | Read / Comment | Controlled Copy   |
+|   6 | Lead Business Analyst  | Business Analysis         | Read / Edit    | Master Copy       |
+|   7 | Business Analyst       | Business Analysis         | Read / Edit    | Working Copy      |
+|   8 | Enterprise Architect   | Enterprise Architecture   | Read / Comment | Controlled Copy   |
+|   9 | Solution Architect     | Solution Architecture     | Read / Comment | Controlled Copy   |
+|  10 | Technical Lead         | Engineering               | Read / Comment | Controlled Copy   |
+|  11 | Development Team       | Engineering               | Read Only      | Controlled Copy   |
+|  12 | QA / Testing Team      | Quality Assurance         | Read Only      | Controlled Copy   |
+|  13 | DevOps Engineer        | Infrastructure            | Read Only      | Controlled Copy   |
+|  14 | Security Architect     | Information Security      | Read / Comment | Controlled Copy   |
+|  15 | Database Administrator | Database Administration   | Read Only      | Controlled Copy   |
+|  16 | UI/UX Designer         | Product Design            | Read Only      | Controlled Copy   |
+|  17 | Infrastructure Team    | IT Infrastructure         | Read Only      | Controlled Copy   |
+|  18 | Internal Audit         | Internal Audit            | Read Only      | Controlled Copy   |
+|  19 | Compliance Officer     | Governance & Compliance   | Read Only      | Controlled Copy   |
+|  20 | Document Controller    | PMO                       | Full Control   | Master Copy       |
+
+---
+
+# Access Level Definition
+
+| Access Level   | Description                                                                                |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| Full Control   | Mengelola dokumen, melakukan revisi resmi, mengubah versi, serta mendistribusikan dokumen. |
+| Read / Edit    | Mengusulkan atau menyusun perubahan selama fase penyusunan dokumen.                        |
+| Read / Comment | Memberikan masukan dan hasil review tanpa mengubah dokumen utama.                          |
+| Read Only      | Menggunakan dokumen sebagai referensi tanpa hak melakukan perubahan.                       |
+
+---
+
+# Distribution Type Definition
+
+| Distribution Type | Description                                                                                           |
+| ----------------- | ----------------------------------------------------------------------------------------------------- |
+| Master Copy       | Dokumen resmi yang menjadi sumber utama dan dikelola oleh Document Owner atau Document Controller.    |
+| Working Copy      | Salinan kerja yang digunakan selama proses penyusunan dan review.                                     |
+| Controlled Copy   | Salinan resmi yang mengikuti proses pengendalian versi dan hanya diperbarui melalui distribusi resmi. |
+| Uncontrolled Copy | Salinan di luar proses pengendalian dokumen. Tidak boleh digunakan sebagai referensi resmi proyek.    |
+
+---
+
+# Document Repository
+
+Seluruh dokumen proyek ERP disimpan pada repositori dokumen terpusat yang dikelola oleh **Project Management Office (PMO)** atau **Document Management System (DMS)**.
+
+Setiap dokumen harus memiliki informasi berikut:
+
+* Document ID
+* Document Title
+* Version
+* Status
+* Classification
+* Document Owner
+* Effective Date
+* Last Updated
+* Repository Location
+
+---
+
+# Distribution Rules
+
+Distribusi dokumen harus mengikuti ketentuan berikut:
+
+1. Hanya versi **Approved** yang boleh didistribusikan sebagai referensi resmi.
+2. Setiap penerima wajib menggunakan versi terbaru yang tersedia pada repositori dokumen.
+3. Dokumen yang telah digantikan oleh versi baru harus diberi status **Obsolete** dan tidak boleh digunakan sebagai acuan proyek.
+4. Distribusi melalui media di luar repositori resmi harus memperoleh persetujuan dari **Document Owner** atau **Project Manager**.
+5. Dokumen dengan klasifikasi **Confidential – Internal Use Only** tidak boleh dibagikan kepada pihak eksternal tanpa persetujuan tertulis.
+
+---
+
+# Document Notification
+
+Setiap perubahan versi dokumen harus diinformasikan kepada seluruh pihak dalam Distribution List melalui mekanisme komunikasi proyek yang telah disepakati, seperti:
+
+* Email resmi proyek.
+* Project Management Tool.
+* Document Management System (DMS).
+* Enterprise Collaboration Platform.
+
+Notifikasi minimal memuat:
+
+* Document ID
+* Document Title
+* Previous Version
+* New Version
+* Summary of Changes
+* Effective Date
+* Link menuju dokumen terbaru
+
+---
+
+# Distribution Responsibility
+
+| Role                | Responsibility                                                                                                   |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Document Owner      | Menjamin keakuratan dan validitas isi dokumen.                                                                   |
+| Document Controller | Mengelola versi, distribusi, arsip, dan status dokumen.                                                          |
+| Project Manager     | Memastikan seluruh stakeholder menggunakan versi dokumen yang berlaku.                                           |
+| Business Analyst    | Memperbarui isi dokumen sesuai hasil analisis dan review.                                                        |
+| Recipient           | Menggunakan dokumen sesuai hak akses serta melaporkan apabila terdapat ketidaksesuaian atau kebutuhan perubahan. |
+
+---
+
+# Confidentiality Statement
+
+Business Requirement Document (BRD) ini diklasifikasikan sebagai:
+
+**Classification:** **Confidential – Internal Use Only**
+
+Dokumen hanya boleh diakses oleh pihak yang tercantum pada **Distribution List**. Seluruh penerima bertanggung jawab menjaga kerahasiaan informasi yang terkandung di dalam dokumen sesuai dengan kebijakan keamanan informasi organisasi.
+
+Penggandaan, distribusi ulang, atau penyampaian kepada pihak di luar organisasi proyek tanpa persetujuan tertulis dari **Project Sponsor** atau **Document Owner** tidak diperkenankan.

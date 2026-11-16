@@ -1,0 +1,165 @@
+# BAB 7. Security Architecture
+
+## 7.1 Overview
+
+Bab ini mendefinisikan arsitektur keamanan platform ERP secara menyeluruh, menerapkan prinsip **defense-in-depth** dan **least privilege**. Bab ini mengelaborasi kebutuhan keamanan fungsional pada **BRD BAB 9.4 (BR-031 s.d. BR-040)** dan **BAB 15 Security Requirements**, serta kebutuhan non-fungsional keamanan/kepatuhan **NFR-016 s.d. NFR-021**.
+
+Keamanan tidak diperlakukan sebagai lapisan tunggal, melainkan ditegakkan pada setiap tingkat: jaringan, gateway, layanan, data, dan proses pengembangan.
+
+---
+
+## 7.2 Security Principles and Threat Model
+
+### 7.2.1 Prinsip Keamanan
+
+| Prinsip                 | Penerapan                                                              |
+| ----------------------- | --------------------------------------------------------------------- |
+| Defense-in-Depth        | Kontrol berlapis: Kong → service → RLS → enkripsi.                     |
+| Least Privilege         | Hak akses minimum per peran & scope organisasi.                       |
+| Zero Trust (internal)   | Tidak ada kepercayaan implisit antar-layanan; autentikasi service-to-service. |
+| Secure by Default        | Konfigurasi aman sebagai default; penyimpangan eksplisit.            |
+| Scope-Based Everything  | Setiap akses tunduk pada scope Organization Tree.                     |
+| Auditability            | Seluruh aktivitas sensitif tercatat & tidak dapat diubah.            |
+
+### 7.2.2 Trust Boundaries & Threat Model (STRIDE ringkas)
+
+```text
+[Internet] ──TLS──► [Kong Gateway] ──mTLS/JWT──► [Go Services] ──TLS──► [PostgreSQL/Kafka]
+   (untrusted)         (DMZ)              (trusted internal)         (data zone)
+```
+
+| Ancaman (STRIDE)         | Kontrol Mitigasi                                              |
+| ------------------------ | ------------------------------------------------------------- |
+| Spoofing                 | OAuth2/OIDC, MFA (BR-032), mTLS antar-layanan.                |
+| Tampering                | TLS in-transit, enkripsi at-rest, integritas audit log.       |
+| Repudiation              | Audit trail immutable (9.20), correlation_id.                 |
+| Information Disclosure   | Enkripsi, RLS, masking PII, least privilege.                  |
+| Denial of Service        | Rate limiting (Kong), auto-scaling, WAF/quota.               |
+| Elevation of Privilege   | RBAC + scope enforcement berlapis, validasi input.           |
+
+---
+
+## 7.3 Authentication
+
+| Aspek                       | Mekanisme                                                                  | Referensi        |
+| --------------------------- | -------------------------------------------------------------------------- | ---------------- |
+| Autentikasi pengguna        | **OAuth2/OIDC** melalui Kong, terintegrasi Identity Provider (Azure AD/Google/LDAP). | INT-012, INT-015 |
+| Single Sign-On (SSO)        | Federasi via IdP; pengguna tidak memerlukan akun terpisah pada ERP.         | INT-012          |
+| Multi-Factor Authentication | MFA untuk akses sensitif/administratif (didorong oleh IdP).                 | BR-032, NFR-016  |
+| Autentikasi service-to-service | **mTLS** dan/atau token layanan berumur pendek (short-lived).           | Zero Trust       |
+| Manajemen sesi & token      | JWT tervalidasi di Kong; masa berlaku pendek + *refresh token*.            | NFR-016          |
+
+Kegagalan autentikasi ditolak pada gateway sebelum mencapai layanan (INT-015: request tanpa token valid ditolak).
+
+---
+
+## 7.4 Authorization
+
+Otorisasi menggabungkan **RBAC** (Role-Based Access Control) dan **Scope-Based Access Control** (berbasis Organization Tree), ditegakkan berlapis:
+
+| Lapis            | Keputusan Otorisasi                                                    | Granularitas |
+| ---------------- | ---------------------------------------------------------------------- | ------------ |
+| Kong (gateway)   | Validasi token, cek scope kasar & kebijakan akses API                  | Coarse       |
+| Service (Go)     | Cek peran (RBAC) + hak operasi + `organization_id`/scope (fine)        | Fine         |
+| PostgreSQL (RLS) | Filter baris per scope organisasi                                      | Data (row)   |
+
+* **RBAC**: peran didefinisikan pada `security-service` (BR-031); pemetaan peran→hak bersifat konfigurabel.
+* **Scope-Based (ABAC atas atribut organisasi)**: akses dibatasi sesuai posisi pengguna pada Organization Tree; data lintas Company/Business Unit terlindungi kecuali pengguna berwenang.
+* **Separation of Duties**: konfigurasi approval matrix (Workflow) mencegah konflik kepentingan (mis. pembuat ≠ penyetuju).
+
+---
+
+## 7.5 Data Protection and Encryption
+
+| Kategori                | Kontrol                                                                     | Referensi        |
+| ----------------------- | --------------------------------------------------------------------------- | ---------------- |
+| Enkripsi in-transit     | TLS 1.2+ pada seluruh kanal (klien↔Kong, antar-layanan, ke DB/Kafka).       | NFR-016          |
+| Enkripsi at-rest        | Enkripsi volume/basis data PostgreSQL & Kafka; *transparent* dan/atau *field-level* untuk PII. | NFR-016, NFR-019 |
+| Perlindungan PII        | Masking/tokenization data sensitif; pembatasan tujuan pemrosesan (UU PDP).  | NFR-019          |
+| Manajemen kunci         | *Key management* terpusat, rotasi berkala; pemisahan kunci per lingkungan.   | NFR-016          |
+| Data subject rights     | Mekanisme akses/koreksi/penghapusan PII lintas layanan (dikoordinasi via event). | NFR-019          |
+
+Enkripsi field-level diterapkan pada data pribadi kritikal (mis. NIK, data gaji) sesuai klasifikasi data.
+
+---
+
+## 7.6 API and Gateway Security
+
+Kong (ADR-003) menegakkan kontrol keamanan terpusat (rincian fungsi pada BAB 5.9):
+
+| Kontrol                     | Realisasi                                                     | Ancaman Ditangani     |
+| --------------------------- | ------------------------------------------------------------- | --------------------- |
+| Authentication enforcement  | Validasi OAuth2/OIDC/JWT                                       | Spoofing              |
+| Rate limiting & throttling  | Plugin per konsumen/klien (INT-016)                           | DoS/abuse             |
+| Input validation            | Validasi skema request pada gateway & layanan                 | Injection/Tampering   |
+| TLS termination             | Terminasi TLS + re-enkripsi ke *upstream*                     | Info disclosure       |
+| IP restriction / WAF        | Pembatasan sumber & aturan WAF untuk endpoint sensitif        | DoS/intrusion         |
+| OWASP API Security Top 10   | Pedoman desain endpoint & review keamanan                    | Beragam               |
+
+---
+
+## 7.7 Audit Logging and Security Monitoring
+
+* `audit-service` (SVC-018) mengonsumsi seluruh *event* (`erp.audit.event.recorded`) sebagai **jejak audit immutable** — sumber forensik utama (NFR-018, BRD 9.20).
+* Setiap catatan audit memuat: pengguna, organisasi, waktu, jenis aksi, nilai *before/after*, dan `correlation_id`.
+* *Security event* (percobaan akses tidak sah, kegagalan autentikasi) diaruskan ke **SIEM** untuk korelasi & deteksi.
+* Target respons: MTTD < 1 jam, MTTR awal < 4 jam (NFR-018); kerentanan kritikal ditangani < 24 jam (NFR-016).
+
+---
+
+## 7.8 Compliance Controls
+
+| Regulasi / Standar         | Kontrol Arsitektur                                                     | Referensi        |
+| -------------------------- | --------------------------------------------------------------------- | ---------------- |
+| UU PDP (No. 27/2022)       | Consent, hak subjek data, pembatasan tujuan, pelaporan insiden ≤ 3×24 jam. | NFR-019          |
+| PSAK/IFRS                  | Integritas & auditabilitas data keuangan; PostgreSQL sebagai SoT.      | NFR-021, CONS-010|
+| Perpajakan (DJP)           | Integrasi e-Faktur (INT-006), integritas faktur pajak.                | CONS-011         |
+| OJK (bila relevan)         | Konfigurasi kepatuhan per entitas; pelaporan & pengendalian internal.  | NFR-020          |
+
+Kontrol kepatuhan bersifat konfigurabel per entitas organisasi (schema-per-tenant untuk isolasi kuat — ADR-002).
+
+---
+
+## 7.9 Secrets and Certificate Management
+
+* Rahasia (kredensial DB, kunci API pihak ketiga, token) dikelola melalui **secret manager** (mis. HashiCorp Vault / sealed-secrets Kubernetes) — **tidak** disimpan di kode atau image.
+* Rotasi kredensial & sertifikat otomatis; pemisahan per lingkungan (dev/staging/prod).
+* Sertifikat TLS internal dikelola (mis. cert-manager) dengan pembaruan otomatis.
+* Akses rahasia mengikuti least privilege dan tercatat pada audit.
+
+---
+
+## 7.10 Security in the SDLC
+
+Keamanan diintegrasikan ke pipeline (rincian pada BAB 10):
+
+| Tahap        | Kontrol Keamanan                                              | Referensi        |
+| ------------ | ------------------------------------------------------------- | ---------------- |
+| Code         | *Secure coding standard*, *secret scanning*                   | NFR-016          |
+| Build/Test   | **SAST**, *dependency/CVE scan* (SCA)                        | NFR-016, NFR-017 |
+| Pre-deploy   | *Container image scan*, *image signing*                      | NFR-016          |
+| Runtime      | **DAST**, *penetration testing* berkala, *vulnerability scan* | NFR-017          |
+
+Penetration testing menyeluruh minimum 1×/tahun; vulnerability scanning otomatis minimum 1×/bulan (NFR-017).
+
+---
+
+## 7.11 Security Traceability
+
+| Kebutuhan (BRD)         | Realisasi Arsitektur (SAD)                     | Bagian     |
+| ----------------------- | ---------------------------------------------- | ---------- |
+| BR-031 (RBAC/Scope)     | Otorisasi berlapis + RLS                        | §7.4, §6.4 |
+| BR-032 (MFA)            | MFA via IdP                                      | §7.3       |
+| BR-033 (Enkripsi)       | TLS + at-rest + field-level                      | §7.5       |
+| NFR-016 (vuln response) | Security in SDLC + monitoring                    | §7.10, §7.7|
+| NFR-017 (assessment)    | Pentest & scanning berkala                       | §7.10      |
+| NFR-018 (incident)      | Audit stream + SIEM                              | §7.7       |
+| NFR-019 (UU PDP)        | Perlindungan PII + data subject rights           | §7.5, §7.8 |
+
+---
+
+## 7.12 Summary
+
+Bab ini mendefinisikan arsitektur keamanan berlapis (*defense-in-depth*) yang menegakkan autentikasi (OAuth2/OIDC + MFA + mTLS), otorisasi (RBAC + Scope-Based + RLS), perlindungan data (enkripsi in-transit/at-rest + PII), keamanan gateway (Kong), audit immutable, kontrol kepatuhan (UU PDP/PSAK/OJK), manajemen rahasia, serta integrasi keamanan pada SDLC. Seluruh kontrol tertaut ke kebutuhan keamanan BRD (BR-031–040, BAB 15) dan NFR-016–021, memastikan keamanan menjadi properti sistem *by design*.
+
+---

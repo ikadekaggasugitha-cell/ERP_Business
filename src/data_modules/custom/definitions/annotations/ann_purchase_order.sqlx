@@ -1,0 +1,38 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["annotation", "procurement", "cortex_v7"],
+  description: "Unified Purchase Orders from SAP MM with currency scaling and safe dates"
+}
+
+WITH tcurx_shift AS (
+  ${currency.currencyDecimalShift(ref("stg_tcurx"))}
+)
+
+SELECT
+  TO_HEX(MD5(CONCAT('SAP_MM|', h.mandt, '|', h.po_number))) AS po_id,
+  'SAP_MM' AS source_system,
+  h.mandt,
+  h.po_number,
+  CAST(i.item_number AS STRING) AS line_number,
+  h.company_code,
+  h.po_type,
+  h.vendor_number AS vendor_id,
+  h.purchasing_org,
+  h.purchasing_group,
+  ${sap_helpers.safeSapDate("h.doc_date")} AS order_date,
+  i.material_number AS material_id,
+  i.plant AS plant_code,
+  i.storage_location,
+  CAST(i.quantity AS NUMERIC) AS order_quantity,
+  i.unit_of_measure AS uom,
+  CAST(i.net_price AS NUMERIC) AS unit_price,
+  ${currency.amountWithDecimalShift("i.net_value", "shift")} AS net_amount_tc,
+  TRIM(h.currency_key) AS currency_tc,
+  ${sap_helpers.latestRecordstamp(["h.recordstamp", "i.recordstamp"])} AS source_last_updated_at
+FROM ${ref("stg_ekko")} h
+INNER JOIN ${ref("stg_ekpo")} i
+  ON h.mandt = i.mandt
+  AND h.po_number = i.po_number
+LEFT JOIN tcurx_shift shift
+  ON TRIM(h.currency_key) = shift.currkey

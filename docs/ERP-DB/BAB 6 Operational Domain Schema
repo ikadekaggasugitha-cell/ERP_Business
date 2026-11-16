@@ -1,0 +1,180 @@
+# BAB 6. Operational Domain Schema
+
+## 6.1 Overview
+
+Bab ini mendesain skema domain **Operasional**: Procurement, Inventory, Sales, dan Manufacturing. Domain ini mengutamakan ketersediaan & *throughput* (SAD BAB 4.6) dan terhubung ke domain finansial melalui event (INT-001/002). **Inventory Reservation** menerapkan Exactly-Once (ADR-005). Tabel pergerakan bervolume tinggi dipartisi RANGE per tanggal (DBS-013). Seluruh tabel mengikuti standar BAB 2.
+
+---
+
+## 6.2 Procurement (`procurement_db`)
+
+Merealisasikan BRD 9.7: permintaan → PO → penerimaan; menerbitkan `procurement.po.approved` & `procurement.goods.received` (INT-002).
+
+```mermaid
+erDiagram
+  PURCHASE_REQUISITION ||--|{ PR_LINE : contains
+  PURCHASE_ORDER ||--|{ PO_LINE : contains
+  PURCHASE_REQUISITION ||--o{ PURCHASE_ORDER : sourced_into
+  PURCHASE_ORDER ||--o{ GOODS_RECEIPT : received_by
+  GOODS_RECEIPT ||--|{ GR_LINE : contains
+```
+
+### `pr.purchase_requisition`
+
+| Column          | Type          | Null | Key | Description                                            |
+| --------------- | ------------- | ---- | --- | ------------------------------------------------------ |
+| `pr_no`         | VARCHAR(50)   | No   | U   | Nomor PR.                                              |
+| `requester_id`  | UUID          | No   | IDX | Pemohon (ref logis user).                             |
+| `status`        | VARCHAR(20)   | No   | IDX | Draft/Submitted/Approved/Rejected/Closed.             |
+| `workflow_ref`  | VARCHAR(100)  | Yes  |     | Referensi workflow approval (INT-004).                |
+| `needed_date`   | DATE          | Yes  |     | Tanggal kebutuhan.                                     |
+
+### `po.purchase_order`
+
+| Column          | Type          | Null | Key | Description                                            |
+| --------------- | ------------- | ---- | --- | ------------------------------------------------------ |
+| `po_no`         | VARCHAR(50)   | No   | U   | Nomor PO.                                              |
+| `vendor_id`     | UUID          | No   | IDX | Vendor (ref logis `masterdata_db`).                   |
+| `order_date`    | DATE          | No   |     | Tanggal PO.                                            |
+| `currency_code` | VARCHAR(3)    | No   |     | Mata uang.                                             |
+| `total_amount`  | NUMERIC(20,4) | No   |     | Total nilai PO.                                        |
+| `status`        | VARCHAR(20)   | No   | IDX | Draft/Approved/PartiallyReceived/Received/Closed.     |
+
+### `po.po_line`
+
+| Column        | Type          | Null | Key | Description                                    |
+| ------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `purchase_order_id`| UUID     | No   | FK  | Induk PO.                                      |
+| `item_id`     | UUID          | No   | IDX | Item (ref logis `masterdata_db`).             |
+| `order_qty`   | NUMERIC(20,4) | No   |     | Kuantitas dipesan.                             |
+| `received_qty`| NUMERIC(20,4) | No   |     | Kuantitas diterima.                            |
+| `unit_price`  | NUMERIC(20,4) | No   |     | Harga satuan.                                  |
+
+### `gr.goods_receipt` & `gr.gr_line` — pola standar (referensi `po_line`, `warehouse_id`, `received_qty`; memicu `procurement.goods.received`).
+
+---
+
+## 6.3 Inventory (`inventory_db`)
+
+Merealisasikan BRD 9.8: stok, gudang, pergerakan; reservasi (Exactly-Once); menerbitkan `inventory.stock.reserved`, `inventory.goods.issued/received` (INT-001/002).
+
+```mermaid
+erDiagram
+  WAREHOUSE ||--o{ STOCK_BALANCE : holds
+  ITEM_REF ||--o{ STOCK_BALANCE : quantified_in
+  STOCK_BALANCE ||--o{ STOCK_MOVEMENT : changed_by
+  STOCK_RESERVATION }o--|| ITEM_REF : reserves
+```
+
+### `inv.warehouse`
+
+| Column   | Type         | Null | Key | Description                          |
+| -------- | ------------ | ---- | --- | ------------------------------------ |
+| `code`   | VARCHAR(50)  | No   | U   | Kode gudang.                         |
+| `name`   | VARCHAR(150) | No   |     | Nama gudang.                         |
+| `organization_ref_id`| UUID | No | IDX | Unit organisasi pemilik.            |
+
+### `inv.stock_balance` (saldo stok per item/gudang)
+
+| Column          | Type          | Null | Key | Description                                    |
+| --------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `warehouse_id`  | UUID          | No   | IDX | Gudang.                                        |
+| `item_id`       | UUID          | No   | IDX | Item (ref logis).                              |
+| `on_hand_qty`   | NUMERIC(20,4) | No   |     | Kuantitas fisik.                               |
+| `reserved_qty`  | NUMERIC(20,4) | No   |     | Kuantitas dicadangkan.                         |
+| `available_qty` | NUMERIC(20,4) | No   |     | Tersedia (on_hand − reserved).                 |
+| `avg_cost`      | NUMERIC(20,4) | No   |     | Biaya rata-rata (costing).                     |
+
+**Unique:** `uq_stock_balance (organization_id, warehouse_id, item_id)`. Update saldo menggunakan optimistic locking / row lock untuk konsistensi reservasi (EOS).
+
+### `inv.stock_movement` (PARTITION BY RANGE (`movement_date`))
+
+| Column          | Type          | Null | Key | Description                                            |
+| --------------- | ------------- | ---- | --- | ------------------------------------------------------ |
+| `id`            | UUID          | No   | PK  | Identitas pergerakan.                                 |
+| `movement_date` | DATE          | No   | IDX | Tanggal (kunci partisi).                              |
+| `warehouse_id`  | UUID          | No   | IDX | Gudang.                                                |
+| `item_id`       | UUID          | No   | IDX | Item.                                                  |
+| `movement_type` | VARCHAR(20)   | No   |     | Receipt/Issue/Transfer/Adjustment.                    |
+| `quantity`      | NUMERIC(20,4) | No   |     | Kuantitas (+/−).                                       |
+| `source_document_ref`| VARCHAR(100)| Yes| IDX | Dokumen sumber (GR/SO/WO).                            |
+| `correlation_id`| UUID          | No   | IDX | Korelasi (Saga INT-001/002).                          |
+
+### `inv.stock_reservation`
+
+| Column          | Type          | Null | Key | Description                                    |
+| --------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `item_id`       | UUID          | No   | IDX | Item dicadangkan.                              |
+| `warehouse_id`  | UUID          | No   |     | Gudang.                                        |
+| `reserved_qty`  | NUMERIC(20,4) | No   |     | Kuantitas reservasi.                           |
+| `sales_order_ref`| VARCHAR(100) | No   | IDX | SO pemicu (INT-001).                           |
+| `status`        | VARCHAR(20)   | No   |     | Reserved/Released/Consumed.                    |
+
+---
+
+## 6.4 Sales (`sales_db`)
+
+Merealisasikan BRD 9.14: order → pengiriman → penagihan; menerbitkan `sales.order.confirmed` (INT-001).
+
+```mermaid
+erDiagram
+  SALES_ORDER ||--|{ SO_LINE : contains
+  SALES_ORDER ||--o{ DELIVERY : fulfilled_by
+```
+
+### `so.sales_order`
+
+| Column          | Type          | Null | Key | Description                                            |
+| --------------- | ------------- | ---- | --- | ------------------------------------------------------ |
+| `so_no`         | VARCHAR(50)   | No   | U   | Nomor Sales Order.                                    |
+| `customer_id`   | UUID          | No   | IDX | Pelanggan (ref logis `masterdata_db`).               |
+| `order_date`    | DATE          | No   |     | Tanggal order.                                        |
+| `currency_code` | VARCHAR(3)    | No   |     | Mata uang.                                             |
+| `total_amount`  | NUMERIC(20,4) | No   |     | Total nilai order.                                    |
+| `status`        | VARCHAR(20)   | No   | IDX | Draft/Confirmed/PartiallyDelivered/Delivered/Invoiced/Cancelled. |
+| `correlation_id`| UUID          | No   | IDX | Korelasi (Saga INT-001).                             |
+
+### `so.so_line`
+
+| Column        | Type          | Null | Key | Description                                    |
+| ------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `sales_order_id`| UUID        | No   | FK  | Induk SO.                                      |
+| `item_id`     | UUID          | No   | IDX | Item (ref logis).                              |
+| `order_qty`   | NUMERIC(20,4) | No   |     | Kuantitas.                                     |
+| `unit_price`  | NUMERIC(20,4) | No   |     | Harga satuan.                                  |
+| `delivered_qty`| NUMERIC(20,4)| No   |     | Kuantitas terkirim.                            |
+
+### `so.delivery` & `so.delivery_line` — pola standar (memicu `inventory.goods.issued` → `ar.invoice.issued`).
+
+---
+
+## 6.5 Manufacturing (`manufacturing_db`)
+
+Merealisasikan BRD 9.9: perencanaan & pelaksanaan produksi; menerbitkan `manufacturing.workorder.completed`.
+
+### `mfg.bill_of_material` & `mfg.bom_line`
+
+| Table                | Kolom kunci                                              | Deskripsi                                |
+| -------------------- | ------------------------------------------------------- | ---------------------------------------- |
+| `mfg.bill_of_material`| `code`, `product_item_id`, `version`, `is_active`       | Struktur produk (BoM).                   |
+| `mfg.bom_line`       | `bom_id`, `component_item_id`, `quantity`, `uom`        | Komponen & kuantitas.                    |
+
+### `mfg.work_order`
+
+| Column          | Type          | Null | Key | Description                                    |
+| --------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `wo_no`         | VARCHAR(50)   | No   | U   | Nomor work order.                              |
+| `product_item_id`| UUID         | No   | IDX | Produk yang diproduksi.                        |
+| `bom_id`        | UUID          | No   | FK  | BoM referensi.                                 |
+| `planned_qty`   | NUMERIC(20,4) | No   |     | Kuantitas rencana.                             |
+| `produced_qty`  | NUMERIC(20,4) | No   |     | Kuantitas hasil.                               |
+| `status`        | VARCHAR(20)   | No   | IDX | Planned/Released/InProgress/Completed/Closed.  |
+| `sales_order_ref`| VARCHAR(100) | Yes  | IDX | SO pemicu (make-to-order).                     |
+
+---
+
+## 6.6 Summary
+
+Bab ini mendesain skema domain operasional: **Procurement** (PR→PO→GR), **Inventory** (saldo stok, pergerakan terpartisi, reservasi Exactly-Once), **Sales** (order→delivery), dan **Manufacturing** (BoM→work order). Domain ini berinteraksi dengan finansial melalui event (INT-001/002) — pergerakan stok & pengiriman memicu penerbitan invoice dan posting GL. Referensi lintas domain (item, customer, vendor, GR, SO) bersifat logis sesuai database-per-service, dan tabel pergerakan bervolume tinggi dipartisi per tanggal.
+
+---

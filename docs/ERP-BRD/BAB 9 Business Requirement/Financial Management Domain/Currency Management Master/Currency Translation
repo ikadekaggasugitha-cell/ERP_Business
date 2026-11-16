@@ -1,0 +1,214 @@
+# 9.5.3.13 Currency Translation Requirements
+
+---
+
+# 9.5.3.13.1 Overview
+
+Currency Translation merupakan proses bisnis keuangan yang menerjemahkan laporan keuangan dari mata uang fungsional (*Functional Currency*) suatu Legal Entity ke mata uang pelaporan (*Reporting Currency*) atau mata uang konsolidasi (*Group Currency*).
+
+Proses ini digunakan untuk mendukung penyusunan laporan keuangan grup perusahaan, konsolidasi lintas negara, multi-holding, multi-ledger, dan pelaporan sesuai standar akuntansi internasional. Currency Translation tidak mengubah transaksi sumber maupun saldo historis, melainkan menghasilkan nilai laporan yang ekuivalen dalam mata uang pelaporan menggunakan aturan translasi yang telah ditetapkan.
+
+---
+
+# 9.5.3.13.2 Business Capability
+
+Currency Translation menyediakan kapabilitas berikut:
+
+* Financial Statement Translation.
+* Functional Currency to Reporting Currency Translation.
+* Group Currency Translation.
+* Multi-Reporting Currency.
+* Multi-Ledger Translation.
+* Multi-Book Translation.
+* Translation Adjustment Calculation.
+* Cumulative Translation Adjustment (CTA).
+* Foreign Currency Translation Reserve (FCTR).
+* Historical, Closing, dan Average Rate Translation.
+* Consolidation Integration.
+* Simulation.
+* Approval Workflow.
+* Audit Trail.
+
+---
+
+# 9.5.3.13.3 Business Requirement Catalogue
+
+## BR-201 – Currency Translation Process
+
+| Attribute           | Description                                                                                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-201                                                                                                                                                        |
+| Requirement Name    | Currency Translation Process                                                                                                                                  |
+| Category            | Currency Translation                                                                                                                                          |
+| Priority            | Critical                                                                                                                                                      |
+| Business Objective  | BO-011                                                                                                                                                        |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                                                              |
+| Description         | Sistem harus menyediakan proses Currency Translation untuk menerjemahkan laporan keuangan dari Functional Currency ke Reporting Currency atau Group Currency. |
+| Business Value      | Mendukung penyusunan laporan keuangan konsolidasi yang konsisten dan sesuai standar akuntansi.                                                                |
+| Acceptance Criteria | Sistem mampu menghasilkan laporan hasil translasi beserta jurnal penyesuaian translasi apabila diperlukan.                                                    |
+
+---
+
+## BR-202 – Translation Scope
+
+| Attribute        | Description                                                                                                                                                                      |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-202                                                                                                                                                                           |
+| Requirement Name | Translation Scope                                                                                                                                                                |
+| Priority         | Critical                                                                                                                                                                         |
+| Description      | Sistem harus mendukung translasi berdasarkan Holding, Sub Holding, Legal Entity, Financial Organization, Ledger, Financial Book, Reporting Currency, maupun Consolidation Group. |
+
+---
+
+## BR-203 – Translation Rate Selection
+
+| Attribute        | Description                                                                                                                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-203                                                                                                                                                                                                            |
+| Requirement Name | Translation Exchange Rate Selection                                                                                                                                                                               |
+| Priority         | Critical                                                                                                                                                                                                          |
+| Description      | Sistem harus memilih Exchange Rate sesuai Currency Conversion Policy dan Translation Rule yang berlaku, termasuk penggunaan Closing Rate, Average Rate, Historical Rate, atau Custom Rate berdasarkan jenis akun. |
+
+---
+
+## BR-204 – Translation Adjustment Calculation
+
+| Attribute        | Description                                                                                                                                                                               |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-204                                                                                                                                                                                    |
+| Requirement Name | Translation Adjustment Calculation                                                                                                                                                        |
+| Priority         | Critical                                                                                                                                                                                  |
+| Description      | Sistem harus menghitung Translation Adjustment, termasuk Cumulative Translation Adjustment (CTA) atau Foreign Currency Translation Reserve (FCTR), sesuai kebijakan akuntansi perusahaan. |
+
+---
+
+## BR-205 – Financial Statement Translation
+
+| Attribute        | Description                                                                                                                                                                            |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-205                                                                                                                                                                                 |
+| Requirement Name | Financial Statement Translation                                                                                                                                                        |
+| Priority         | Critical                                                                                                                                                                               |
+| Description      | Sistem harus menerjemahkan seluruh komponen laporan keuangan seperti Neraca, Laporan Laba Rugi, Arus Kas, Perubahan Ekuitas, dan Catatan atas Laporan Keuangan ke mata uang pelaporan. |
+
+---
+
+## BR-206 – Simulation Mode
+
+| Attribute        | Description                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-206                                                                                                            |
+| Requirement Name | Translation Simulation                                                                                            |
+| Priority         | High                                                                                                              |
+| Description      | Sistem harus menyediakan simulasi hasil translasi sebelum proses dipublikasikan atau digunakan dalam konsolidasi. |
+
+---
+
+## BR-207 – Consolidation Integration
+
+| Attribute        | Description                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-207                                                                                                                                |
+| Requirement Name | Consolidation Integration                                                                                                             |
+| Priority         | Critical                                                                                                                              |
+| Description      | Hasil Currency Translation harus dapat digunakan langsung oleh proses Financial Consolidation tanpa memerlukan transformasi tambahan. |
+
+---
+
+## BR-208 – Approval Workflow
+
+| Attribute        | Description                                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-208                                                                                                         |
+| Requirement Name | Translation Approval Workflow                                                                                  |
+| Priority         | Critical                                                                                                       |
+| Description      | Hasil Currency Translation harus melalui proses persetujuan sebelum digunakan dalam laporan konsolidasi resmi. |
+
+---
+
+## BR-209 – Batch Processing
+
+| Attribute        | Description                                                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-209                                                                                                                                            |
+| Requirement Name | Batch Translation Processing                                                                                                                      |
+| Priority         | High                                                                                                                                              |
+| Description      | Sistem harus mendukung translasi secara massal untuk banyak Legal Entity, Ledger, Reporting Currency, atau Consolidation Group dalam satu proses. |
+
+---
+
+## BR-210 – Currency Translation Auditability
+
+| Attribute        | Description                                                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-210                                                                                                                                           |
+| Requirement Name | Currency Translation Auditability                                                                                                                |
+| Priority         | Critical                                                                                                                                         |
+| Description      | Seluruh proses translasi, parameter, hasil perhitungan, penyesuaian, persetujuan, dan publikasi harus tercatat secara lengkap dalam Audit Trail. |
+
+---
+
+# 9.5.3.13.4 Business Rules
+
+| Business Rule ID | Description                                                                                                                                                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-CTR-001    | Currency Translation hanya boleh dijalankan setelah proses Currency Revaluation dan Period-End Closing selesai sesuai kebijakan perusahaan.                                                                           |
+| BRule-CTR-002    | Translation tidak boleh mengubah transaksi sumber maupun saldo pada Functional Currency.                                                                                                                              |
+| BRule-CTR-003    | Setiap kelompok akun harus menggunakan jenis kurs yang sesuai dengan Translation Rule, misalnya Historical Rate untuk ekuitas, Average Rate untuk pendapatan dan beban, serta Closing Rate untuk aset dan liabilitas. |
+| BRule-CTR-004    | Selisih translasi harus dicatat sebagai Translation Adjustment (CTA/FCTR) sesuai konfigurasi akuntansi.                                                                                                               |
+| BRule-CTR-005    | Hasil Currency Translation yang telah dipublikasikan tidak boleh diubah; koreksi dilakukan melalui proses translasi ulang dengan versi baru.                                                                          |
+| BRule-CTR-006    | Satu kombinasi Legal Entity, Reporting Currency, dan Accounting Period hanya boleh memiliki satu hasil translasi yang berstatus Published.                                                                            |
+| BRule-CTR-007    | Seluruh aktivitas translasi wajib memiliki jejak audit yang lengkap.                                                                                                                                                  |
+
+---
+
+# 9.5.3.13.5 Data Attributes
+
+| Attribute                     | Description                                             |
+| ----------------------------- | ------------------------------------------------------- |
+| Translation ID                | Identitas unik proses translasi.                        |
+| Translation Number            | Nomor dokumen translasi.                                |
+| Translation Date              | Tanggal proses translasi.                               |
+| Accounting Period             | Periode akuntansi.                                      |
+| Financial Organization        | Organisasi keuangan.                                    |
+| Legal Entity                  | Entitas hukum.                                          |
+| Consolidation Group           | Grup konsolidasi.                                       |
+| Functional Currency           | Mata uang fungsional.                                   |
+| Reporting Currency            | Mata uang pelaporan.                                    |
+| Group Currency                | Mata uang grup (opsional).                              |
+| Translation Rule              | Aturan translasi yang digunakan.                        |
+| Currency Conversion Policy    | Referensi ke kebijakan konversi.                        |
+| Exchange Rate Version         | Referensi versi kurs.                                   |
+| Translation Adjustment Amount | Nilai penyesuaian translasi.                            |
+| CTA/FCTR Account              | Akun penampung selisih translasi.                       |
+| Consolidation Reference       | Referensi proses konsolidasi.                           |
+| Simulation Flag               | Penanda simulasi.                                       |
+| Approval Status               | Draft, Pending Approval, Approved, Published, Rejected. |
+| Status                        | Draft, Running, Completed, Published, Archived.         |
+| Created By / Created Date     | Informasi pembuatan proses.                             |
+| Updated By / Updated Date     | Informasi perubahan terakhir.                           |
+
+---
+
+# 9.5.3.13.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                     |
+| -------------- | ------------------ | ----------- | ---------------------------------- |
+| BR-201         | BO-011             | SH-003      | Currency Translation Execution     |
+| BR-202         | BO-011             | SH-003      | Translation Scope Selection        |
+| BR-203         | BO-010             | SH-003      | Translation Rate Resolution        |
+| BR-204         | BO-011             | SH-003      | Translation Adjustment Calculation |
+| BR-205         | BO-011             | SH-003      | Financial Statement Translation    |
+| BR-206         | BO-029             | SH-010      | Simulation                         |
+| BR-207         | BO-011             | SH-003      | Financial Consolidation            |
+| BR-208         | BO-029             | SH-003      | Approval Workflow                  |
+| BR-209         | BO-027             | SH-007      | Batch Processing                   |
+| BR-210         | BO-029             | SH-010      | Audit & Compliance                 |
+
+---
+
+# 9.5.3.13.7 Summary
+
+Currency Translation merupakan proses bisnis yang menerjemahkan laporan keuangan dari Functional Currency ke Reporting Currency atau Group Currency untuk mendukung konsolidasi keuangan perusahaan. Dengan dukungan pemilihan kurs berbasis aturan, translasi berdasarkan jenis akun, perhitungan CTA/FCTR, simulasi, integrasi dengan Financial Consolidation, pemrosesan massal, dan audit trail yang lengkap, ERP mampu menghasilkan laporan konsolidasi yang konsisten, dapat ditelusuri, dan memenuhi standar akuntansi internasional.
+
+Seluruh requirement pada bagian ini menjadi fondasi implementasi **Financial Consolidation**, **Group Financial Reporting**, **Multi-Currency Financial Statements**, **Management Reporting**, dan **Regulatory Reporting**.

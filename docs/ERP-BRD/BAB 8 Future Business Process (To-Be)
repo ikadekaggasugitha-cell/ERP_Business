@@ -1,0 +1,242 @@
+# BAB 8. Future Business Process (To-Be)
+
+## 8.1 Overview
+
+Bab ini mendefinisikan kondisi proses bisnis yang menjadi target (*To-Be Business Process*) setelah implementasi Enterprise Resource Planning (ERP). Proses bisnis masa depan dirancang untuk mendukung organisasi yang dinamis, terintegrasi, dan berorientasi pada efisiensi operasional.
+
+Seluruh proses bisnis akan distandarisasi dengan tetap memberikan fleksibilitas melalui mekanisme konfigurasi sehingga dapat diterapkan pada berbagai jenis organisasi, mulai dari perusahaan tunggal hingga grup perusahaan dengan struktur Holding, Sub Holding, Company, Business Unit, Branch, Department, Warehouse, Plant, maupun Project Site.
+
+---
+
+# 8.2 Future Business Principles
+
+Seluruh proses bisnis dalam ERP harus mengikuti prinsip-prinsip berikut:
+
+1. **Organization-Centric** – Seluruh proses mengikuti struktur organisasi.
+2. **Configuration over Customization** – Penyesuaian dilakukan melalui konfigurasi.
+3. **Workflow Driven** – Proses bisnis dijalankan melalui workflow yang terdokumentasi.
+4. **Data Integrity** – Data dikelola secara konsisten dan terpusat.
+5. **Single Source of Truth** – Satu sumber data utama untuk seluruh organisasi.
+6. **Role & Scope Based Access** – Hak akses ditentukan berdasarkan peran dan ruang lingkup organisasi.
+7. **Automation First** – Aktivitas manual diminimalkan melalui otomatisasi.
+8. **Auditability** – Seluruh aktivitas dapat ditelusuri melalui audit trail.
+
+---
+
+# 8.3 Target Operating Model
+
+ERP menjadi platform utama yang menghubungkan seluruh fungsi bisnis.
+
+Karakteristik target operating model:
+
+* Satu platform ERP untuk seluruh entitas organisasi.
+* Data utama dikelola secara terpusat.
+* Proses bisnis mengikuti standar perusahaan.
+* Workflow dapat dikonfigurasi sesuai kebijakan organisasi.
+* Pelaporan tersedia secara real-time.
+* Integrasi antar modul dilakukan secara otomatis.
+
+---
+
+# 8.4 Future Organization Model
+
+Struktur organisasi bersifat dinamis dan dapat dikonfigurasi.
+
+Contoh model organisasi:
+
+```text id="orgfuture01"
+Holding
+│
+├── Sub Holding
+│   ├── Company
+│   │   ├── Business Unit
+│   │   ├── Branch
+│   │   ├── Department
+│   │   ├── Warehouse
+│   │   └── Project Site
+│   └── Company
+│
+└── Company
+```
+
+Karakteristik:
+
+* Jumlah level organisasi tidak dibatasi.
+* Nama level organisasi dapat diubah melalui konfigurasi.
+* Setiap organisasi memiliki *Organization Scope*.
+* Hak akses dan workflow mengikuti struktur organisasi.
+* Penambahan entitas baru tidak memerlukan perubahan source code.
+
+---
+
+# 8.5 Future Business Capability
+
+ERP menyediakan kapabilitas bisnis berikut.
+
+| Capability               | Target State               |
+| ------------------------ | -------------------------- |
+| Organization Management  | Fully Configurable         |
+| User & Access Management | Scope-Based                |
+| Workflow Management      | Dynamic Workflow           |
+| Master Data Management   | Centralized                |
+| Procurement              | Digital                    |
+| Purchasing               | Integrated                 |
+| Inventory                | Real-Time                  |
+| Warehouse                | Multi-Warehouse            |
+| Sales                    | Integrated                 |
+| CRM                      | Unified Customer View      |
+| HRM                      | Enterprise HR              |
+| Payroll                  | Integrated Payroll         |
+| Finance                  | Consolidated               |
+| Accounting               | Real-Time Posting          |
+| Asset Management         | Lifecycle Management       |
+| Project Management       | Enterprise Project Control |
+| Reporting                | Real-Time Dashboard        |
+| Audit                    | Complete Audit Trail       |
+
+---
+
+# 8.6 Target Business Process Characteristics
+
+Seluruh proses bisnis harus memiliki karakteristik berikut.
+
+* Terstandarisasi di seluruh organisasi.
+* Dapat dikonfigurasi sesuai kebutuhan bisnis.
+* Memiliki workflow yang terdokumentasi.
+* Menghasilkan audit trail.
+* Mendukung persetujuan berjenjang.
+* Mendukung notifikasi otomatis.
+* Menggunakan master data terpusat.
+* Terintegrasi antar modul.
+
+---
+
+# 8.7 Future Workflow Model
+
+Setiap proses bisnis mengikuti alur umum berikut:
+
+1. Pembuatan transaksi oleh pengguna sesuai *Organization Scope*.
+2. Validasi data secara otomatis.
+3. Penentuan jalur persetujuan berdasarkan workflow yang dikonfigurasi.
+4. Proses persetujuan berjenjang sesuai struktur organisasi.
+5. Pencatatan seluruh aktivitas ke audit trail.
+6. Pembaruan status transaksi secara real-time.
+7. Notifikasi kepada pihak terkait.
+8. Integrasi otomatis dengan modul lain yang relevan.
+
+Workflow dapat disesuaikan melalui konfigurasi tanpa perubahan kode aplikasi.
+
+---
+
+# 8.8 Future Data Flow
+
+Target aliran data pada ERP adalah sebagai berikut:
+
+1. Data dibuat satu kali pada sumber yang berwenang.
+2. Data divalidasi secara otomatis.
+3. Data disimpan pada repositori terpusat.
+4. Modul lain menggunakan data yang sama melalui layanan internal.
+5. Perubahan data tercatat pada audit trail.
+6. Pelaporan menggunakan data real-time.
+
+Model ini menghilangkan kebutuhan rekonsiliasi manual antar aplikasi.
+
+---
+
+# 8.9 Target Reporting Model
+
+Pelaporan pada ERP memiliki karakteristik:
+
+* Real-time.
+* Konsolidasi lintas organisasi.
+* Berbasis Organization Scope.
+* Mendukung drill-down hingga tingkat transaksi.
+* Dapat dikonfigurasi sesuai kebutuhan pengguna.
+* Mendukung dashboard operasional dan eksekutif.
+
+---
+
+# 8.10 Target Governance Model
+
+ERP mendukung tata kelola perusahaan melalui:
+
+* Role-Based Access Control (RBAC).
+* Scope-Based Access Control.
+* Segregation of Duties (SoD).
+* Audit Trail.
+* Approval Matrix.
+* Workflow Governance.
+* Document Versioning.
+* Change History.
+
+---
+
+# 8.11 Target Integration Model
+
+Seluruh modul ERP saling terintegrasi melalui layanan yang terstandarisasi.
+
+Prinsip integrasi:
+
+* API First.
+* Event Driven Integration.
+* Loose Coupling.
+* Standard Data Exchange.
+* Asynchronous Processing untuk proses yang memerlukan skalabilitas.
+* Monitoring dan Logging terpusat.
+
+---
+
+# 8.12 Future Business Benefits
+
+Implementasi proses bisnis target diharapkan memberikan manfaat berikut:
+
+### Operational Benefits
+
+* Standardisasi proses bisnis.
+* Pengurangan aktivitas manual.
+* Peningkatan produktivitas.
+* Proses persetujuan lebih cepat.
+
+### Management Benefits
+
+* Visibilitas operasional secara real-time.
+* Dashboard manajemen.
+* Pengambilan keputusan berbasis data.
+* Konsolidasi lintas organisasi.
+
+### Financial Benefits
+
+* Efisiensi biaya operasional.
+* Pengurangan duplikasi sistem.
+* Peningkatan akurasi laporan keuangan.
+
+### Strategic Benefits
+
+* Mendukung pertumbuhan organisasi.
+* Mempermudah ekspansi bisnis.
+* Meningkatkan tata kelola perusahaan.
+* Menjadi fondasi transformasi digital.
+
+---
+
+# 8.13 To-Be Process Success Criteria
+
+Keberhasilan proses bisnis target diukur berdasarkan indikator berikut.
+
+| Area         | Success Criteria                                              |
+| ------------ | ------------------------------------------------------------- |
+| Organization | Struktur organisasi dapat dikonfigurasi tanpa perubahan kode. |
+| Workflow     | Seluruh proses utama menggunakan workflow digital.            |
+| Data         | Tidak terjadi duplikasi master data.                          |
+| Reporting    | Laporan tersedia secara real-time.                            |
+| Integration  | Seluruh modul utama saling terintegrasi.                      |
+| Security     | Hak akses mengikuti role dan organization scope.              |
+| Audit        | Seluruh transaksi memiliki audit trail lengkap.               |
+
+---
+
+# 8.14 To-Be Process Summary
+
+Proses bisnis target dirancang untuk menghasilkan organisasi yang lebih terintegrasi, efisien, dan mudah berkembang. Seluruh aktivitas bisnis akan berjalan di atas platform ERP yang berorientasi pada struktur organisasi, data terpusat, workflow yang dapat dikonfigurasi, serta tata kelola yang kuat.
+
+Bab ini menjadi acuan utama dalam penyusunan **BAB 9 – Business Requirements**, di mana setiap kebutuhan bisnis akan diturunkan secara sistematis dari proses bisnis target yang telah didefinisikan.

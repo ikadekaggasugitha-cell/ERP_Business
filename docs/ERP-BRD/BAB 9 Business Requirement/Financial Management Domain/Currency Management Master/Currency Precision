@@ -1,0 +1,205 @@
+# 9.5.3.10 Currency Precision Requirements
+
+---
+
+# 9.5.3.10.1 Overview
+
+Currency Precision merupakan konfigurasi yang mendefinisikan tingkat ketelitian numerik (decimal precision) yang digunakan dalam penyimpanan, perhitungan, pembulatan, penyajian, dan pelaporan nilai mata uang di seluruh Enterprise Resource Planning (ERP).
+
+Currency Precision tidak hanya mengatur jumlah digit di belakang koma untuk suatu mata uang, tetapi juga memungkinkan organisasi menetapkan tingkat presisi yang berbeda berdasarkan konteks bisnis seperti transaksi operasional, nilai tukar, perpajakan, treasury, costing, budgeting, maupun pelaporan keuangan.
+
+Dengan memisahkan Currency Precision dari Currency Master, organisasi memperoleh fleksibilitas untuk memenuhi standar akuntansi internasional, regulasi lokal, dan kebutuhan operasional tanpa mengubah definisi mata uang.
+
+---
+
+# 9.5.3.10.2 Business Capability
+
+Currency Precision menyediakan kapabilitas berikut:
+
+* Pengelolaan master Currency Precision.
+* Konfigurasi precision berdasarkan konteks bisnis.
+* Dukungan multi-precision untuk satu mata uang.
+* Assignment ke Financial Organization, Ledger, Financial Book, dan Business Process.
+* Effective dating.
+* Versioning.
+* Approval workflow.
+* Validasi precision pada transaksi.
+* Integrasi dengan Currency Conversion Policy dan Rounding Policy.
+* Audit trail.
+
+---
+
+# 9.5.3.10.3 Business Requirement Catalogue
+
+## BR-171 – Currency Precision Master
+
+| Attribute           | Description                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-171                                                                                                          |
+| Requirement Name    | Currency Precision Master                                                                                       |
+| Category            | Currency Precision                                                                                              |
+| Priority            | Critical                                                                                                        |
+| Business Objective  | BO-009                                                                                                          |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                |
+| Description         | Sistem harus menyediakan master Currency Precision yang dapat dikonfigurasi tanpa perubahan aplikasi.           |
+| Business Value      | Menjamin konsistensi perhitungan numerik pada seluruh modul ERP.                                                |
+| Acceptance Criteria | Administrator dapat membuat, mengubah, mengaktifkan, dan menonaktifkan konfigurasi precision sesuai kewenangan. |
+
+---
+
+## BR-172 – Multi Precision Context
+
+| Attribute        | Description                                                                                                                              |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-172                                                                                                                                   |
+| Requirement Name | Multi Precision Context                                                                                                                  |
+| Priority         | Critical                                                                                                                                 |
+| Description      | Sistem harus mendukung konfigurasi precision yang berbeda untuk Amount, Exchange Rate, Tax, Costing, Treasury, Budgeting, dan Reporting. |
+
+---
+
+## BR-173 – Organization Scope
+
+| Attribute        | Description                                                                                                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-173                                                                                                                                                                |
+| Requirement Name | Organization Scope                                                                                                                                                    |
+| Priority         | High                                                                                                                                                                  |
+| Description      | Currency Precision harus dapat diterapkan secara global maupun dibatasi berdasarkan Financial Organization, Legal Entity, Ledger, Financial Book, atau Business Unit. |
+
+---
+
+## BR-174 – Transaction Validation
+
+| Attribute        | Description                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-174                                                                                                                                |
+| Requirement Name | Transaction Precision Validation                                                                                                      |
+| Priority         | Critical                                                                                                                              |
+| Description      | Sistem harus memvalidasi bahwa seluruh transaksi menggunakan precision sesuai kebijakan yang berlaku sebelum diproses atau diposting. |
+
+---
+
+## BR-175 – Storage & Display Precision
+
+| Attribute        | Description                                                                                                                            |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-175                                                                                                                                 |
+| Requirement Name | Storage & Display Precision                                                                                                            |
+| Priority         | High                                                                                                                                   |
+| Description      | Sistem harus mendukung pemisahan antara precision penyimpanan data (*storage precision*) dan precision tampilan (*display precision*). |
+
+---
+
+## BR-176 – Effective Dating
+
+| Attribute        | Description                                                                                                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-176                                                                                                                        |
+| Requirement Name | Effective Dating                                                                                                              |
+| Priority         | High                                                                                                                          |
+| Description      | Setiap konfigurasi Currency Precision harus memiliki periode efektif sehingga perubahan tidak memengaruhi transaksi historis. |
+
+---
+
+## BR-177 – Versioning
+
+| Attribute        | Description                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-177                                                                                                               |
+| Requirement Name | Currency Precision Versioning                                                                                        |
+| Priority         | High                                                                                                                 |
+| Description      | Sistem harus mendukung versioning terhadap konfigurasi Currency Precision untuk menjaga histori perubahan kebijakan. |
+
+---
+
+## BR-178 – Approval Workflow
+
+| Attribute        | Description                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-178                                                                                                               |
+| Requirement Name | Precision Approval Workflow                                                                                          |
+| Priority         | Critical                                                                                                             |
+| Description      | Perubahan Currency Precision harus melalui proses persetujuan sesuai matriks otorisasi organisasi sebelum digunakan. |
+
+---
+
+## BR-179 – Dependency Validation
+
+| Attribute        | Description                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-179                                                                                                                                |
+| Requirement Name | Dependency Validation                                                                                                                 |
+| Priority         | Critical                                                                                                                              |
+| Description      | Sistem harus mencegah penghapusan konfigurasi Currency Precision yang telah digunakan oleh transaksi, laporan, atau konfigurasi lain. |
+
+---
+
+## BR-180 – Currency Precision Auditability
+
+| Attribute        | Description                                                                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-180                                                                                                                                                   |
+| Requirement Name | Currency Precision Auditability                                                                                                                          |
+| Priority         | Critical                                                                                                                                                 |
+| Description      | Seluruh perubahan konfigurasi Currency Precision harus dicatat dalam Audit Trail lengkap beserta identitas pengguna, waktu perubahan, dan alasan bisnis. |
+
+---
+
+# 9.5.3.10.4 Business Rules
+
+| Business Rule ID | Description                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------- |
+| BRule-CP-001     | Setiap Currency Precision harus dikaitkan dengan satu Currency dan satu Precision Context.                           |
+| BRule-CP-002     | Satu mata uang dapat memiliki lebih dari satu konfigurasi precision berdasarkan konteks bisnis.                      |
+| BRule-CP-003     | Precision penyimpanan tidak boleh lebih kecil daripada precision tampilan.                                           |
+| BRule-CP-004     | Transaksi yang melebihi precision yang diizinkan harus ditolak atau disesuaikan sesuai Rounding Policy yang berlaku. |
+| BRule-CP-005     | Perubahan Currency Precision tidak boleh mengubah nilai transaksi yang telah diposting.                              |
+| BRule-CP-006     | Konfigurasi yang telah digunakan tidak boleh dihapus secara permanen.                                                |
+| BRule-CP-007     | Seluruh perubahan konfigurasi wajib tercatat pada Audit Trail.                                                       |
+
+---
+
+# 9.5.3.10.5 Data Attributes
+
+| Attribute                 | Description                                                                  |
+| ------------------------- | ---------------------------------------------------------------------------- |
+| Currency Precision ID     | Identitas unik sistem.                                                       |
+| Currency ID               | Referensi ke Currency Master.                                                |
+| Precision Context         | Amount, Exchange Rate, Tax, Reporting, Costing, Treasury, Budgeting, Custom. |
+| Storage Precision         | Jumlah digit yang disimpan dalam basis data.                                 |
+| Display Precision         | Jumlah digit yang ditampilkan pada antarmuka dan laporan.                    |
+| Maximum Precision         | Batas maksimum digit yang diperbolehkan untuk perhitungan internal.          |
+| Effective From            | Tanggal mulai berlaku.                                                       |
+| Effective To              | Tanggal akhir berlaku.                                                       |
+| Approval Status           | Draft, Pending Approval, Approved, Published, Archived.                      |
+| Version                   | Nomor versi konfigurasi.                                                     |
+| Status                    | Active, Suspended, Inactive, Archived.                                       |
+| Remarks                   | Catatan bisnis.                                                              |
+| Created By / Created Date | Informasi pembuatan data.                                                    |
+| Updated By / Updated Date | Informasi perubahan terakhir.                                                |
+
+---
+
+# 9.5.3.10.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process              |
+| -------------- | ------------------ | ----------- | --------------------------- |
+| BR-171         | BO-009             | SH-003      | Precision Administration    |
+| BR-172         | BO-010             | SH-003      | Precision Configuration     |
+| BR-173         | BO-009             | SH-003      | Organization Assignment     |
+| BR-174         | BO-010             | SH-003      | Transaction Validation      |
+| BR-175         | BO-011             | SH-003      | Data Storage & Presentation |
+| BR-176         | BO-029             | SH-010      | Effective Date Governance   |
+| BR-177         | BO-029             | SH-010      | Version Management          |
+| BR-178         | BO-029             | SH-003      | Approval Workflow           |
+| BR-179         | BO-029             | SH-010      | Dependency Validation       |
+| BR-180         | BO-029             | SH-010      | Audit & Compliance          |
+
+---
+
+# 9.5.3.10.7 Summary
+
+Currency Precision merupakan komponen tata kelola numerik yang memastikan seluruh nilai mata uang diproses dengan tingkat ketelitian yang sesuai dengan kebutuhan bisnis dan regulasi. Dengan mendukung berbagai konteks precision, pemisahan antara penyimpanan dan penyajian data, serta mekanisme versioning dan audit, ERP mampu menjaga konsistensi perhitungan di seluruh modul tanpa mengorbankan fleksibilitas organisasi.
+
+Currency Precision menjadi fondasi bagi implementasi **Currency Rounding Policy**, **Financial Calculation Engine**, **Tax Calculation**, **Inventory Costing**, **Treasury Management**, **Financial Consolidation**, dan seluruh proses perhitungan yang melibatkan nilai mata uang.

@@ -1,0 +1,26 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc", "s4"],
+  description: "SAP Material Documents staging view with CDC deduplication"
+}
+
+SELECT
+  MANDT AS mandt,
+  MBLNR AS material_doc_number,
+  MJAHR AS doc_year,
+  ZEILE AS doc_item,
+  BUDAT AS posting_date,
+  MATNR AS material_number,
+  WERKS AS plant,
+  LGORT AS storage_location,
+  BWART AS movement_type,
+  MENGE AS quantity,
+  MEINS AS unit_of_measure,
+  DMBTR AS amount_loc_curr,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "matdoc")}
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY MANDT, MBLNR, MJAHR, ZEILE
+  ORDER BY recordstamp DESC
+) = 1

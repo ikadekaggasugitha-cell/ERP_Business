@@ -1,0 +1,37 @@
+config {
+  type: "assertion",
+  tags: ["assert", "organization", "cortex_v7"],
+  description: "Asserts foreign key referential integrity between fact tables and dim_organization"
+}
+
+WITH valid_orgs AS (
+  SELECT org_id FROM ${ref("dim_organization")}
+)
+
+SELECT
+  'fact_gl_transaction' AS fact_table,
+  gl_journal_id AS entity_id,
+  org_id
+FROM ${ref("fact_gl_transaction")}
+WHERE org_id IS NOT NULL 
+  AND org_id NOT IN (SELECT org_id FROM valid_orgs)
+
+UNION ALL
+
+SELECT
+  'fact_sales_order' AS fact_table,
+  order_id AS entity_id,
+  org_id
+FROM ${ref("fact_sales_order")}
+WHERE org_id IS NOT NULL 
+  AND org_id NOT IN (SELECT org_id FROM valid_orgs)
+
+UNION ALL
+
+SELECT
+  'fact_inventory_snapshot' AS fact_table,
+  CONCAT(material_id, '|', warehouse_id) AS entity_id,
+  org_id
+FROM ${ref("fact_inventory_snapshot")}
+WHERE org_id IS NOT NULL 
+  AND org_id NOT IN (SELECT org_id FROM valid_orgs)

@@ -1,0 +1,57 @@
+name: treasury-cashbank-service
+
+on:
+  push:
+    paths: ["services/treasury-cashbank-service/**", "services/shared/**", "db/migrations/treasury_db/**", ".github/workflows/treasury-cashbank-service.yml"]
+  pull_request:
+    paths: ["services/treasury-cashbank-service/**", "services/shared/**", "db/migrations/treasury_db/**"]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/treasury-cashbank-service
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/treasury_db?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.23", cache-dependency-path: services/treasury-cashbank-service/go.sum }
+
+      - name: Install tools
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+          curl -fsSL https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz
+          sudo mv migrate /usr/local/bin/
+
+      - name: Create database
+        run: psql "postgres://postgres:postgres@localhost:5432/postgres" -c "CREATE DATABASE treasury_db"
+        env: { PGPASSWORD: postgres }
+
+      - name: Migrate up (golang-migrate)
+        run: migrate -path ../../db/migrations/treasury_db -database "$DATABASE_URL" up
+
+      - name: Verify sqlc generated code is current
+        run: sqlc diff
+
+      - name: Build & test
+        run: |
+          go mod tidy
+          go build ./...
+          go vet ./...
+          go test -race ./...
+
+      - name: Migrate down (rollback smoke)
+        run: migrate -path ../../db/migrations/treasury_db -database "$DATABASE_URL" down -all

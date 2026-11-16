@@ -1,0 +1,128 @@
+# BAB 5. Domain and Repository Layer
+
+## 5.1 Overview
+
+Layer domain/repository adalah tempat **aturan bisnis dan integritas transaksional** ditegakkan di aplikasi. Ia berada di antara handler (BAB 4) dan query `sqlc` (BAB 2.3), dan **selalu** melewati batas RLS `WithOrgScope` untuk operasi ber-scope. Pola diambil langsung dari `internal/repository/journal_repository.go` pada `gl-service`.
+
+> **SDD-020 — Satu aggregate = satu transaksi.** Operasi yang mengubah beberapa tabel yang harus konsisten (mis. `journal_entry` + banyak `journal_line`, atau perubahan data + baris `outbox`) dieksekusi dalam **satu** `WithOrgScope` sehingga *commit* atomik (all-or-nothing).
+
+## 5.2 The Repository Pattern with sqlc
+
+Setiap repository memegang pool (`*platform.DB`) dan handel query `sqlc` (`*<db>.Queries`). Metode ber-scope membuka transaksi via `WithOrgScope`, lalu mengikat query ke transaksi dengan `q.WithTx(tx)`:
+
+```go
+type JournalRepository struct {
+    db *platform.DB
+    q  *gldb.Queries
+}
+func NewJournalRepository(db *platform.DB) *JournalRepository {
+    return &JournalRepository{db: db, q: gldb.New(db.Pool)}
+}
+
+func (r *JournalRepository) ListByPeriod(ctx context.Context, scope []uuid.UUID,
+    arg gldb.ListJournalEntriesByPeriodParams) ([]gldb.ListJournalEntriesByPeriodRow, error) {
+    var out []gldb.ListJournalEntriesByPeriodRow
+    err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+        var e error
+        out, e = r.q.WithTx(tx).ListJournalEntriesByPeriod(ctx, arg)
+        return e
+    })
+    return out, err
+}
+```
+
+Query ditulis di `db/queries/*.sql` dengan anotasi `-- name: <Nama> :one|:many|:exec|:execrows`, lalu `sqlc generate` menghasilkan fungsi type-safe. **Tidak ada string SQL** di kode Go.
+
+> **SDD-021 — Katalog `sqlc` polos, penegakan di DB.** `db/schema/schema.sql` (input `sqlc`) sengaja tanpa RLS/partisi/trigger — hanya untuk inferensi tipe. Penegakan sebenarnya (RLS, trigger nomor dokumen, partisi) ada di migrasi (DBDD). Karena itu perilaku runtime bisa "lebih ketat" dari yang terlihat di katalog `sqlc`; ini disengaja.
+
+## 5.3 Transactions and Atomic Aggregates
+
+Contoh kanonik penulisan aggregate multi-tabel — jurnal + baris-barisnya — dalam satu transaksi ber-scope (dari `gl-service`):
+
+```go
+func (r *JournalRepository) CreateEntryWithLines(
+    ctx context.Context, scope []uuid.UUID,
+    entry gldb.CreateJournalEntryParams, lines []gldb.CreateJournalLineParams,
+) (gldb.CreateJournalEntryRow, error) {
+    var created gldb.CreateJournalEntryRow
+    err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+        q := r.q.WithTx(tx)
+        var e error
+        if created, e = q.CreateJournalEntry(ctx, entry); e != nil { return e }
+        for i := range lines {
+            lines[i].JournalEntryID = created.ID
+            lines[i].PostingDate = created.PostingDate // composite FK butuh tanggal cocok (partisi)
+            if e = q.CreateJournalLine(ctx, lines[i]); e != nil { return e }
+        }
+        return nil // COMMIT; error apa pun => ROLLBACK
+    })
+    return created, err
+}
+```
+
+Perhatikan `PostingDate` disalin ke tiap baris: tabel di-partisi RANGE per `posting_date`, dan FK komposit `(journal_entry_id, posting_date)` mensyaratkan tanggal cocok (DBDD). Ini contoh bagaimana **kesadaran partisi** merembes ke kode repository.
+
+> **SDD-022 — Emit outbox dalam transaksi domain.** Untuk operasi yang menghasilkan event (mis. `gl.journal.posted`), penyisipan baris `outbox` dilakukan **di transaksi yang sama** dengan perubahan domain (ADR-008). Ini menghilangkan *dual-write*: bila commit gagal, event tidak pernah ada; bila sukses, event pasti terekam untuk relay (BAB 6.2).
+
+## 5.4 Optimistic Locking and Soft Delete
+
+* **Optimistic locking (DBS-010):** transisi status memakai `UPDATE ... WHERE id=$1 AND row_version=$n AND status='Draft'` dan mengembalikan **jumlah baris** (`:execrows`). Nol baris = basi atau bukan Draft → handler mengubahnya jadi **409** (BAB 4.6):
+
+```sql
+-- name: PostJournalEntry :execrows
+UPDATE gl.journal_entry
+SET status = 'Posted', posted_at = now(), updated_by = $4
+WHERE id = $1 AND posting_date = $2 AND status = 'Draft' AND row_version = $3;
+```
+
+```go
+func (r *JournalRepository) Post(ctx context.Context, scope []uuid.UUID,
+    arg gldb.PostJournalEntryParams) (int64, error) {
+    var n int64
+    err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+        var e error; n, e = r.q.WithTx(tx).PostJournalEntry(ctx, arg); return e
+    })
+    return n, err // n==0 => 409 STALE_ROW_VERSION di handler
+}
+```
+
+* **Soft delete (DBS-010):** `DELETE /{resource}/{id}` **tidak** menghapus fisik; ia menandai kolom soft-delete (mis. `deleted_at`/`is_deleted`) via `UPDATE`, mengembalikan **204**. Query baca standar menyaring baris terhapus. `row_version` dinaikkan oleh trigger `public.tg_touch_row()` (DBDD) pada setiap update.
+
+## 5.5 Business Rules Placement (BR-xxx)
+
+Aturan bisnis ditegakkan pada **lapisan paling ketat yang memungkinkan**, dengan urutan preferensi:
+
+1. **Constraint DB** (paling kuat) — keunikan, FK, `CHECK`, nomor dokumen via trigger registry (5.6). Contoh: keunikan `journal_no` ditegakkan trigger `document_number_registry`, bukan kode.
+2. **RLS** — isolasi baris per organisasi (BAB 7.4), tak bisa dilewati aplikasi.
+3. **Repository (Go)** — aturan yang butuh komputasi/agregasi lintas baris sebelum menulis. Contoh **BR-556** (jurnal harus seimbang) memakai query `JournalEntryTotals` sebelum mengizinkan `Post`:
+
+```sql
+-- name: JournalEntryTotals :one
+-- Application posting check (BR-556): totals must balance before status=Posted.
+SELECT COALESCE(SUM(debit_amount),0)::numeric(20,4)  AS total_debit,
+       COALESCE(SUM(credit_amount),0)::numeric(20,4) AS total_credit
+FROM gl.journal_line WHERE journal_entry_id = $1 AND posting_date = $2;
+```
+
+Handler/repository membandingkan `total_debit == total_credit`; bila tidak → **422** `GL_JOURNAL_UNBALANCED` (BAB 4.6). Aturan konfigurasi per-organisasi (posting rule, approval matrix) dibaca sebagai **data** dari DB (SAD 11.2), bukan hard-code.
+
+> **SDD-023 — Jangan duplikasi aturan yang sudah di DB.** Jika sebuah invarian sudah dijamin constraint/RLS/trigger, kode **tidak** mengulang validasinya (hindari *double-guard* yang bisa menyimpang). Kode hanya menegakkan aturan yang tidak bisa diekspresikan deklaratif di DB.
+
+## 5.6 Document Number Registration and Uniqueness
+
+Keunikan nomor dokumen bisnis (mis. `journal_no`, `invoice_no`, `payment_no`, `efaktur_no`) **dijamin di level DB, bukan oleh aplikasi**. Aplikasi **menyuplai** nilai nomor (dari seri/periode kontekstual), lalu trigger **BEFORE INSERT** mendaftarkannya ke `document_number_registry`; sebuah `UNIQUE` constraint pada registry **menolak duplikat** (menutup REVIEW M2). Jadi peran DB adalah *mendaftarkan + menegakkan keunikan* nomor yang disuplai — bukan membangkitkannya:
+
+```sql
+-- name: CreateJournalEntry :one
+-- Trigger BEFORE INSERT menegakkan keunikan journal_no via registry.
+INSERT INTO gl.journal_entry ( ... ) VALUES ( ... )
+RETURNING id, posting_date, status, row_version;
+```
+
+> **SDD-024 — Keunikan nomor dokumen ditegakkan DB (registry).** Aplikasi menyuplai nomor; trigger registry + `UNIQUE` constraint menolak duplikat, sehingga keunikan terjamin pada beban konkuren dan lintas partisi (registry non-partisi) tanpa bergantung pada cek sisi-aplikasi. Bila skema butuh *auto-generate*, itu diimplementasikan di dalam trigger/fungsi DB (mis. sekuens per seri), tetap bukan di kode layanan. Verified pada `ap-service`: `INSERT` `invoice_no` duplikat ditolak `uq_document_number_registry`.
+
+## 5.7 Summary
+
+Repository adalah penjaga transaksi dan aturan bisnis: satu aggregate = satu `WithOrgScope`, outbox ditulis dalam transaksi domain, optimistic locking via `:execrows`→409, soft delete via update, dan aturan ditegakkan pada lapisan terketat (DB > RLS > Go). Keunikan nomor dokumen ditegakkan trigger registry DB. BAB 6 melanjutkan ke jalur event.
+
+---

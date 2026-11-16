@@ -1,0 +1,178 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["dimension", "cortex_v7", "tri_currency"],
+  partitionBy: "DATE_TRUNC(rate_date, MONTH)",
+  clusterBy: ["from_currency", "to_currency"],
+  description: "Conformed currency exchange rate dimension with indirect quotes and USD triangulation"
+}
+
+WITH sap_rates AS (
+  SELECT
+    'SAP_TCURR' AS source_system,
+    TRIM(rate_type) AS rate_type,
+    TRIM(from_currency) AS from_currency,
+    TRIM(to_currency) AS to_currency,
+    CASE
+      -- SAP stores inverted date in GDATU: 99999999 - GDATU = YYYYMMDD
+      WHEN SAFE_CAST(effective_date_raw AS INT64) > 70000000 THEN
+        SAFE.PARSE_DATE('%Y%m%d', CAST(99999999 - CAST(effective_date_raw AS INT64) AS STRING))
+      ELSE
+        ${sap_helpers.safeSapDate("effective_date_raw")}
+    END AS rate_date,
+    -- PSAK 10 / IAS 21 Indirect Quotation Calculation
+    CASE
+      WHEN CAST(exchange_rate AS NUMERIC) < 0 THEN
+        SAFE_DIVIDE(
+          CAST(to_ratio AS NUMERIC),
+          ABS(CAST(exchange_rate AS NUMERIC)) * CAST(from_ratio AS NUMERIC)
+        )
+      WHEN CAST(exchange_rate AS NUMERIC) > 0 THEN
+        SAFE_DIVIDE(
+          CAST(exchange_rate AS NUMERIC) * CAST(to_ratio AS NUMERIC),
+          CAST(from_ratio AS NUMERIC)
+        )
+      ELSE NULL
+    END AS mid_rate,
+    1 AS priority,
+    CAST(recordstamp AS TIMESTAMP) AS recordstamp
+  FROM ${ref("stg_tcurr")}
+  WHERE effective_date_raw IS NOT NULL
+),
+
+new_erp_rates AS (
+  SELECT
+    'NEW_ERP' AS source_system,
+    TRIM(CAST(rate_type AS STRING)) AS rate_type,
+    TRIM(CAST(from_currency AS STRING)) AS from_currency,
+    TRIM(CAST(to_currency AS STRING)) AS to_currency,
+    DATE(rate_date) AS rate_date,
+    CASE
+      WHEN CAST(rate AS NUMERIC) > 0 THEN CAST(rate AS NUMERIC)
+      ELSE NULL
+    END AS mid_rate,
+    2 AS priority,
+    CAST(updated_at AS TIMESTAMP) AS recordstamp
+  FROM ${ref("erp_staging", "stg_exchange_rates_cdc")}
+),
+
+direct_rates AS (
+  SELECT * FROM sap_rates WHERE rate_date IS NOT NULL AND mid_rate IS NOT NULL AND mid_rate > 0
+  UNION ALL
+  SELECT * FROM new_erp_rates WHERE rate_date IS NOT NULL AND mid_rate IS NOT NULL AND mid_rate > 0
+),
+
+-- USD anchor triangulation for missing cross-currency pairs
+usd_anchors_raw AS (
+  -- Currency to USD (e.g. EUR -> USD, rate = 1.10 USD per EUR)
+  SELECT
+    rate_date,
+    rate_type,
+    from_currency,
+    mid_rate AS rate_to_usd,
+    priority,
+    recordstamp
+  FROM direct_rates
+  WHERE to_currency = 'USD'
+    AND mid_rate > 0
+
+  UNION ALL
+
+  -- USD to Currency inverted (e.g. USD -> IDR with mid_rate = 16000, so 1 IDR = 1/16000 USD)
+  SELECT
+    rate_date,
+    rate_type,
+    to_currency AS from_currency,
+    SAFE_DIVIDE(NUMERIC '1', mid_rate) AS rate_to_usd,
+    priority,
+    recordstamp
+  FROM direct_rates
+  WHERE from_currency = 'USD'
+    AND mid_rate > 0
+
+  UNION ALL
+
+  -- USD anchor identity (1 USD = 1 USD)
+  SELECT DISTINCT
+    rate_date,
+    rate_type,
+    'USD' AS from_currency,
+    NUMERIC '1' AS rate_to_usd,
+    0 AS priority,
+    recordstamp
+  FROM direct_rates
+  WHERE from_currency = 'USD' OR to_currency = 'USD'
+),
+
+usd_anchors AS (
+  SELECT
+    rate_date,
+    rate_type,
+    from_currency,
+    rate_to_usd
+  FROM usd_anchors_raw
+  WHERE rate_to_usd IS NOT NULL AND rate_to_usd > 0
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY rate_date, rate_type, from_currency
+    ORDER BY priority ASC, recordstamp DESC
+  ) = 1
+),
+
+triangulated_rates AS (
+  SELECT
+    'USD_TRIANGULATION' AS source_system,
+    r1.rate_type,
+    r1.from_currency,
+    r2.from_currency AS to_currency,
+    r1.rate_date,
+    SAFE_DIVIDE(r1.rate_to_usd, r2.rate_to_usd) AS mid_rate,
+    3 AS priority,
+    TIMESTAMP('2026-01-01 00:00:00+00') AS recordstamp
+  FROM usd_anchors r1
+  INNER JOIN usd_anchors r2
+    ON r1.rate_date = r2.rate_date
+    AND r1.rate_type = r2.rate_type
+    AND r1.from_currency != r2.from_currency
+  WHERE SAFE_DIVIDE(r1.rate_to_usd, r2.rate_to_usd) > 0
+),
+
+-- Same currency identity: 1.0
+identity_rates AS (
+  SELECT DISTINCT
+    'IDENTITY' AS source_system,
+    rate_type,
+    from_currency,
+    from_currency AS to_currency,
+    rate_date,
+    NUMERIC '1' AS mid_rate,
+    0 AS priority,
+    TIMESTAMP('2026-01-01 00:00:00+00') AS recordstamp
+  FROM direct_rates
+),
+
+all_rates AS (
+  SELECT * FROM identity_rates
+  UNION ALL
+  SELECT * FROM direct_rates
+  UNION ALL
+  SELECT * FROM triangulated_rates
+)
+
+SELECT
+  TO_HEX(MD5(CONCAT(rate_type, '|', from_currency, '|', to_currency, '|', CAST(rate_date AS STRING)))) AS currency_rate_id,
+  rate_date,
+  rate_type,
+  from_currency,
+  to_currency,
+  mid_rate,
+  source_system
+FROM all_rates
+WHERE rate_date IS NOT NULL
+  AND from_currency IS NOT NULL
+  AND to_currency IS NOT NULL
+  AND mid_rate IS NOT NULL
+  AND mid_rate > 0
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY rate_date, rate_type, from_currency, to_currency
+  ORDER BY priority ASC, recordstamp DESC
+) = 1

@@ -1,0 +1,123 @@
+package httpapi
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/sinergiinvestasiproperti/erp/services/audit-service/internal/auditdb"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
+)
+
+type stubStore struct {
+	rows   []auditdb.ListAuditLogsFilteredRow
+	total  int64
+	detail auditdb.AuditAuditLog
+	err    error
+	entity string
+	action string
+}
+
+func (s *stubStore) ListFiltered(_ context.Context, _ []uuid.UUID, entityType, action string, _, _ int32) ([]auditdb.ListAuditLogsFilteredRow, int64, error) {
+	s.entity = entityType
+	s.action = action
+	return s.rows, s.total, s.err
+}
+
+func (s *stubStore) GetByID(_ context.Context, _ []uuid.UUID, _ uuid.UUID) (auditdb.AuditAuditLog, error) {
+	if s.err != nil {
+		return auditdb.AuditAuditLog{}, s.err
+	}
+	return s.detail, nil
+}
+
+func TestAuditEndpointsPaginationRBACAndGetByID(t *testing.T) {
+	orgID := uuid.New()
+	id := uuid.New()
+	corrID := uuid.New()
+	now := time.Now().UTC()
+
+	store := &stubStore{
+		rows: []auditdb.ListAuditLogsFilteredRow{{
+			ID:             id,
+			OccurredAt:     pgtype.Timestamptz{Time: now, Valid: true},
+			OrganizationID: orgID,
+			Action:         "gl.journal.posted",
+			EntityType:     "JournalEntry",
+			CorrelationID:  corrID,
+		}},
+		total: 42,
+		detail: auditdb.AuditAuditLog{
+			ID:             id,
+			OccurredAt:     pgtype.Timestamptz{Time: now, Valid: true},
+			OrganizationID: orgID,
+			Action:         "gl.journal.posted",
+			EntityType:     "JournalEntry",
+			AfterValue:     []byte(`{"journalNumber":"JV-01"}`),
+			CorrelationID:  corrID,
+		},
+	}
+
+	mux := http.NewServeMux()
+	NewServer(store).Register(mux)
+	h := httpx.Middleware(mux)
+
+	// 1. RBAC denies caller missing audit:read when gateway headers are present.
+	req := httptest.NewRequest(http.MethodGet, "/audit-events", nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-Roles", "VIEWER")
+	req.Header.Set("X-Permissions", "gl:read")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for missing audit:read, got %d", rec.Code)
+	}
+
+	// 2. Authorized list passes filters and returns full pagination metadata.
+	req = httptest.NewRequest(http.MethodGet, "/audit-events?page=2&size=10&entityType=JournalEntry&action=gl.journal.posted", nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-Permissions", "audit:read")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if store.entity != "JournalEntry" || store.action != "gl.journal.posted" {
+		t.Fatalf("filters not forwarded: entity=%q action=%q", store.entity, store.action)
+	}
+	var resp struct {
+		Data []auditEventDTO `json:"data"`
+		Page httpx.PageMeta  `json:"page"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Page.TotalElements != 42 || resp.Page.TotalPages != 5 || len(resp.Data) != 1 {
+		t.Fatalf("unexpected page/data: %+v", resp)
+	}
+
+	// 3. Get by ID returns detail; ErrNoRows maps to 404.
+	req = httptest.NewRequest(http.MethodGet, "/audit-events/"+id.String(), nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-Permissions", "audit:read")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 detail, got %d", rec.Code)
+	}
+
+	store.err = pgx.ErrNoRows
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 on ErrNoRows, got %d", rec.Code)
+	}
+}
+

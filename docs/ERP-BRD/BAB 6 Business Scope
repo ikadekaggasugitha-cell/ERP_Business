@@ -1,0 +1,328 @@
+# BAB 6. Business Scope
+
+## 6.1 Overview
+
+Business Scope mendefinisikan batasan ruang lingkup (*scope boundary*) dari pengembangan **Enterprise Resource Planning (ERP)**. Bab ini menjelaskan proses bisnis, organisasi, modul, pengguna, data, dan integrasi yang termasuk maupun tidak termasuk dalam cakupan implementasi.
+
+Tujuan utama Business Scope adalah:
+
+* Menetapkan batas proyek secara jelas.
+* Menyelaraskan ekspektasi seluruh stakeholder.
+* Menghindari *scope creep* selama pelaksanaan proyek.
+* Menjadi dasar penyusunan Business Requirements, Software Requirement Specification (SRS), serta perencanaan implementasi.
+
+Seluruh kebutuhan yang berada di luar ruang lingkup dokumen ini hanya dapat dimasukkan melalui proses **Change Request (CR)** sesuai kebijakan *Change Management* proyek.
+
+---
+
+# 6.2 Scope Principles
+
+Penentuan ruang lingkup ERP didasarkan pada prinsip-prinsip berikut:
+
+1. **Business Driven** – Seluruh ruang lingkup harus memberikan nilai bisnis yang terukur.
+2. **Configuration over Customization** – Perubahan organisasi dan proses bisnis diakomodasi melalui konfigurasi.
+3. **Organization Tree First** – Seluruh proses mengikuti hierarki organisasi.
+4. **Modular Architecture** – Modul dapat diimplementasikan secara bertahap tanpa mengganggu modul lain.
+5. **Scalability** – Ruang lingkup mendukung pertumbuhan organisasi di masa depan.
+6. **Single Source of Truth** – Seluruh data utama dikelola secara terpusat.
+7. **Security by Design** – Setiap ruang lingkup mempertimbangkan aspek keamanan dan tata kelola.
+
+---
+
+# 6.3 Organization Scope
+
+ERP dirancang untuk mendukung struktur organisasi bertingkat tanpa batas jumlah level.
+
+Contoh implementasi organisasi:
+
+```text
+Holding Company
+│
+├── Sub Holding
+│   ├── Company
+│   │   ├── Business Unit
+│   │   ├── Branch
+│   │   ├── Department
+│   │   ├── Warehouse
+│   │   └── Project Site
+│   └── Company
+│
+└── Company
+```
+
+Karakteristik utama:
+
+* Jumlah level organisasi tidak dibatasi.
+* Nama level organisasi dapat dikonfigurasi.
+* Hubungan antar organisasi bersifat hierarkis (*parent-child*).
+* Penambahan atau perubahan struktur organisasi tidak memerlukan perubahan source code.
+
+---
+
+# 6.4 Functional Scope
+
+ERP mencakup fungsi bisnis berikut.
+
+| Functional Area                        | Scope    |
+| -------------------------------------- | -------- |
+| Organization Management                | In Scope |
+| User & Access Management               | In Scope |
+| Role & Permission Management           | In Scope |
+| Workflow Management                    | In Scope |
+| Master Data Management                 | In Scope |
+| Procurement                            | In Scope |
+| Purchasing                             | In Scope |
+| Inventory Management                   | In Scope |
+| Warehouse Management                   | In Scope |
+| Sales Management                       | In Scope |
+| Customer Relationship Management (CRM) | In Scope |
+| Human Resource Management (HRM)        | In Scope |
+| Payroll                                | In Scope |
+| Finance                                | In Scope |
+| Accounting                             | In Scope |
+| Budget Management                      | In Scope |
+| Tax Management                         | In Scope |
+| Asset Management                       | In Scope |
+| Project Management                     | In Scope |
+| Manufacturing                          | In Scope |
+| Document Management                    | In Scope |
+| Reporting                              | In Scope |
+| Dashboard                              | In Scope |
+| Audit Trail                            | In Scope |
+| Notification                           | In Scope |
+| Integration                            | In Scope |
+
+---
+
+# 6.5 Business Capability Scope
+
+ERP akan menyediakan kapabilitas bisnis sebagai berikut.
+
+### Core Platform
+
+* Organization Management
+* Multi Organization
+* Multi Company
+* Multi Currency
+* Multi Language
+* Multi Time Zone (Future Ready)
+* Master Data Management
+* Workflow Engine
+* Notification Engine
+* RBAC (Role-Based Access Control)
+* Scope-Based Access Control
+* Audit Trail
+* Document Management
+
+### Enterprise Operations
+
+* Procurement
+* Purchasing
+* Inventory
+* Warehouse
+* Sales
+* CRM
+* Manufacturing
+* Asset Management
+* Project Management
+* Human Resource
+* Payroll
+* Finance & Accounting
+
+### Executive Services
+
+* Business Intelligence
+* Executive Dashboard
+* Consolidated Reporting
+* KPI Monitoring
+
+---
+
+# 6.6 Data Scope
+
+ERP mengelola data berikut.
+
+## Master Data
+
+* Organization
+* Company
+* Branch
+* Department
+* Business Unit
+* Employee
+* Customer
+* Vendor
+* Product
+* Service
+* Warehouse
+* Asset
+* Currency
+* Tax
+* Chart of Account
+* Cost Center
+* Project
+
+## Transaction Data
+
+* Purchase Request
+* Purchase Order
+* Goods Receipt
+* Goods Issue
+* Sales Order
+* Invoice
+* Journal
+* Payment
+* Payroll
+* Attendance
+* Inventory Movement
+* Asset Transaction
+* Project Progress
+
+## Reference Data
+
+* Country
+* Province
+* City
+* Unit of Measure
+* Fiscal Period
+* Exchange Rate
+* Payment Terms
+* Approval Status
+* Workflow Status
+
+---
+
+# 6.7 User Scope
+
+ERP mendukung berbagai kategori pengguna.
+
+| User Category          | Scope       |
+| ---------------------- | ----------- |
+| Executive Management   | Enterprise  |
+| Holding Management     | Holding     |
+| Sub Holding Management | Sub Holding |
+| Company Management     | Company     |
+| Branch Management      | Branch      |
+| Department Manager     | Department  |
+| Supervisor             | Team        |
+| Staff                  | Unit Kerja  |
+| Administrator          | Enterprise  |
+| Auditor                | Enterprise  |
+| External User (Future) | Optional    |
+
+Hak akses setiap pengguna ditentukan berdasarkan kombinasi **Role**, **Organization Scope**, dan **Permission**.
+
+---
+
+# 6.8 Integration Scope
+
+ERP mendukung integrasi dengan:
+
+* Identity Provider (SSO)
+* Email Server
+* SMS Gateway
+* WhatsApp Notification
+* Push Notification Service
+* Payment Gateway
+* Banking System
+* Tax System
+* Government Services
+* BI Platform
+* ERP Legacy System
+* Third-Party API
+
+Seluruh integrasi dilakukan melalui API dan mekanisme yang terstandarisasi.
+
+---
+
+# 6.9 In Scope
+
+Fitur yang termasuk dalam implementasi ERP.
+
+* Platform ERP terpadu.
+* Multi Organization.
+* Multi Company.
+* Organization Tree.
+* Configurable Workflow.
+* Shared dan Isolated Master Data.
+* Modular ERP.
+* Dashboard.
+* Reporting.
+* Audit Trail.
+* Role-Based Access Control (RBAC).
+* Scope-Based Access Control.
+* API Integration.
+* Multi Currency.
+* Multi Language.
+* Document Management.
+
+---
+
+# 6.10 Out of Scope
+
+Fitur berikut tidak termasuk dalam ruang lingkup implementasi awal dan dapat dipertimbangkan pada fase berikutnya.
+
+* Internet of Things (IoT).
+* Artificial Intelligence (AI) untuk pengambilan keputusan otomatis.
+* Machine Learning.
+* Blockchain.
+* Robotic Process Automation (RPA).
+* Advanced Predictive Analytics.
+* Marketplace Integration.
+* E-Commerce Platform.
+* Customer Mobile Application.
+* Vendor Portal.
+* Public API Marketplace.
+
+---
+
+# 6.11 Project Deliverables
+
+Deliverables utama proyek meliputi:
+
+* Business Requirement Document (BRD).
+* Software Requirement Specification (SRS).
+* Functional Specification.
+* Solution Architecture.
+* Database Design.
+* API Specification.
+* UI/UX Specification.
+* Source Code.
+* Test Documentation.
+* User Manual.
+* Administrator Guide.
+* Deployment Guide.
+* Training Material.
+* Go-Live Documentation.
+
+---
+
+# 6.12 Business Assumptions
+
+Asumsi yang digunakan dalam ruang lingkup proyek:
+
+1. Struktur organisasi dapat berubah sewaktu-waktu.
+2. Setiap perusahaan dapat memiliki proses bisnis yang berbeda.
+3. Pengguna memiliki hak akses berdasarkan organisasi.
+4. Modul ERP dapat diimplementasikan secara bertahap.
+5. Data historis akan dimigrasikan sesuai kebutuhan implementasi.
+
+---
+
+# 6.13 Business Constraints
+
+Batasan proyek meliputi:
+
+* Implementasi dilakukan secara bertahap (*phased implementation*).
+* Penyesuaian proses bisnis mengikuti kebijakan organisasi.
+* Integrasi dengan sistem eksternal bergantung pada ketersediaan API.
+* Perubahan ruang lingkup harus melalui proses Change Request (CR).
+* Kebutuhan di luar ruang lingkup tidak menjadi bagian dari implementasi fase berjalan.
+
+---
+
+# 6.14 Scope Summary
+
+Business Scope mendefinisikan batas yang jelas mengenai apa yang akan dan tidak akan dikembangkan dalam ERP. Seluruh Business Requirements pada bab berikutnya harus berada dalam ruang lingkup yang telah ditetapkan pada dokumen ini.
+
+Setiap perubahan terhadap ruang lingkup proyek wajib mengikuti mekanisme **Change Management** agar tetap menjaga kualitas, jadwal, biaya, dan tujuan bisnis implementasi ERP.

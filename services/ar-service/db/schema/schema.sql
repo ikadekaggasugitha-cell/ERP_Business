@@ -1,0 +1,96 @@
+-- sqlc catalog for ar-service (plain DDL for type inference ONLY).
+-- Authoritative schema (RANGE partitioning by invoice_date, RLS via app.org_scope,
+-- tg_touch_row trigger, invoice_no registry trigger ar.tg_register_invoice_no,
+-- partitioned outbox) lives in db/migrations/ar_db. Keep this catalog in sync
+-- (sqlc diff gate in CI). Twin of ap-service; statuses differ (default 'Issued').
+CREATE SCHEMA IF NOT EXISTS ar;
+
+CREATE TABLE ar.ar_invoice (
+    id                 uuid          NOT NULL DEFAULT gen_random_uuid(),
+    organization_id    uuid          NOT NULL,
+    invoice_no         varchar(50)   NOT NULL,
+    customer_id        uuid          NOT NULL,
+    invoice_date       date          NOT NULL,
+    due_date           date          NOT NULL,
+    currency_code      varchar(3)    NOT NULL,
+    total_amount       numeric(20,4) NOT NULL DEFAULT 0,
+    outstanding_amount numeric(20,4) NOT NULL DEFAULT 0,
+    status             varchar(20)   NOT NULL DEFAULT 'Issued',
+    sales_order_ref    varchar(100),
+    gl_journal_ref     varchar(50),
+    created_at         timestamptz   NOT NULL DEFAULT now(),
+    created_by         uuid          NOT NULL,
+    updated_at         timestamptz   NOT NULL DEFAULT now(),
+    updated_by         uuid,
+    deleted_at         timestamptz,
+    row_version        integer       NOT NULL DEFAULT 1,
+    PRIMARY KEY (id, invoice_date)
+);
+
+CREATE TABLE ar.ar_invoice_line (
+    id               uuid          NOT NULL DEFAULT gen_random_uuid(),
+    organization_id  uuid          NOT NULL,
+    ar_invoice_id    uuid          NOT NULL,
+    invoice_date     date          NOT NULL,
+    line_no          integer       NOT NULL,
+    account_id       uuid          NOT NULL,
+    item_id          uuid,
+    quantity         numeric(20,4),
+    unit_price       numeric(20,4),
+    amount           numeric(20,4) NOT NULL DEFAULT 0,
+    description      text,
+    created_at       timestamptz   NOT NULL DEFAULT now(),
+    created_by       uuid          NOT NULL,
+    updated_at       timestamptz   NOT NULL DEFAULT now(),
+    updated_by       uuid,
+    deleted_at       timestamptz,
+    row_version      integer       NOT NULL DEFAULT 1,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE ar.ar_receipt_allocation (
+    id               uuid          NOT NULL DEFAULT gen_random_uuid(),
+    organization_id  uuid          NOT NULL,
+    ar_invoice_id    uuid          NOT NULL,
+    invoice_date     date          NOT NULL,
+    receipt_id       uuid          NOT NULL,
+    allocated_amount numeric(20,4) NOT NULL DEFAULT 0,
+    allocated_at     timestamptz   NOT NULL DEFAULT now(),
+    created_at       timestamptz   NOT NULL DEFAULT now(),
+    created_by       uuid          NOT NULL,
+    updated_at       timestamptz   NOT NULL DEFAULT now(),
+    updated_by       uuid,
+    deleted_at       timestamptz,
+    row_version      integer       NOT NULL DEFAULT 1,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE ar.outbox (
+    id               uuid         NOT NULL DEFAULT gen_random_uuid(),
+    aggregate_type   varchar(100) NOT NULL,
+    aggregate_id     uuid         NOT NULL,
+    event_type       varchar(150) NOT NULL,
+    payload          jsonb        NOT NULL,
+    organization_id  uuid         NOT NULL,
+    correlation_id   uuid         NOT NULL,
+    created_at       timestamptz  NOT NULL DEFAULT now(),
+    published_at     timestamptz,
+    PRIMARY KEY (id, created_at)
+);
+
+CREATE TABLE ar.processed_event (
+    event_id     uuid         NOT NULL,
+    event_type   varchar(150) NOT NULL,
+    processed_at timestamptz  NOT NULL DEFAULT now(),
+    PRIMARY KEY (event_id)
+);
+
+CREATE TABLE ar.masterdata_cache (
+    organization_id uuid         NOT NULL,
+    party_id        uuid         NOT NULL,
+    code            varchar(50)  NOT NULL DEFAULT '',
+    name            varchar(200) NOT NULL DEFAULT '',
+    party_type      varchar(20)  NOT NULL DEFAULT '',
+    updated_at      timestamptz  NOT NULL DEFAULT now(),
+    PRIMARY KEY (organization_id, party_id)
+);

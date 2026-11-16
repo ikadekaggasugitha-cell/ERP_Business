@@ -1,0 +1,203 @@
+# 9.5.3.14 Functional Currency Requirements
+
+---
+
+# 9.5.3.14.1 Overview
+
+Functional Currency merupakan mata uang utama yang digunakan oleh suatu Legal Entity atau Financial Organization untuk mengukur, mencatat, dan menyajikan transaksi ekonomi sesuai dengan lingkungan ekonomi utama tempat entitas tersebut beroperasi. Functional Currency menjadi dasar pencatatan akuntansi, pengakuan transaksi, pengukuran aset dan liabilitas, serta penyusunan laporan keuangan sesuai dengan standar akuntansi yang berlaku.
+
+ERP harus memungkinkan pengelolaan Functional Currency secara terpisah dari Currency Master sehingga perubahan mata uang fungsional dapat dikelola melalui mekanisme *effective dating*, *versioning*, *approval workflow*, dan *audit trail* tanpa memengaruhi transaksi historis.
+
+---
+
+# 9.5.3.14.2 Business Capability
+
+Functional Currency menyediakan kapabilitas berikut:
+
+* Functional Currency Assignment.
+* Assignment berdasarkan Legal Entity.
+* Assignment berdasarkan Financial Organization.
+* Dukungan perubahan Functional Currency dengan histori.
+* Effective dating.
+* Versioning.
+* Approval workflow.
+* Validasi terhadap Ledger dan Financial Book.
+* Integrasi dengan Currency Translation.
+* Integrasi dengan Currency Revaluation.
+* Audit trail.
+
+---
+
+# 9.5.3.14.3 Business Requirement Catalogue
+
+## BR-211 – Functional Currency Master
+
+| Attribute           | Description                                                                                                                               |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-211                                                                                                                                    |
+| Requirement Name    | Functional Currency Master                                                                                                                |
+| Category            | Functional Currency                                                                                                                       |
+| Priority            | Critical                                                                                                                                  |
+| Business Objective  | BO-009                                                                                                                                    |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                                          |
+| Description         | Sistem harus menyediakan konfigurasi Functional Currency sebagai objek bisnis yang dapat dikelola secara independen dari Currency Master. |
+| Business Value      | Menjamin pengelolaan mata uang fungsional yang terdokumentasi dan dapat diaudit.                                                          |
+| Acceptance Criteria | Administrator dapat menetapkan, mengubah, mengaktifkan, dan menghentikan Functional Currency sesuai kewenangan.                           |
+
+---
+
+## BR-212 – Legal Entity Assignment
+
+| Attribute        | Description                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-212                                                                                                   |
+| Requirement Name | Legal Entity Functional Currency Assignment                                                              |
+| Priority         | Critical                                                                                                 |
+| Description      | Setiap Legal Entity harus memiliki tepat satu Functional Currency yang aktif pada suatu periode efektif. |
+
+---
+
+## BR-213 – Financial Organization Assignment
+
+| Attribute        | Description                                                                                                                                   |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-213                                                                                                                                        |
+| Requirement Name | Financial Organization Assignment                                                                                                             |
+| Priority         | High                                                                                                                                          |
+| Description      | Sistem harus mendukung penetapan Functional Currency pada tingkat Financial Organization apabila diperlukan oleh model organisasi perusahaan. |
+
+---
+
+## BR-214 – Effective Dating
+
+| Attribute        | Description                                                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-214                                                                                                                |
+| Requirement Name | Functional Currency Effective Dating                                                                                  |
+| Priority         | Critical                                                                                                              |
+| Description      | Penetapan Functional Currency harus memiliki periode berlaku sehingga perubahan tidak memengaruhi transaksi historis. |
+
+---
+
+## BR-215 – Version Management
+
+| Attribute        | Description                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-215                                                                                     |
+| Requirement Name | Functional Currency Versioning                                                             |
+| Priority         | High                                                                                       |
+| Description      | Sistem harus menyimpan histori perubahan Functional Currency melalui mekanisme versioning. |
+
+---
+
+## BR-216 – Financial Process Integration
+
+| Attribute        | Description                                                                                                                                                                                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-216                                                                                                                                                                                                     |
+| Requirement Name | Financial Process Integration                                                                                                                                                                              |
+| Priority         | Critical                                                                                                                                                                                                   |
+| Description      | Functional Currency harus digunakan sebagai referensi utama oleh General Ledger, Accounts Payable, Accounts Receivable, Fixed Assets, Treasury, Budgeting, Currency Revaluation, dan Currency Translation. |
+
+---
+
+## BR-217 – Validation Rules
+
+| Attribute        | Description                                                                                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-217                                                                                                                                                                               |
+| Requirement Name | Functional Currency Validation                                                                                                                                                       |
+| Priority         | Critical                                                                                                                                                                             |
+| Description      | Sistem harus memvalidasi bahwa transaksi dicatat menggunakan Functional Currency atau dikonversi sesuai Currency Conversion Policy apabila transaksi dilakukan dalam mata uang lain. |
+
+---
+
+## BR-218 – Approval Workflow
+
+| Attribute        | Description                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-218                                                                                                           |
+| Requirement Name | Functional Currency Approval Workflow                                                                            |
+| Priority         | Critical                                                                                                         |
+| Description      | Perubahan Functional Currency harus melalui proses persetujuan sesuai matriks otorisasi sebelum berlaku efektif. |
+
+---
+
+## BR-219 – Dependency Validation
+
+| Attribute        | Description                                                                                                                                                                               |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-219                                                                                                                                                                                    |
+| Requirement Name | Dependency Validation                                                                                                                                                                     |
+| Priority         | Critical                                                                                                                                                                                  |
+| Description      | Sistem harus mencegah perubahan atau penghapusan Functional Currency yang masih digunakan oleh Ledger, Financial Book, atau transaksi yang telah diposting tanpa proses migrasi yang sah. |
+
+---
+
+## BR-220 – Functional Currency Auditability
+
+| Attribute        | Description                                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-220                                                                                                                          |
+| Requirement Name | Functional Currency Auditability                                                                                                |
+| Priority         | Critical                                                                                                                        |
+| Description      | Seluruh perubahan, persetujuan, aktivasi, dan penonaktifan Functional Currency harus tercatat secara lengkap dalam Audit Trail. |
+
+---
+
+# 9.5.3.14.4 Business Rules
+
+| Business Rule ID | Description                                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-FC-001     | Setiap Legal Entity harus memiliki tepat satu Functional Currency aktif pada satu waktu.                                        |
+| BRule-FC-002     | Functional Currency harus berasal dari Currency Master yang berstatus Active.                                                   |
+| BRule-FC-003     | Perubahan Functional Currency hanya dapat berlaku mulai periode efektif berikutnya dan tidak boleh mengubah transaksi historis. |
+| BRule-FC-004     | Seluruh transaksi dalam mata uang selain Functional Currency harus menggunakan Currency Conversion Policy yang berlaku.         |
+| BRule-FC-005     | Currency Revaluation dan Currency Translation harus menggunakan Functional Currency sebagai mata uang sumber.                   |
+| BRule-FC-006     | Functional Currency yang telah digunakan pada transaksi historis tidak boleh dihapus secara permanen.                           |
+| BRule-FC-007     | Seluruh perubahan Functional Currency wajib tercatat dalam Audit Trail.                                                         |
+
+---
+
+# 9.5.3.14.5 Data Attributes
+
+| Attribute                 | Description                                             |
+| ------------------------- | ------------------------------------------------------- |
+| Functional Currency ID    | Identitas unik sistem.                                  |
+| Assignment Code           | Kode penetapan Functional Currency.                     |
+| Legal Entity              | Entitas hukum yang menggunakan Functional Currency.     |
+| Financial Organization    | Organisasi keuangan terkait (opsional).                 |
+| Currency ID               | Referensi ke Currency Master.                           |
+| Effective From            | Tanggal mulai berlaku.                                  |
+| Effective To              | Tanggal akhir berlaku.                                  |
+| Approval Status           | Draft, Pending Approval, Approved, Published, Archived. |
+| Version                   | Nomor versi.                                            |
+| Status                    | Active, Suspended, Inactive, Archived.                  |
+| Change Reason             | Alasan bisnis perubahan Functional Currency.            |
+| Created By / Created Date | Informasi pembuatan data.                               |
+| Updated By / Updated Date | Informasi perubahan terakhir.                           |
+
+---
+
+# 9.5.3.14.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                       |
+| -------------- | ------------------ | ----------- | ------------------------------------ |
+| BR-211         | BO-009             | SH-003      | Functional Currency Administration   |
+| BR-212         | BO-009             | SH-003      | Legal Entity Configuration           |
+| BR-213         | BO-009             | SH-003      | Financial Organization Configuration |
+| BR-214         | BO-029             | SH-010      | Effective Date Governance            |
+| BR-215         | BO-029             | SH-010      | Version Management                   |
+| BR-216         | BO-011             | SH-003      | Financial Transaction Processing     |
+| BR-217         | BO-011             | SH-003      | Transaction Validation               |
+| BR-218         | BO-029             | SH-003      | Approval Workflow                    |
+| BR-219         | BO-029             | SH-010      | Dependency Validation                |
+| BR-220         | BO-029             | SH-010      | Audit & Compliance                   |
+
+---
+
+# 9.5.3.14.7 Summary
+
+Functional Currency merupakan fondasi seluruh proses akuntansi dalam ERP. Seluruh transaksi diukur dan dicatat berdasarkan mata uang ini sebelum dilakukan revaluasi, translasi, atau konsolidasi. Dengan memodelkan Functional Currency sebagai objek bisnis yang memiliki *effective dating*, *versioning*, *approval workflow*, dan *audit trail*, ERP mampu mendukung perubahan mata uang fungsional secara terkendali tanpa mengorbankan integritas data historis.
+
+Functional Currency menjadi referensi utama bagi **General Ledger**, **Accounts Payable**, **Accounts Receivable**, **Fixed Assets**, **Treasury Management**, **Budgeting**, **Currency Revaluation**, **Currency Translation**, **Financial Consolidation**, dan **Financial Reporting**.

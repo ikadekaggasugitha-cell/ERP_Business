@@ -1,0 +1,118 @@
+# BAB 7. Human Resource and Payroll Schema
+
+## 7.1 Overview
+
+Bab ini mendesain skema domain **HR** dan **Payroll** (SAD BAB 4.5: SVC-016, SVC-017). Domain ini memuat **data pribadi (PII)** sehingga tunduk pada kontrol perlindungan data (UU PDP, SAD BAB 7 & BAB 6.8). HR menerbitkan `hr.employee.updated`; Payroll mengonsumsinya dan menerbitkan `payroll.run.completed` yang memicu posting GL (INT-003, Exactly-Once). Seluruh tabel mengikuti standar BAB 2.
+
+---
+
+## 7.2 Human Resource Management (`hr_db`)
+
+Merealisasikan BRD 9.12: data kepegawaian, struktur jabatan, siklus SDM.
+
+```mermaid
+erDiagram
+  EMPLOYEE ||--o{ EMPLOYMENT : has
+  POSITION ||--o{ EMPLOYMENT : filled_by
+  EMPLOYEE ||--o{ EMPLOYEE_COMPENSATION : compensated_by
+```
+
+### `hr.employee`
+
+| Column          | Type          | Null | Key | Description                                            |
+| --------------- | ------------- | ---- | --- | ------------------------------------------------------ |
+| `employee_no`   | VARCHAR(50)   | No   | U   | Nomor induk karyawan.                                  |
+| `full_name`     | VARCHAR(200)  | No   |     | Nama lengkap (**PII**).                                |
+| `national_id`   | VARCHAR(50)   | Yes  | U   | NIK (**PII**, enkripsi field-level — BAB 7.4).        |
+| `date_of_birth` | DATE          | Yes  |     | Tanggal lahir (**PII**).                              |
+| `email`         | VARCHAR(255)  | Yes  |     | Email (**PII**).                                       |
+| `hire_date`     | DATE          | No   |     | Tanggal masuk.                                         |
+| `status`        | VARCHAR(20)   | No   | IDX | Active/OnLeave/Terminated.                            |
+| `user_ref_id`   | UUID          | Yes  |     | Referensi logis akun (`user_db`, INT UC-010).         |
+
+### `hr.position`
+
+| Column          | Type          | Null | Key | Description                                    |
+| --------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `code`          | VARCHAR(50)   | No   | U   | Kode jabatan.                                  |
+| `title`         | VARCHAR(150)  | No   |     | Nama jabatan.                                  |
+| `organization_ref_id`| UUID     | No   | IDX | Unit organisasi (ref logis `org_db`).         |
+| `parent_position_id`| UUID      | Yes  | FK  | Atasan (hierarki jabatan).                     |
+
+### `hr.employment` (penempatan efektif — DBS-016)
+
+| Column          | Type          | Null | Key | Description                                    |
+| --------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `employee_id`   | UUID          | No   | FK  | Karyawan.                                      |
+| `position_id`   | UUID          | No   | FK  | Jabatan.                                       |
+| `employment_type`| VARCHAR(20)  | No   |     | Permanent/Contract/Outsource.                  |
+| `effective_from`| DATE          | No   |     | Awal berlaku.                                  |
+| `effective_to`  | DATE          | Yes  |     | Akhir berlaku.                                 |
+
+### `hr.employee_compensation` (komponen kompensasi — **PII sensitif**)
+
+| Column          | Type          | Null | Key | Description                                    |
+| --------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `employee_id`   | UUID          | No   | FK  | Karyawan.                                      |
+| `component_code`| VARCHAR(30)   | No   |     | Jenis (basic/allowance/deduction).             |
+| `amount`        | NUMERIC(20,4) | No   |     | Nilai (enkripsi field-level).                  |
+| `effective_from`| DATE          | No   |     | Awal berlaku.                                  |
+
+---
+
+## 7.3 Payroll Management (`payroll_db`)
+
+Merealisasikan BRD 9.17: perhitungan & pembayaran gaji; hasil diposting ke GL (INT-003); integrasi BPJS (INT-007).
+
+```mermaid
+erDiagram
+  PAYROLL_RUN ||--|{ PAYROLL_RESULT : produces
+  PAYROLL_RESULT ||--|{ PAYROLL_RESULT_LINE : details
+```
+
+### `pay.payroll_run`
+
+| Column          | Type          | Null | Key | Description                                            |
+| --------------- | ------------- | ---- | --- | ------------------------------------------------------ |
+| `run_no`        | VARCHAR(50)   | No   | U   | Nomor periode penggajian.                             |
+| `period_month`  | INTEGER       | No   |     | Bulan.                                                 |
+| `period_year`   | INTEGER       | No   |     | Tahun.                                                 |
+| `status`        | VARCHAR(20)   | No   | IDX | Draft/Calculated/Approved/Posted/Paid.               |
+| `gl_journal_ref`| VARCHAR(50)   | Yes  |     | Referensi jurnal GL (INT-003).                        |
+| `correlation_id`| UUID          | No   | IDX | Korelasi (EOS posting).                              |
+
+### `pay.payroll_result`
+
+| Column          | Type          | Null | Key | Description                                    |
+| --------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `payroll_run_id`| UUID          | No   | FK  | Periode penggajian.                            |
+| `employee_id`   | UUID          | No   | IDX | Karyawan (ref logis `hr_db`).                 |
+| `gross_amount`  | NUMERIC(20,4) | No   |     | Gaji kotor (**PII sensitif**).                |
+| `deduction_amount`| NUMERIC(20,4)| No  |     | Total potongan.                                |
+| `tax_amount`    | NUMERIC(20,4) | No   |     | PPh 21.                                        |
+| `net_amount`    | NUMERIC(20,4) | No   |     | Gaji bersih.                                   |
+
+### `pay.payroll_result_line` (rincian komponen) & `pay.statutory_contribution` (BPJS TK/Kesehatan — INT-007) — pola standar.
+
+---
+
+## 7.4 PII Protection and Data Subject Rights
+
+Kontrol perlindungan data pribadi (SAD BAB 7.5, NFR-019) yang diterapkan pada `hr_db` & `payroll_db`:
+
+| Kontrol                    | Realisasi Fisik                                                            |
+| -------------------------- | -------------------------------------------------------------------------- |
+| Klasifikasi PII            | Kolom PII ditandai (mis. `national_id`, `date_of_birth`, `email`, `amount`).|
+| Enkripsi field-level       | Kolom PII sensitif dienkripsi (mis. `pgcrypto`/enkripsi aplikatif).        |
+| Isolasi                    | Tenant regulatorik dapat memakai schema-per-tenant (ADR-002).             |
+| Right to erasure           | Prosedur *hard delete*/anonymization terkoordinasi via event (UU PDP).     |
+| Audit akses                | Akses data PII tercatat di audit trail (BAB 3.7, NFR-018).                 |
+| RLS                        | Scope-Based Access membatasi data lintas Company/Business Unit (BR-031).   |
+
+---
+
+## 7.5 Summary
+
+Bab ini mendesain skema **HR** (employee, position, employment efektif, compensation) dan **Payroll** (payroll run, result, result line, kontribusi statutori), dengan penekanan pada **perlindungan PII** — klasifikasi, enkripsi field-level, RLS, audit akses, dan *right to erasure* sesuai UU PDP. Payroll terhubung ke GL via event Exactly-Once (INT-003) dan ke BPJS via integrasi eksternal (INT-007). Data efektivitas (employment/compensation) mengikuti standar temporal DBS-016.
+
+---

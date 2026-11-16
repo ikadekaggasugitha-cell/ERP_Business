@@ -1,0 +1,96 @@
+# BUSINESS REQUIREMENT DOCUMENT (BRD)
+
+## Enterprise Resource Planning (ERP)
+
+### **ERP Enterprise Platform**
+
+---
+
+**Document Information**
+
+| Item                | Description                               |
+| ------------------- | ----------------------------------------- |
+| **Document Title**  | Business Requirement Document (BRD)       |
+| **Project Name**    | Enterprise Resource Planning (ERP) System |
+| **Project Code**    | ERP-CORE                                  |
+| **Document ID**     | ERP-BRD-001                               |
+| **Version**         | 1.0 (Draft)                               |
+| **Document Status** | Draft                                     |
+| **Classification**  | Internal Use Only                         |
+| **Prepared By**     | Business Analyst Team                     |
+| **Reviewed By**     | Project Manager                           |
+| **Approved By**     | Steering Committee                        |
+| **Document Owner**  | ERP Program Management Office (PMO)       |
+| **Effective Date**  | *TBD*                                     |
+| **Last Updated**    | *TBD*                                     |
+
+---
+
+## Document Purpose
+
+Dokumen ini mendefinisikan kebutuhan bisnis (Business Requirements) untuk pembangunan **Enterprise Resource Planning (ERP)** yang dirancang sebagai platform enterprise dengan arsitektur modular, scalable, configurable, dan mendukung struktur organisasi bertingkat mulai dari **Holding Company**, **Sub Holding**, **Company**, **Business Unit**, **Branch**, **Department**, hingga unit organisasi lainnya tanpa memerlukan perubahan source code.
+
+Dokumen ini menjadi referensi utama bagi seluruh pemangku kepentingan dalam proses analisis, perancangan, pengembangan, pengujian, implementasi, serta pemeliharaan sistem ERP.
+
+---
+
+## Core Design Principles
+
+Pembangunan ERP ini mengacu pada prinsip-prinsip berikut:
+
+* **Configuration over Customization**
+* **Organization Tree First**
+* **Scope-Based Everything**
+* **Modular Architecture**
+* **API First**
+* **Cloud Ready**
+* **Multi Company Ready**
+* **Multi Organization Ready**
+* **Multi Currency Ready**
+* **Multi Language Ready**
+* **Role Based Access Control (RBAC)**
+* **Workflow Driven**
+* **Auditability**
+* **Security by Design**
+* **Scalability**
+* **Extensibility**
+
+---
+
+## Target Organization Structure
+
+```text
+Holding Company
+│
+├── Sub Holding A
+│   ├── Company A1
+│   ├── Company A2
+│   └── Company A3
+│
+├── Sub Holding B
+│   ├── Company B1
+│   ├── Company B2
+│   └── Company B3
+│
+└── Company C
+    ├── Branch
+    ├── Warehouse
+    ├── Project Site
+    └── Department
+```
+
+Struktur organisasi di atas merupakan contoh implementasi. Sistem harus mampu mendukung jumlah level organisasi yang tidak terbatas dan seluruh perubahan struktur dilakukan melalui konfigurasi.
+
+---
+
+## Document Version
+
+**Version:** 1.0 (Draft)
+
+Dokumen ini merupakan versi awal dari Business Requirement Document dan akan dikembangkan secara bertahap melalui proses review bersama stakeholder hingga menjadi acuan resmi pengembangan ERP.
+
+---
+
+**© Enterprise Resource Planning (ERP) Project**
+**Business Requirement Document (BRD)**
+**Confidential – Internal Use Only**

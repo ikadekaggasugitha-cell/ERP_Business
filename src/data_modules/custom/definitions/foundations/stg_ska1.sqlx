@@ -1,0 +1,27 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc", "s4"],
+  description: "SAP G/L Account Master staging view with SKAT descriptions and deduplication"
+}
+
+SELECT
+  s.MANDT AS mandt,
+  s.KTOPL AS chart_of_accounts,
+  s.SAKNR AS gl_account_number,
+  s.XBILK AS balance_sheet_account,
+  s.KTOKS AS account_group,
+  t.TXT50 AS account_name,
+  s.recordstamp
+FROM ${ref("sap_ddic_replica", "ska1")} s
+LEFT JOIN ${ref("sap_ddic_replica", "skat")} t
+  ON s.MANDT = t.MANDT
+  AND s.KTOPL = t.KTOPL
+  AND s.SAKNR = t.SAKNR
+  AND t.SPRAS IN ('E', 'M', 'I')
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY s.MANDT, s.KTOPL, s.SAKNR
+  ORDER BY 
+    CASE WHEN t.SPRAS = 'E' THEN 1 WHEN t.SPRAS IN ('M', 'I') THEN 2 ELSE 3 END,
+    s.recordstamp DESC
+) = 1

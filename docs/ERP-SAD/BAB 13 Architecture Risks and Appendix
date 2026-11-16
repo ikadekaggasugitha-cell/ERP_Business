@@ -1,0 +1,125 @@
+# BAB 13. Architecture Risks and Appendix
+
+## 13.1 Overview
+
+Bab ini menutup SAD dengan mendokumentasikan **risiko arsitektur** (identifier `AR-xxx`), *technical debt*, serta lampiran konsolidasi (matriks traceability, baseline versi teknologi, rujukan glossary). Risiko arsitektur di sini melengkapi Risk Analysis pada **BRD BAB 16 (RISK-001 s.d. RISK-015)** dengan fokus pada konsekuensi keputusan arsitektur (BAB 3).
+
+---
+
+## 13.2 Architecture Risks
+
+| AR ID  | Risiko Arsitektur                                        | Sumber Keputusan   | Terkait BRD | Dampak Potensial                                                          |
+| ------ | -------------------------------------------------------- | ------------------ | ----------- | -------------------------------------------------------------------------- |
+| AR-001 | Kompleksitas operasional infrastruktur **self-managed**  | ADR-004            | RISK-005    | Beban operasional tinggi (patching, tuning, HA/DR) melebihi kapasitas Platform Team. |
+| AR-002 | Konsistensi terdistribusi (Saga/Outbox) salah desain     | ADR-001, ADR-008   | RISK-014    | Saldo lintas modul tidak sinkron; *compensating action* tidak lengkap.     |
+| AR-003 | Kompleksitas operasional **Kafka** (lag, ordering, EOS)  | ADR-005            | RISK-013    | *Consumer lag*, duplikasi/kehilangan pemrosesan bila idempotensi lemah.     |
+| AR-004 | *Coupling* skema event antar-layanan                     | ADR-003, ADR-007   | RISK-004    | Perubahan skema *breaking* mengganggu konsumen bila tata kelola lemah.      |
+| AR-005 | Kesalahan klasifikasi EOS vs At-Least-Once               | ADR-005            | RISK-014    | Proses finansial keliru memakai At-Least-Once → risiko inkonsistensi.       |
+| AR-006 | Ketergantungan komponen kritikal (Kong, Apicurio)        | ADR-003            | RISK-004    | Kegagalan gateway/registry berdampak luas bila HA kurang.                   |
+| AR-007 | Ketersediaan kompetensi stack (Go/React/Kafka)           | ADR-006            | RISK-015    | Kurva belajar memperlambat jadwal & menurunkan kualitas desain.            |
+| AR-008 | Kompleksitas Hybrid Multi-Tenancy (migrasi antar-mode)   | ADR-002            | RISK-004    | Kesalahan *routing*/migrasi tenant → kebocoran/inkonsistensi data.         |
+| AR-009 | *Data migration* dari legacy                             | (INT-008)          | RISK-006    | Data tidak lengkap/duplikat pada sistem baru pasca go-live.               |
+
+---
+
+## 13.3 Technical Debt Register
+
+| Debt ID | Deskripsi                                                                | Status/Rencana                                       |
+| ------- | ------------------------------------------------------------------------ | ---------------------------------------------------- |
+| TD-001  | Service Catalog belum mencakup seluruh sub-domain finansial (BAB 4.5).   | Dilengkapi bersama Database Design.                  |
+| TD-002  | Kontrak API/event final (OpenAPI/Protobuf) belum dibakukan.             | Disusun pada artefak API Specification.              |
+| TD-003  | Keputusan *service mesh* (mTLS/traffic policy) belum final.             | Evaluasi pada fase infrastruktur.                    |
+| TD-004  | Detail *sizing*/capacity per komponen belum ditetapkan.                 | Ditetapkan pada artefak Deployment/Operations.       |
+
+*Technical debt* dikelola transparan dan ditinjau berkala agar tidak menjadi risiko tersembunyi.
+
+---
+
+## 13.4 Risk Mitigation and Monitoring
+
+| AR ID  | Mitigasi Utama                                                                 | Pemantauan                                  |
+| ------ | ------------------------------------------------------------------------------ | ------------------------------------------- |
+| AR-001 | Otomasi operasi (operator, GitOps), runbook, pelatihan Platform Team.          | Metrik infrastruktur (BAB 9.3).             |
+| AR-002 | Pola Saga/Outbox baku, *reconciliation job*, uji skenario kompensasi.          | Reconciliation berkala; alert selisih.      |
+| AR-003 | Konsumen idempoten, pemantauan *consumer lag*/DLQ, Schema Registry.            | Alert lag & DLQ (BAB 9.6).                  |
+| AR-004 | Kompatibilitas skema (Apicurio) + gerbang CI (BAB 10.6).                       | Validasi skema pada pipeline.               |
+| AR-005 | Katalog event menandai delivery (BAB 5.4), review arsitektur untuk klasifikasi.| Audit konfigurasi topic.                    |
+| AR-006 | HA multi-replica Kong/Apicurio; health check & failover (BAB 8.7).             | Uptime & health (BAB 9.8).                  |
+| AR-007 | Asesmen & *upskilling*, reference architecture, technical lead berpengalaman.  | Review kualitas kode & desain.              |
+| AR-008 | Prosedur migrasi tenant terkelola, uji isolasi, RLS sebagai *safety net*.      | Audit akses lintas scope.                   |
+| AR-009 | ETL bertahap, *data cleansing*, *mock migration*, rekonsiliasi (BAB 6.10).     | Validasi kualitas data pasca-migrasi.       |
+
+Risiko arsitektur dieskalasikan mengikuti mekanisme *risk monitoring* pada BRD BAB 16.8 (review berkala, eskalasi ke Steering Committee).
+
+---
+
+## 13.5 Appendix A — Consolidated Traceability Matrix
+
+Rantai keterlacakan lintas artefak (dari tujuan bisnis hingga skenario kualitas):
+
+| Business Objective | NFR / INT (BRD)     | ARC (BAB 2) | ADR (BAB 3)         | Realisasi (SVC/BAB)              | QAS (BAB 12)     |
+| ------------------ | ------------------- | ----------- | -------------------- | -------------------------------- | ---------------- |
+| BO-004 (SSoT)      | NFR-007/008         | ARC-001     | ADR-001/005/008      | gl-service (SVC-007), §5.7       | QAS-012          |
+| BO-005 (ekspansi)  | NFR-010/011         | ARC-002     | ADR-001/006          | Go stateless, §6.5, §8.6         | QAS-006/007      |
+| BO-006 (modular)   | NFR-013             | ARC-005     | ADR-001              | §4.5, §10.3                      | QAS-016          |
+| BO-001 (integrasi) | NFR-004, INT-001–004| ARC-003     | ADR-004/008          | §5, §8.7                         | QAS-004/012      |
+| BO-007 (tata kelola)| NFR-019–021        | ARC-008     | ADR-002/003          | §7, §6.3                         | QAS-010          |
+| BO-028 (keamanan)  | NFR-016–018         | ARC-008     | ADR-003              | §7                               | QAS-009/011      |
+| BO-002 (org tree)  | NFR-012             | ARC-004     | ADR-002              | §6.4, §11.3                      | QAS-008          |
+| BO-008 (real-time) | NFR-003             | ARC-007     | ADR-009              | reporting-service (SVC-019)      | QAS-003          |
+
+Matriks lengkap per requirement dikelola pada *traceability register* proyek (melengkapi BRD BAB 20).
+
+---
+
+## 13.6 Appendix B — Technology Version Baseline
+
+| Komponen             | Baseline (minimum)      | Keputusan   |
+| -------------------- | ------------------------ | ----------- |
+| Go (Golang)          | 1.22+                    | ADR-006     |
+| React 19 / Vite      | React 19 / Vite          | ADR-006, ADR-011 |
+| Apache Kafka         | 3.x (KRaft)              | ADR-006     |
+| PostgreSQL           | 15+                      | ADR-006     |
+| Kong API Gateway     | versi LTS terkini        | ADR-003     |
+| Apicurio Registry    | versi stabil terkini     | ADR-003     |
+| Kubernetes           | versi *supported* terkini| ADR-004     |
+| OpenTelemetry        | rilis stabil             | ADR-010     |
+
+Pemutakhiran versi mengikuti kebijakan *lifecycle* & keamanan; perubahan baseline melalui CR (CONS-013).
+
+---
+
+## 13.7 Appendix C — Glossary Reference
+
+Istilah teknis SAD didefinisikan pada **BAB 1.5**. Glossary istilah bisnis mengacu pada **BRD BAB 21.4 Business Glossary** dan tidak diduplikasi.
+
+---
+
+## 13.8 Open Items and Future Work
+
+| Item                                                              | Artefak/Tahap Berikutnya      |
+| ---------------------------------------------------------------- | ----------------------------- |
+| Desain fisik basis data (ERD, Data Dictionary, indeks, partisi)   | Database Design (`DB-xxx`)    |
+| Kontrak API & event final (OpenAPI/Protobuf)                     | API Specification (`API-xxx`) |
+| Desain teknis per layanan (detailed design)                      | Technical Design (`TD-xxx`)   |
+| *Sizing*/capacity & IaC infrastruktur                            | Deployment/Operations         |
+| Test architecture & strategi pengujian non-fungsional            | Test Plan (`TC-xxx`)          |
+
+---
+
+## 13.9 Revision History
+
+| Version | Date       | Author             | Description                                                        | Status |
+| ------- | ---------- | ------------------ | ------------------------------------------------------------------ | ------ |
+| 0.1     | 2026-08-05 | Solution Architect | SAD Fase 1 — BAB 1–5 (fondasi, keputusan, logical, integrasi).     | Draft  |
+| 0.2     | 2026-08-05 | Solution Architect | SAD Fase 2 — BAB 6–13 (data, security, deployment, observability, CI/CD, cross-cutting, QAS, risks). | Draft  |
+
+---
+
+## 13.10 Document Closing Statement
+
+Software Architecture Document ini menyediakan arsitektur menyeluruh platform ERP — dari keputusan arsitektur (ADR-001–010), struktur logis (SVC-001–019), integrasi & event, data, keamanan, deployment, observability, CI/CD, hingga *cross-cutting concerns* dan skenario kualitas terukur (QAS-001–018). Seluruh elemen tertaut secara terlacak ke kebutuhan bisnis dan non-fungsional pada BRD, menjaga konsistensi dari tujuan bisnis hingga realisasi teknis.
+
+SAD menjadi acuan teknis utama bagi tim pengembangan, dan menjadi dasar penyusunan artefak turunan berikutnya — **Database Design**, **API Specification**, dan **Technical Design** — sementara BRD tetap terjaga fokus pada kebutuhan bisnis. Setiap perubahan terhadap keputusan arsitektur yang telah *Accepted* tunduk pada mekanisme **Change Request (CR)** sesuai CONS-013.
+
+---

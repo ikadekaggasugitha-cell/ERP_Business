@@ -1,0 +1,167 @@
+# 9.5.1 Financial Organization Requirements
+
+---
+
+# 9.5.1.1 Overview
+
+Financial Organization merupakan representasi organisasi dari perspektif keuangan yang digunakan untuk mengelola pencatatan transaksi, pengendalian anggaran, pelaporan keuangan, serta konsolidasi antar entitas.
+
+Financial Organization tidak selalu identik dengan struktur organisasi operasional. Satu organisasi operasional dapat memiliki satu atau lebih Financial Organization, dan beberapa organisasi operasional dapat berbagi Financial Organization sesuai dengan kebijakan grup perusahaan.
+
+Konsep ini memberikan fleksibilitas dalam mendukung restrukturisasi perusahaan, pemisahan unit bisnis, konsolidasi laporan keuangan, maupun kebutuhan pelaporan berdasarkan regulasi.
+
+---
+
+# 9.5.1.2 Business Requirement Catalogue
+
+## BR-051 – Financial Organization Master
+
+| Attribute           | Description                                                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-051                                                                                                                                           |
+| Requirement Name    | Financial Organization Master                                                                                                                    |
+| Category            | Financial Organization                                                                                                                           |
+| Priority            | Critical                                                                                                                                         |
+| Business Objective  | BO-009                                                                                                                                           |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                                                 |
+| Description         | Sistem harus menyediakan master data Financial Organization yang terpisah dari Organization operasional.                                         |
+| Business Value      | Memungkinkan pengelolaan struktur keuangan secara independen dari struktur operasional.                                                          |
+| Acceptance Criteria | Administrator dapat membuat, mengubah, mengaktifkan, dan menonaktifkan Financial Organization tanpa memengaruhi struktur organisasi operasional. |
+
+---
+
+## BR-052 – Financial Organization Mapping
+
+| Attribute        | Description                                                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-052                                                                                                                                                                                      |
+| Requirement Name | Financial Organization Mapping                                                                                                                                                              |
+| Priority         | Critical                                                                                                                                                                                    |
+| Description      | Sistem harus mendukung pemetaan antara Organization operasional dengan Financial Organization dalam relasi satu-ke-satu, satu-ke-banyak, maupun banyak-ke-satu sesuai kebijakan perusahaan. |
+
+---
+
+## BR-053 – Financial Organization Hierarchy
+
+| Attribute        | Description                                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-053                                                                                                                  |
+| Requirement Name | Financial Organization Hierarchy                                                                                        |
+| Priority         | Critical                                                                                                                |
+| Description      | Financial Organization harus mendukung struktur hierarki yang dapat digunakan untuk pelaporan dan konsolidasi keuangan. |
+
+---
+
+## BR-054 – Financial Book Assignment
+
+| Attribute        | Description                                                                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-054                                                                                                                                                                                |
+| Requirement Name | Financial Book Assignment                                                                                                                                                             |
+| Priority         | High                                                                                                                                                                                  |
+| Description      | Setiap Financial Organization harus dapat dikaitkan dengan satu atau lebih Financial Book untuk memenuhi kebutuhan pelaporan yang berbeda (misalnya Local GAAP, IFRS, atau Tax Book). |
+
+---
+
+## BR-055 – Ledger Assignment
+
+| Attribute        | Description                                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-055                                                                                                                               |
+| Requirement Name | Ledger Assignment                                                                                                                    |
+| Priority         | Critical                                                                                                                             |
+| Description      | Sistem harus memungkinkan satu Financial Organization menggunakan satu atau lebih Ledger sesuai kebutuhan operasional dan pelaporan. |
+
+---
+
+## BR-056 – Base Currency Assignment
+
+| Attribute        | Description                                                                                                                                          |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-056                                                                                                                                               |
+| Requirement Name | Base Currency Assignment                                                                                                                             |
+| Priority         | Critical                                                                                                                                             |
+| Description      | Setiap Financial Organization harus memiliki mata uang dasar (Base Currency) yang digunakan sebagai mata uang fungsional untuk pencatatan transaksi. |
+
+---
+
+## BR-057 – Fiscal Calendar Assignment
+
+| Attribute        | Description                                                                                         |
+| ---------------- | --------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-057                                                                                              |
+| Requirement Name | Fiscal Calendar Assignment                                                                          |
+| Priority         | Critical                                                                                            |
+| Description      | Financial Organization harus dikaitkan dengan satu Fiscal Calendar yang mengatur periode akuntansi. |
+
+---
+
+## BR-058 – Financial Policy Assignment
+
+| Attribute        | Description                                                                                                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-058                                                                                                                                                                                            |
+| Requirement Name | Financial Policy Assignment                                                                                                                                                                       |
+| Priority         | High                                                                                                                                                                                              |
+| Description      | Setiap Financial Organization harus dapat menggunakan kebijakan keuangan yang berbeda, termasuk metode penyusutan, metode valuasi persediaan, kebijakan penutupan periode, dan kebijakan lainnya. |
+
+---
+
+## BR-059 – Financial Organization Lifecycle
+
+| Attribute        | Description                                                                                                                                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-059                                                                                                                                                     |
+| Requirement Name | Financial Organization Lifecycle                                                                                                                           |
+| Priority         | High                                                                                                                                                       |
+| Description      | Sistem harus mendukung siklus hidup Financial Organization mulai dari Draft, Active, Suspended, Closed, hingga Archived dengan histori yang dapat diaudit. |
+
+---
+
+## BR-060 – Financial Organization Auditability
+
+| Attribute        | Description                                                                                                                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-060                                                                                                                                                                                                   |
+| Requirement Name | Financial Organization Auditability                                                                                                                                                                      |
+| Priority         | Critical                                                                                                                                                                                                 |
+| Description      | Seluruh perubahan pada konfigurasi Financial Organization harus tercatat lengkap dalam Audit Trail, termasuk siapa yang melakukan perubahan, kapan dilakukan, dan nilai sebelum serta sesudah perubahan. |
+
+---
+
+# 9.5.1.3 Financial Organization Business Rules
+
+| Business Rule ID | Description                                                                                               |
+| ---------------- | --------------------------------------------------------------------------------------------------------- |
+| BRule-FORG-001   | Financial Organization merupakan entitas yang terpisah dari Organization operasional.                     |
+| BRule-FORG-002   | Setiap Financial Organization wajib memiliki Base Currency.                                               |
+| BRule-FORG-003   | Setiap Financial Organization wajib memiliki Fiscal Calendar aktif.                                       |
+| BRule-FORG-004   | Financial Organization harus memiliki minimal satu Ledger.                                                |
+| BRule-FORG-005   | Financial Organization dapat memiliki lebih dari satu Financial Book.                                     |
+| BRule-FORG-006   | Mapping Organization dan Financial Organization harus tervalidasi sebelum transaksi keuangan diproses.    |
+| BRule-FORG-007   | Perubahan konfigurasi Financial Organization tidak boleh mengubah histori transaksi yang telah diposting. |
+
+---
+
+# 9.5.1.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                        |
+| -------------- | ------------------ | ----------- | ------------------------------------- |
+| BR-051         | BO-009             | SH-003      | Financial Organization Administration |
+| BR-052         | BO-009             | SH-003      | Organization Mapping                  |
+| BR-053         | BO-011             | SH-003      | Financial Hierarchy                   |
+| BR-054         | BO-011             | SH-003      | Financial Book Assignment             |
+| BR-055         | BO-011             | SH-003      | Ledger Assignment                     |
+| BR-056         | BO-009             | SH-003      | Currency Configuration                |
+| BR-057         | BO-009             | SH-003      | Fiscal Calendar Configuration         |
+| BR-058         | BO-010             | SH-003      | Financial Policy Management           |
+| BR-059         | BO-011             | SH-003      | Financial Organization Lifecycle      |
+| BR-060         | BO-029             | SH-010      | Audit & Compliance                    |
+
+---
+
+# 9.5.1.5 Summary
+
+Financial Organization merupakan fondasi seluruh domain Financial Management. Dengan memisahkan organisasi operasional dan organisasi keuangan, ERP mampu mendukung kebutuhan grup perusahaan yang kompleks, berbagai standar akuntansi, multi-ledger, multi-book, serta konsolidasi lintas entitas tanpa mengorbankan fleksibilitas organisasi bisnis.
+
+Seluruh requirement pada bagian ini akan menjadi dasar bagi desain Financial Book, Ledger, Fiscal Calendar, Chart of Accounts, dan modul General Ledger pada dokumen lanjutan.

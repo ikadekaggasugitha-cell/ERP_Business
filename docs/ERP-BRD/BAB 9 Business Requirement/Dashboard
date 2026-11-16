@@ -1,0 +1,186 @@
+# 9.13 Dashboard and Executive Reporting Requirements
+
+## 9.13.1 Overview
+
+Dashboard and Executive Reporting merupakan lapisan penyajian informasi lintas modul yang memungkinkan manajemen dan pengguna operasional memantau kinerja organisasi secara cepat, akurat, dan real-time tanpa harus membuka masing-masing modul transaksional secara terpisah.
+
+Dalam ERP yang bersifat modular dan multi-organisasi, dashboard harus mampu menyajikan Key Performance Indicator (KPI), ringkasan transaksi, status persetujuan (approval), serta indikator kinerja dari berbagai modul (Finance, Procurement, Sales, Inventory, HR, Project, Manufacturing, dan modul lain) dalam satu tampilan terpadu. Penyajian data tersebut wajib tunduk pada **Organization Scope** dan **Role-Based Access Control**, sehingga setiap pengguna hanya melihat informasi yang relevan dan menjadi haknya.
+
+Dashboard juga harus bersifat **configurable**, artinya widget, layout, filter, dan ambang batas (threshold) indikator dapat diatur melalui konfigurasi tanpa memerlukan perubahan source code, sejalan dengan prinsip Configuration over Customization yang menjadi fondasi platform ERP ini.
+
+Setiap kebutuhan bisnis pada bagian ini menggunakan **Requirement ID (BR-xxx)** agar dapat ditelusuri ke Business Objectives (BO-xxx), Stakeholder (SH-xxx), Functional Requirements (FR-xxx), dan Test Cases (TC-xxx).
+
+---
+
+# 9.13.2 Business Requirement Catalogue
+
+## BR-756 – Configurable Executive Dashboard Framework
+
+| Attribute              | Description                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID         | BR-756                                                                                                                                                |
+| Requirement Name       | Configurable Executive Dashboard Framework                                                                                                           |
+| Category               | Dashboard & Executive Reporting                                                                                                                      |
+| Priority               | Critical                                                                                                                                              |
+| Business Objective     | BO-013, BO-008                                                                                                                                        |
+| Stakeholder Owner      | SH-002 (CEO), SH-014 (PMO)                                                                                                                            |
+| Description            | Sistem harus menyediakan framework dashboard eksekutif dan operasional yang dapat dikonfigurasi, terdiri atas kumpulan widget KPI, ringkasan transaksi, status approval, dan indikator kinerja lintas modul. |
+| Business Rationale     | Manajemen memerlukan gambaran kinerja organisasi secara menyeluruh tanpa harus mengakses setiap modul transaksional satu per satu, sehingga proses pengambilan keputusan menjadi lebih cepat. |
+| Business Value         | Percepatan pengambilan keputusan strategis dan operasional berbasis data terkini.                                                                    |
+| Acceptance Criteria    | Administrator dapat menyusun dashboard dari kumpulan widget yang tersedia melalui konfigurasi, tanpa memerlukan perubahan source code.                |
+| Related Modules        | Dashboard & Executive Reporting, seluruh modul transaksional                                                                                          |
+| Related Business Rules | BRule-DASH-001, BRule-DASH-004                                                                                                                        |
+
+---
+
+## BR-757 – Role-Based Dashboard Personalization
+
+| Attribute           | Description                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-757                                                                                                                  |
+| Requirement Name    | Role-Based Dashboard Personalization                                                                                    |
+| Priority            | Critical                                                                                                                |
+| Description         | Sistem harus memungkinkan setiap pengguna mempersonalisasi tampilan dashboard (pemilihan widget, layout, dan filter default) sesuai dengan role dan preferensi masing-masing. |
+| Acceptance Criteria | Pengguna dapat menambah, menghapus, dan mengatur ulang posisi widget pada dashboard miliknya tanpa memengaruhi dashboard pengguna lain. |
+| Business Value      | Relevansi informasi yang lebih tinggi bagi setiap peran pengguna.                                                        |
+
+---
+
+## BR-758 – Organization Scope-Based Data Filtering
+
+| Attribute           | Description                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-758                                                                                                                  |
+| Requirement Name    | Organization Scope-Based Data Filtering                                                                                 |
+| Priority            | Critical                                                                                                                |
+| Description         | Sistem harus menyaring data yang ditampilkan pada dashboard berdasarkan organization scope pengguna, termasuk kemampuan melakukan drill-down maupun roll-up antar level organisasi (Holding, Sub Holding, Company, Business Unit, Branch, hingga Department). |
+| Acceptance Criteria | Pengguna dengan scope Business Unit tidak dapat melihat data milik Business Unit lain di luar hak aksesnya, kecuali diberikan otorisasi eksplisit. |
+| Business Value      | Konsistensi tata kelola data dan kepatuhan terhadap kebijakan akses organisasi.                                          |
+
+---
+
+## BR-759 – Real-Time KPI Widget Engine
+
+| Attribute           | Description                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-759                                                                                                                  |
+| Requirement Name    | Real-Time KPI Widget Engine                                                                                             |
+| Priority            | Critical                                                                                                                |
+| Description         | Sistem harus menyediakan widget KPI yang menampilkan indikator kinerja (misalnya penjualan, arus kas, tingkat persediaan, produktivitas) secara real-time atau near real-time sesuai interval refresh yang dapat dikonfigurasi. |
+| Acceptance Criteria | Widget KPI menampilkan nilai terkini sesuai interval refresh yang dikonfigurasi, dengan indikator waktu pembaruan data terakhir. |
+| Business Value      | Ketersediaan informasi kinerja yang selalu mutakhir bagi pengambil keputusan.                                            |
+
+---
+
+## BR-760 – Cross-Module Transaction Summary Widget
+
+| Attribute           | Description                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-760                                                                                                                  |
+| Requirement Name    | Cross-Module Transaction Summary Widget                                                                                 |
+| Priority            | High                                                                                                                    |
+| Description         | Sistem harus menyediakan widget ringkasan transaksi lintas modul (Finance, Procurement, Sales, Inventory, Project, HR, dan lainnya) dalam bentuk agregasi angka, grafik, maupun tabel ringkas pada satu tampilan dashboard. |
+| Acceptance Criteria | Widget ringkasan transaksi menampilkan data agregat dari minimal dua modul berbeda secara bersamaan dalam satu dashboard. |
+| Business Value      | Visibilitas menyeluruh atas aktivitas operasional lintas fungsi bisnis.                                                  |
+
+---
+
+## BR-761 – Approval Status Monitoring Widget
+
+| Attribute           | Description                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-761                                                                                                                  |
+| Requirement Name    | Approval Status Monitoring Widget                                                                                       |
+| Priority            | High                                                                                                                    |
+| Description         | Sistem harus menyediakan widget yang menampilkan status dokumen yang menunggu persetujuan, telah disetujui, maupun ditolak pada workflow approval yang menjadi tanggung jawab atau kepentingan pengguna. |
+| Acceptance Criteria | Widget menampilkan jumlah dan daftar dokumen pending approval sesuai role dan scope pengguna yang login.                 |
+| Business Value      | Percepatan tindak lanjut proses persetujuan dan pengurangan bottleneck operasional.                                      |
+
+---
+
+## BR-762 – Drill-Down Navigation to Source Detail
+
+| Attribute           | Description                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-762                                                                                                                  |
+| Requirement Name    | Drill-Down Navigation to Source Detail                                                                                  |
+| Priority            | High                                                                                                                    |
+| Description         | Sistem harus memungkinkan pengguna melakukan drill-down dari widget dashboard menuju data detail atau dokumen transaksi asal pada modul terkait, sesuai hak akses pengguna. |
+| Acceptance Criteria | Pengguna dapat mengklik elemen widget dan diarahkan ke halaman detail transaksi atau modul sumber data terkait.          |
+| Business Value      | Efisiensi investigasi dan validasi data tanpa berpindah aplikasi.                                                        |
+
+---
+
+## BR-763 – Dashboard Alert and Threshold Notification
+
+| Attribute           | Description                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-763                                                                                                                  |
+| Requirement Name    | Dashboard Alert and Threshold Notification                                                                              |
+| Priority            | Medium                                                                                                                  |
+| Description         | Sistem harus mampu memberikan notifikasi visual maupun sistem (in-app/email) apabila nilai KPI pada dashboard melampaui atau tidak memenuhi ambang batas (threshold) yang dikonfigurasi. |
+| Acceptance Criteria | Sistem menampilkan indikator visual (misalnya warna atau ikon peringatan) dan mengirimkan notifikasi ketika KPI melewati threshold yang ditentukan. |
+| Business Value      | Deteksi dini terhadap anomali atau penyimpangan kinerja organisasi.                                                      |
+
+---
+
+## BR-764 – Dashboard Export and Scheduled Distribution
+
+| Attribute           | Description                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-764                                                                                                                  |
+| Requirement Name    | Dashboard Export and Scheduled Distribution                                                                             |
+| Priority            | Medium                                                                                                                  |
+| Description         | Sistem harus menyediakan kemampuan mengekspor tampilan dashboard atau ringkasan laporan eksekutif ke format standar (PDF/Excel/Image) serta mendistribusikannya secara terjadwal kepada penerima yang ditentukan. |
+| Acceptance Criteria | Pengguna dapat mengekspor dashboard ke format PDF/Excel dan mengatur jadwal pengiriman otomatis kepada daftar penerima tertentu. |
+| Business Value      | Kemudahan pelaporan berkala kepada manajemen tanpa proses manual berulang.                                               |
+
+---
+
+## BR-765 – Dashboard Access and Usage Audit Trail
+
+| Attribute           | Description                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-765                                                                                                                  |
+| Requirement Name    | Dashboard Access and Usage Audit Trail                                                                                  |
+| Priority            | Medium                                                                                                                  |
+| Description         | Sistem harus mencatat riwayat akses, konfigurasi, dan ekspor data pada dashboard eksekutif untuk kepentingan audit dan tata kelola data. |
+| Acceptance Criteria | Setiap akses, perubahan konfigurasi widget, dan aktivitas ekspor dashboard tercatat pada audit log dengan informasi pengguna, waktu, dan aktivitas yang dilakukan. |
+| Business Value      | Transparansi dan akuntabilitas penggunaan informasi eksekutif.                                                           |
+
+---
+
+# 9.13.3 Dashboard Business Rules Reference
+
+| Business Rule ID | Description                                                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------- |
+| BRule-DASH-001    | Setiap widget dashboard hanya menampilkan data sesuai organization scope pengguna yang sedang login.            |
+| BRule-DASH-002    | Data KPI pada dashboard diperbarui secara real-time atau near real-time sesuai interval refresh yang dikonfigurasi. |
+| BRule-DASH-003    | Konfigurasi personalisasi dashboard (layout, widget, filter default) disimpan per pengguna dan tidak memengaruhi konfigurasi pengguna lain. |
+| BRule-DASH-004    | Widget dashboard hanya dapat menampilkan data dari modul yang menjadi hak akses (permission) pengguna terkait.  |
+| BRule-DASH-005    | Ambang batas (threshold) notifikasi dashboard dapat dikonfigurasi secara berbeda untuk setiap KPI dan organization scope. |
+| BRule-DASH-006    | Widget yang menampilkan data finansial harus menyajikan nilai dalam mata uang sesuai preferensi organization scope terkait. |
+| BRule-DASH-007    | Setiap akses, perubahan konfigurasi, dan ekspor data pada dashboard eksekutif wajib dicatat dalam audit trail.  |
+
+---
+
+# 9.13.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder        | Future Process                       |
+| --------------- | -------------------- | -------------------- | --------------------------------------- |
+| BR-756          | BO-013, BO-008        | SH-002, SH-014       | Dashboard & Executive Reporting          |
+| BR-757          | BO-013                | SH-007                | Dashboard Personalization                |
+| BR-758          | BO-013, BO-008        | SH-002                | Organization Scope Data Filtering        |
+| BR-759          | BO-008                | SH-002, SH-003        | Real-Time KPI Monitoring                 |
+| BR-760          | BO-008                | SH-007                | Cross-Module Reporting                   |
+| BR-761          | BO-012, BO-013        | SH-014                | Approval Monitoring                      |
+| BR-762          | BO-008                | SH-007                | Drill-Down Analysis                      |
+| BR-763          | BO-008                | SH-002                | KPI Threshold Alerting                   |
+| BR-764          | BO-013                | SH-002, SH-014        | Executive Report Distribution            |
+| BR-765          | BO-007, BO-028        | SH-010                | Dashboard Audit & Compliance             |
+
+---
+
+# 9.13.5 Summary
+
+Modul **Dashboard and Executive Reporting** berperan sebagai lapisan visualisasi terpadu yang menyajikan KPI, ringkasan transaksi, status approval, dan indikator kinerja lintas modul secara real-time, dipersonalisasi sesuai role dan organization scope pengguna. Seluruh requirement pada bagian ini menjadi dasar penyusunan Functional Requirements, desain widget dan layout dashboard, spesifikasi API agregasi data, serta skenario pengujian pada dokumen lanjutan.

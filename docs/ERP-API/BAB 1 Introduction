@@ -1,0 +1,80 @@
+# BAB 1. Introduction
+
+## 1.1 Purpose
+
+API Specification ini mendefinisikan **kontrak antarmuka** platform ERP: REST API sinkron dan *event* asinkron. Dokumen menerjemahkan kapabilitas fungsional (BRD) dan arsitektur integrasi (SAD BAB 5) menjadi kontrak yang dapat diimplementasikan, diuji, dan dikonsumsi oleh frontend (React 19 SPA), sistem pihak ketiga, serta antar-layanan.
+
+Tujuan:
+
+* Menetapkan **standar & konvensi API** yang seragam lintas seluruh layanan (BAB 2).
+* Mendefinisikan **kontrak REST** per domain (endpoint, skema request/response, aksi) — BAB 3–6.
+* Mendefinisikan **kontrak event** (Kafka) beserta tata kelola skema (Apicurio) — BAB 7.
+* Menjaga keterlacakan dari kebutuhan integrasi (INT-xxx) dan tabel data (DBDD) menuju kontrak API.
+
+Dokumen ini menjadi dasar penyusunan **kontrak OpenAPI/Protobuf final** dan implementasi *handler* pada layanan Go.
+
+## 1.2 Scope
+
+### In Scope
+
+* Kontrak REST publik/klien (via Kong) untuk domain inti (Platform, Financial, Operational, HR/Payroll).
+* Kontrak *event* asinkron (Kafka) & tata kelola skema (Apicurio).
+* Standar lintas API: autentikasi, versioning, error, pagination, idempotensi, rate limiting.
+
+### Out of Scope
+
+* Implementasi internal *handler*/logika bisnis (layanan Go) — mengacu SAD/BRD.
+* Struktur fisik basis data — pada **DBDD**.
+* Kontrak gRPC internal terperinci — hanya diikhtisarkan (BAB 8.5); detail pada Technical Design.
+* Konfigurasi Kong terperinci (plugin/route) — pada artefak Deployment/Operations (arsitekturnya di SAD BAB 5.9).
+
+## 1.3 Relationship to SAD, DBDD, and BRD
+
+```text
+BRD (BR-xxx, INT-xxx) ─► SAD (SVC-xxx, integrasi BAB 5) ─► DBDD (tabel)
+                                    │                          │
+                                    ▼                          ▼
+                        ►►  API SPECIFICATION (dokumen ini)  ◄◄
+                                    │
+                                    ▼
+              OpenAPI/Protobuf final + implementasi handler (Go) + klien (React 19 SPA)
+```
+
+| Sumber                   | Kontribusi ke API Spec                                        |
+| ------------------------ | ------------------------------------------------------------- |
+| BRD BAB 13 (INT-xxx)     | Kebutuhan integrasi & API Strategy (INT-013–016).             |
+| SAD BAB 5                | Pola sinkron/asinkron, Kong, Apicurio, EOS, Saga.             |
+| SAD BAB 4.5 (SVC-xxx)    | Kepemilikan API per layanan.                                  |
+| DBDD (tabel)             | Entitas yang menjadi *resource* & skema payload.              |
+
+## 1.4 API Landscape (Sync and Async)
+
+| Jenis        | Teknologi/Kanal              | Konsumen                          | Referensi        |
+| ------------ | ---------------------------- | ---------------------------------- | ---------------- |
+| REST (publik)| HTTPS via **Kong** + OpenAPI | Frontend Backoffice SPA (React 19), pihak ketiga | INT-013, ADR-003 |
+| gRPC (internal)| gRPC/Protobuf              | Antar-layanan (query sinkron)      | ADR-007 (BAB 8.5)|
+| Event (async)| **Apache Kafka** + Apicurio  | Antar-layanan (loose coupling)     | INT-004, ADR-005 |
+
+REST digunakan untuk interaksi klien & integrasi eksternal; gRPC untuk panggilan internal berlatensi rendah; event untuk integrasi antar-modul (BAB 7).
+
+## 1.5 Identifier and Notation Conventions
+
+| Notasi           | Makna                                                              |
+| ---------------- | ------------------------------------------------------------------ |
+| API-xxx          | Identitas *resource* API (katalog pada BAB 8.2).                   |
+| `METHOD /path`   | Operasi REST (mis. `POST /journal-entries`).                       |
+| `{id}`           | Path parameter.                                                    |
+| Topic `erp.…`    | Nama *event* Kafka (BAB 7.3).                                      |
+| INT-xxx / BR-xxx | Referensi silang ke BRD.                                           |
+| `db.table`       | Referensi tabel DBDD.                                              |
+
+Base path REST: `/{version}/{resource}` di belakang Kong (BAB 2.2).
+
+## 1.6 How to Read This Document
+
+* **BAB 2** wajib dibaca lebih dulu — memuat standar yang berlaku untuk seluruh endpoint (auth, versioning, error, pagination, idempotensi) sehingga tidak diulang per endpoint.
+* **BAB 3–6** memuat kontrak REST per domain; setiap *resource* mengasumsikan **Standard Resource Operations** (BAB 2.6) kecuali dinyatakan lain, dan hanya merinci skema kunci & aksi domain.
+* **BAB 7** memuat katalog *event* asinkron.
+* **BAB 8** memuat katalog *resource* (API-xxx), traceability, katalog kode error, dan lampiran OpenAPI.
+
+---

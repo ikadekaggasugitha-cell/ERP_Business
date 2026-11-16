@@ -1,0 +1,25 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc", "s4"],
+  description: "SAP Sales Order Header staging view with CDC deduplication"
+}
+
+SELECT
+  MANDT AS mandt,
+  VBELN AS sales_order_number,
+  ERDAT AS order_date,
+  AUART AS order_type,
+  VBTYP AS document_category,
+  VKORG AS sales_org,
+  VTWEG AS distribution_channel,
+  SPART AS division,
+  KUNNR AS customer_number,
+  NETWR AS net_value,
+  WAERS AS currency_key,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "vbak")}
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY MANDT, VBELN
+  ORDER BY recordstamp DESC
+) = 1

@@ -1,0 +1,175 @@
+# 9.5.17 Financial Analytics Requirements
+
+---
+
+# 9.5.17.1 Overview
+
+Financial Analytics merupakan kapabilitas lanjutan dalam domain Financial Management yang menyediakan analisis rasio keuangan, tren historis, analisis varians, serta business intelligence keuangan untuk mendukung pengambilan keputusan manajemen dan eksekutif secara cepat dan berbasis data.
+
+Financial Analytics tidak menggantikan Financial Reporting maupun Financial Consolidation, melainkan memanfaatkan data dari General Ledger, Budget Management, Chart of Accounts, Cost Center, Profit Center, serta Financial Consolidation sebagai sumber data untuk menghasilkan wawasan (insight) yang lebih mendalam dan kontekstual.
+
+Sejalan dengan prinsip Configuration over Customization dan Organization Tree First, seluruh formula rasio, dimensi analisis, ambang batas (threshold), dan tampilan dashboard harus dapat dikonfigurasi sesuai kebutuhan setiap Holding, Sub Holding, Company, Business Unit, hingga level organisasi terkecil, tanpa memerlukan perubahan source code. Analisis dapat dilakukan pada satu entitas maupun secara agregat lintas entitas sesuai scope akses pengguna.
+
+---
+
+# 9.5.17.2 Business Requirement Catalogue
+
+## BR-686 – Financial Ratio Analysis Engine
+
+| Attribute           | Description                                                                                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-686                                                                                                                                                                                          |
+| Requirement Name    | Financial Ratio Analysis Engine                                                                                                                                                                 |
+| Category            | Financial Analytics                                                                                                                                                                             |
+| Priority            | Critical                                                                                                                                                                                        |
+| Business Objective  | BO-008, BO-031                                                                                                                                                                                  |
+| Stakeholder Owner   | SH-003 (CFO), SH-002 (CEO)                                                                                                                                                                      |
+| Description         | Sistem harus menyediakan mesin analisis rasio keuangan (liquidity, solvency, profitability, activity/efficiency ratio) yang dapat dihitung otomatis dari data General Ledger dan Financial Consolidation, dengan formula yang dapat dikonfigurasi per organisasi. |
+| Business Rationale  | Manajemen dan eksekutif memerlukan indikator kesehatan keuangan yang terstandardisasi namun tetap fleksibel terhadap karakteristik masing-masing entitas usaha dalam grup.                     |
+| Business Value      | Mempercepat evaluasi kinerja keuangan, mendukung keputusan strategis berbasis data real-time, dan mengurangi ketergantungan pada perhitungan manual yang rawan kesalahan.                       |
+| Acceptance Criteria | Pengguna dapat memilih Financial Organization/scope, menghasilkan perhitungan rasio keuangan standar secara otomatis, serta menambah atau mengubah formula rasio melalui konfigurasi tanpa perubahan source code. |
+
+---
+
+## BR-687 – Historical Trend Analysis
+
+| Attribute        | Description                                                                                                                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-687                                                                                                                                                          |
+| Requirement Name  | Historical Trend Analysis                                                                                                                                       |
+| Priority          | Critical                                                                                                                                                        |
+| Description       | Sistem harus mampu menyajikan tren historis atas akun, rasio, dan indikator keuangan lain sepanjang beberapa periode fiskal (bulanan, kuartalan, tahunan) secara komparatif, termasuk pola musiman (seasonality) apabila relevan. |
+| Business Value    | Membantu manajemen mengidentifikasi pola pertumbuhan, penurunan, atau anomali kinerja keuangan dari waktu ke waktu untuk mendukung perencanaan jangka panjang.  |
+
+---
+
+## BR-688 – Variance Analysis (Budget vs Actual & Period-over-Period)
+
+| Attribute        | Description                                                                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-688                                                                                                                                                              |
+| Requirement Name  | Variance Analysis (Budget vs Actual & Period-over-Period)                                                                                                          |
+| Priority          | Critical                                                                                                                                                            |
+| Description       | Sistem harus menyediakan analisis varians antara anggaran dan realisasi (budget vs actual), serta antar periode (period-over-period dan year-over-year), lengkap dengan persentase deviasi dan indikator signifikansi yang dapat dikonfigurasi. |
+| Acceptance Criteria | Sistem menampilkan nilai varians, persentase varians, serta highlight otomatis pada varians yang melampaui threshold yang dikonfigurasi per Cost Center/Profit Center. |
+
+---
+
+## BR-689 – Financial Dashboard & KPI Visualization
+
+| Attribute        | Description                                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-689                                                                                                                                                        |
+| Requirement Name  | Financial Dashboard & KPI Visualization                                                                                                                       |
+| Priority          | High                                                                                                                                                          |
+| Description       | Sistem harus menyediakan dashboard keuangan yang dapat dikonfigurasi (configurable widget, layout, dan Key Performance Indicator) untuk kebutuhan eksekutif, CFO, dan manajemen keuangan pada berbagai level organisasi. |
+| Business Value    | Memberikan gambaran kinerja keuangan secara ringkas dan visual sehingga mempercepat pengambilan keputusan tanpa perlu membuka laporan detail.                  |
+
+---
+
+## BR-690 – Drill-Down & Multi-Dimensional Analysis
+
+| Attribute        | Description                                                                                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-690                                                                                                                                                    |
+| Requirement Name  | Drill-Down & Multi-Dimensional Analysis                                                                                                                   |
+| Priority          | Critical                                                                                                                                                  |
+| Description       | Sistem harus memungkinkan pengguna melakukan drill-down dari indikator ringkas menuju rincian transaksi, serta menganalisis data secara multi-dimensi (dimensi organisasi, akun, cost center, profit center, proyek, dan periode). |
+| Acceptance Criteria | Pengguna dapat melakukan drill-down dari nilai rasio/KPI hingga ke tingkat jurnal transaksi tanpa keluar dari modul analitik.                              |
+
+---
+
+## BR-691 – Comparative Analysis Across Organization Scope
+
+| Attribute        | Description                                                                                                                                                        |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-691                                                                                                                                                            |
+| Requirement Name  | Comparative Analysis Across Organization Scope                                                                                                                    |
+| Priority          | High                                                                                                                                                              |
+| Description       | Sistem harus mendukung analisis komparatif antar entitas dalam struktur organisasi (Company vs Company, Business Unit vs Business Unit) sesuai hak akses dan scope pengguna, termasuk normalisasi mata uang pelaporan. |
+| Business Value    | Memudahkan benchmarking kinerja keuangan antar entitas dalam grup untuk mendukung evaluasi manajemen dan alokasi sumber daya.                                    |
+
+---
+
+## BR-692 – What-If & Scenario Simulation
+
+| Attribute        | Description                                                                                                                                       |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-692                                                                                                                                          |
+| Requirement Name  | What-If & Scenario Simulation                                                                                                                   |
+| Priority          | Medium                                                                                                                                          |
+| Description       | Sistem harus menyediakan kemampuan simulasi skenario (what-if analysis) yang memungkinkan pengguna mengubah asumsi (misalnya pertumbuhan pendapatan, biaya operasional, kurs mata uang) untuk melihat dampak proyeksi terhadap indikator keuangan tanpa mengubah data aktual. |
+| Business Value    | Mendukung perencanaan strategis dan mitigasi risiko dengan memahami dampak berbagai skenario sebelum keputusan diambil.                         |
+
+---
+
+## BR-693 – Predictive Analytics & Forecasting Support
+
+| Attribute        | Description                                                                                                                                              |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-693                                                                                                                                                  |
+| Requirement Name  | Predictive Analytics & Forecasting Support                                                                                                              |
+| Priority          | Medium                                                                                                                                                  |
+| Description       | Sistem harus menyediakan dukungan analitik prediktif berbasis data historis (misalnya proyeksi arus kas, tren pendapatan) sebagai bahan masukan proses forecasting dan budgeting. |
+| Acceptance Criteria | Sistem dapat menghasilkan proyeksi tren berdasarkan data historis minimal dengan metode statistik dasar (moving average/regresi linear) yang dapat dikonfigurasi. |
+
+---
+
+## BR-694 – Custom Analytical Report Builder
+
+| Attribute        | Description                                                                                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID    | BR-694                                                                                                                                                  |
+| Requirement Name  | Custom Analytical Report Builder                                                                                                                        |
+| Priority          | High                                                                                                                                                     |
+| Description       | Sistem harus menyediakan builder analitik yang memungkinkan pengguna menyusun laporan analisis kustom (kombinasi rasio, tren, varians, dan dimensi lain) tanpa memerlukan bantuan tim development. |
+| Business Value    | Memberikan fleksibilitas kepada Finance Department untuk merancang analisis sesuai kebutuhan spesifik tanpa menambah beban permintaan customization ke tim teknis. |
+
+---
+
+## BR-695 – Analytics Data Export & BI Tool Integration
+
+| Attribute        | Description                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID    | BR-695                                                                                                                                                          |
+| Requirement Name  | Analytics Data Export & BI Tool Integration                                                                                                                     |
+| Priority          | High                                                                                                                                                            |
+| Description       | Sistem harus menyediakan mekanisme ekspor data analitik (format standar seperti Excel, CSV, PDF) serta integrasi API dengan alat Business Intelligence eksternal untuk kebutuhan analisis lanjutan. |
+| Acceptance Criteria | Pengguna dapat mengekspor hasil analisis rasio, tren, dan varians ke format standar, serta data analitik dapat diakses melalui API oleh sistem BI eksternal sesuai hak akses. |
+
+---
+
+# 9.5.17.3 Financial Analytics Business Rules
+
+| Business Rule ID | Description                                                                                                                        |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-FAN-001     | Perhitungan rasio dan indikator analitik menggunakan data periode yang telah di-*closing* sebagai baseline resmi, dengan opsi data real-time yang ditandai sebagai unaudited sesuai konfigurasi. |
+| BRule-FAN-002     | Seluruh analisis (rasio, tren, varians, komparasi) tunduk pada Scope-Based Access Control sesuai posisi organisasi pengguna pada Organization Tree.                                              |
+| BRule-FAN-003     | Data lintas mata uang dikonversi ke mata uang pelaporan menggunakan kurs periode berjalan atau kurs historis sesuai kebijakan konsolidasi yang berlaku pada entitas terkait.                    |
+| BRule-FAN-004     | Formula rasio, threshold varians, dan definisi KPI dapat dikonfigurasi per Financial Organization/industri tanpa mengubah source code aplikasi.                                                 |
+| BRule-FAN-005     | Perubahan formula atau threshold analitik yang telah digunakan pada pelaporan resmi harus melalui approval workflow dan tercatat pada audit trail.                                              |
+| BRule-FAN-006     | Data historis untuk keperluan tren dan analisis prediktif harus tersedia minimal sesuai periode retensi data yang dikonfigurasi oleh organisasi.                                                |
+| BRule-FAN-007     | Simulasi what-if dan hasil forecasting bersifat non-posting dan tidak memengaruhi data transaksi maupun saldo akun aktual.                                                                      |
+
+---
+
+# 9.5.17.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder    | Future Process                        |
+| -------------- | ------------------- | -------------- | -------------------------------------- |
+| BR-686         | BO-008, BO-031      | SH-003, SH-002 | Financial Ratio Analysis               |
+| BR-687         | BO-008, BO-031      | SH-003         | Historical Trend Analysis              |
+| BR-688         | BO-031               | SH-003, SH-027 | Budget vs Actual Variance Review       |
+| BR-689         | BO-008               | SH-002, SH-003 | Executive Financial Dashboard          |
+| BR-690         | BO-008               | SH-003, SH-028 | Multi-Dimensional Financial Drill-Down |
+| BR-691         | BO-031               | SH-002, SH-003 | Cross-Entity Performance Benchmarking  |
+| BR-692         | BO-031               | SH-003, SH-002 | Financial Scenario Simulation          |
+| BR-693         | BO-008, BO-031      | SH-003         | Financial Forecasting Support          |
+| BR-694         | BO-031               | SH-027, SH-003 | Custom Financial Analysis Design       |
+| BR-695         | BO-008               | SH-003, SH-006 | Financial Data Export & BI Integration |
+
+---
+
+# 9.5.17.5 Summary
+
+Financial Analytics Requirements melengkapi domain Financial Management dengan kapabilitas analisis lanjutan yang mengubah data keuangan mentah menjadi wawasan strategis melalui rasio keuangan, tren historis, analisis varians, simulasi skenario, dan integrasi Business Intelligence. Seluruh requirement pada bagian ini dirancang agar sepenuhnya configurable, selaras dengan struktur Organization Tree dan Scope-Based Access Control, sehingga dapat mendukung kebutuhan analisis baik pada level entitas tunggal maupun konsolidasi grup tanpa memerlukan perubahan source code.

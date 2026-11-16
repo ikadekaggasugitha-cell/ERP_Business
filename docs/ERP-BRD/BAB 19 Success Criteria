@@ -1,0 +1,185 @@
+# BAB 19. Success Criteria
+
+## 19.1 Overview
+
+Bab ini mendefinisikan kriteria keberhasilan (*Success Criteria*) proyek dan keberhasilan operasional implementasi Enterprise Resource Planning (ERP) secara konkret dan terukur. Apabila BAB 4 Business Objective menetapkan **apa** yang ingin dicapai organisasi melalui implementasi ERP, maka bab ini menetapkan **bagaimana** pencapaian tersebut diukur, kapan diukur, dan target angka yang harus dipenuhi.
+
+Setiap Success Criteria diberikan **Success Criteria ID (SC-xxx)** yang bersifat unik dan dapat ditelusuri (*traceable*) terhadap Business Objective (BO-xxx) pada BAB 4, Non-Functional Requirement (NFR) pada BAB 12, maupun Business Requirement (BR-xxx) yang relevan. Keterlacakan ini memastikan bahwa kriteria keberhasilan bukan merupakan target yang berdiri sendiri, melainkan konsekuensi terukur dari tujuan bisnis dan kebutuhan yang telah disepakati.
+
+Success Criteria pada bab ini dikelompokkan menjadi tiga kategori:
+
+1. **Business Success Metrics** — mengukur pencapaian nilai bisnis dari sisi organisasi dan proses bisnis.
+2. **Project Success Metrics** — mengukur keberhasilan pelaksanaan proyek implementasi ERP itu sendiri.
+3. **Operational Success Metrics** — mengukur keberhasilan sistem ERP setelah go-live dari sisi operasional harian.
+
+Total terdapat **9 (sembilan) Success Criteria (SC-001 s.d. SC-009)**, masing-masing 3 (tiga) item per kategori.
+
+---
+
+## 19.2 Business Success Metrics
+
+Business Success Metrics mengukur sejauh mana implementasi ERP memberikan dampak nyata terhadap tujuan bisnis strategis organisasi, khususnya terkait konsolidasi platform, efisiensi proses keuangan, dan kualitas data.
+
+### SC-001 – Adopsi Platform ERP Tunggal Lintas Organisasi
+
+| Attribute | Description |
+| --- | --- |
+| Success Criteria ID | SC-001 |
+| Name | Adopsi Platform ERP Tunggal Lintas Organisasi |
+| Category | Business Success Metrics |
+| Description | Seluruh entitas organisasi (Holding, Sub Holding, Company, Business Unit, Branch, dan level organisasi lainnya) telah menggunakan satu platform ERP yang sama untuk menjalankan proses bisnis inti, tanpa lagi bergantung pada aplikasi legacy atau proses manual paralel. |
+| Target/Metric | 100% entitas organisasi in-scope telah onboarding dan aktif menggunakan platform ERP dalam **12 bulan** sejak tanggal go-live. |
+| Related Business Objective | BO-001 (Platform ERP terintegrasi) |
+
+---
+
+### SC-002 – Percepatan Konsolidasi Laporan Keuangan Lintas Perusahaan
+
+| Attribute | Description |
+| --- | --- |
+| Success Criteria ID | SC-002 |
+| Name | Percepatan Konsolidasi Laporan Keuangan Lintas Perusahaan |
+| Category | Business Success Metrics |
+| Description | Proses konsolidasi laporan keuangan dari seluruh entitas anak perusahaan ke laporan konsolidasi grup dapat dilakukan secara lebih cepat karena data keuangan tersedia secara real-time dalam satu platform. |
+| Target/Metric | Waktu konsolidasi laporan keuangan berkurang dari **15 hari kerja** (kondisi as-is) menjadi maksimal **3 hari kerja** (kondisi to-be) setelah seluruh entitas menggunakan ERP. |
+| Related Business Objective | BO-020 (Konsolidasi laporan keuangan lintas perusahaan) |
+
+---
+
+### SC-003 – Pengurangan Duplikasi Master Data
+
+| Attribute | Description |
+| --- | --- |
+| Success Criteria ID | SC-003 |
+| Name | Pengurangan Duplikasi Master Data |
+| Category | Business Success Metrics |
+| Description | Master Data (antara lain Chart of Account, Customer, Vendor, Item, dan Employee) dikelola secara terpusat sehingga duplikasi entri data antar perusahaan dan antar modul dapat ditekan seminimal mungkin. |
+| Target/Metric | Duplikasi Master Data berkurang sebesar minimal **95%** dibandingkan kondisi as-is, diverifikasi melalui data quality audit pasca go-live. |
+| Related Business Objective | BO-004 (Single Source of Truth) |
+
+---
+
+## 19.3 Project Success Metrics
+
+Project Success Metrics mengukur keberhasilan pelaksanaan proyek implementasi ERP dari sisi manajemen proyek, yaitu kesesuaian waktu, biaya, kualitas hasil pengujian, dan stabilitas sistem pada saat go-live.
+
+### SC-004 – Kesesuaian Timeline dan Budget Proyek
+
+| Attribute | Description |
+| --- | --- |
+| Success Criteria ID | SC-004 |
+| Name | Kesesuaian Timeline dan Budget Proyek |
+| Category | Project Success Metrics |
+| Description | Proyek implementasi ERP diselesaikan sesuai dengan timeline dan budget yang telah disetujui dalam project charter, termasuk seluruh fase perencanaan, konfigurasi, pengujian, migrasi data, dan go-live. |
+| Target/Metric | Deviasi timeline maksimal **±10%** dari jadwal yang disetujui dan deviasi budget maksimal **±10%** dari anggaran yang disetujui, tanpa perubahan scope yang tidak disetujui oleh Steering Committee. |
+| Related Business Objective | BO-023 (Efisiensi biaya operasional), BO-029 (Efisiensi operasional) |
+
+---
+
+### SC-005 – Kelulusan User Acceptance Test (UAT)
+
+| Attribute | Description |
+| --- | --- |
+| Success Criteria ID | SC-005 |
+| Name | Kelulusan User Acceptance Test (UAT) |
+| Category | Project Success Metrics |
+| Description | Seluruh modul yang berada dalam ruang lingkup (in-scope) proyek telah diuji oleh pengguna bisnis (business user) melalui UAT dan dinyatakan lulus sesuai skenario dan kriteria penerimaan yang disepakati. |
+| Target/Metric | Minimal **100%** skenario UAT kritikal (critical scenario) dan minimal **95%** skenario UAT keseluruhan dinyatakan **Pass**, dengan sign-off tertulis dari Business Owner setiap modul. |
+| Related Business Objective | BO-003 (Integrasi seluruh proses bisnis) |
+
+---
+
+### SC-006 – Stabilitas Sistem pada Saat Go-Live
+
+| Attribute | Description |
+| --- | --- |
+| Success Criteria ID | SC-006 |
+| Name | Stabilitas Sistem pada Saat Go-Live |
+| Category | Project Success Metrics |
+| Description | Sistem ERP berjalan stabil pada periode go-live dan hypercare tanpa ditemukan cacat (defect) yang mengganggu proses bisnis kritikal atau mengakibatkan kehilangan/kerusakan data. |
+| Target/Metric | **Nol (0) critical defect** pada masa go-live dan periode hypercare (H+30), dengan seluruh major defect ditutup (resolved) dalam waktu maksimal **5 hari kerja**. |
+| Related Business Objective | BO-028 (Keamanan, audit trail, dan integritas data) |
+
+---
+
+## 19.4 Operational Success Metrics
+
+Operational Success Metrics mengukur keberhasilan sistem ERP setelah go-live dari sisi operasional harian, mencakup ketersediaan sistem, performa transaksi, dan tingkat adopsi pengguna terhadap sistem baru.
+
+### SC-007 – Ketersediaan Sistem (Uptime) Sesuai SLA
+
+| Attribute | Description |
+| --- | --- |
+| Success Criteria ID | SC-007 |
+| Name | Ketersediaan Sistem (Uptime) Sesuai SLA |
+| Category | Operational Success Metrics |
+| Description | Sistem ERP tersedia dan dapat diakses oleh pengguna sesuai dengan Service Level Agreement (SLA) yang disepakati, di luar jadwal maintenance yang telah dikomunikasikan. |
+| Target/Metric | Uptime sistem minimal **99,5%** per bulan, diukur melalui monitoring infrastruktur dan application performance monitoring (APM). |
+| Related Business Objective | BO-007 (Tata kelola dan transparansi organisasi); cross-ref BAB 12 NFR Availability |
+
+---
+
+### SC-008 – Waktu Respon Transaksi Sesuai Target Performa
+
+| Attribute | Description |
+| --- | --- |
+| Success Criteria ID | SC-008 |
+| Name | Waktu Respon Transaksi Sesuai Target Performa |
+| Category | Operational Success Metrics |
+| Description | Transaksi utama pada modul ERP (antara lain input transaksi, approval workflow, pencarian data, dan generate laporan standar) diproses dalam waktu respon yang memenuhi target performa yang ditetapkan. |
+| Target/Metric | **95%** transaksi standar selesai diproses dalam waktu respon maksimal **3 detik**, dan laporan standar tergenerate maksimal **10 detik** pada kondisi beban normal. |
+| Related Business Objective | BO-030 (Pengurangan waktu pemrosesan transaksi bisnis); cross-ref BAB 12 NFR Performance |
+
+---
+
+### SC-009 – Tingkat Adopsi Pengguna (User Adoption Rate)
+
+| Attribute | Description |
+| --- | --- |
+| Success Criteria ID | SC-009 |
+| Name | Tingkat Adopsi Pengguna (User Adoption Rate) |
+| Category | Operational Success Metrics |
+| Description | Pengguna terdaftar (registered user) secara aktif menggunakan sistem ERP untuk menjalankan tugas dan tanggung jawab kesehariannya, menggantikan proses manual atau sistem legacy sebelumnya. |
+| Target/Metric | Minimal **85%** user aktif (active login dan menyelesaikan minimal satu transaksi) dari total pengguna terdaftar dalam **3 bulan** sejak tanggal go-live. |
+| Related Business Objective | BO-034 (Kepuasan pengguna melalui sistem yang terintegrasi) |
+
+---
+
+## 19.5 Success Criteria Traceability
+
+Tabel berikut menunjukkan keterlacakan setiap Success Criteria terhadap Business Objective, NFR/Business Requirement terkait, metode pengukuran, dan target yang harus dipenuhi.
+
+| SC ID | Related Business Objective | Related NFR/BR | Measurement Method | Target |
+| --- | --- | --- | --- | --- |
+| SC-001 | BO-001 | BR-001 – BR-020 | Rekapitulasi status onboarding organisasi pada Organization Management module | 100% entitas aktif dalam 12 bulan sejak go-live |
+| SC-002 | BO-020 | BR-121 – BR-160 (Financial Consolidation) | Pengukuran waktu proses closing dan konsolidasi laporan keuangan grup | Dari 15 hari kerja menjadi maksimal 3 hari kerja |
+| SC-003 | BO-004 | BR-121 – BR-160 (Master Data Management) | Data quality audit terhadap Master Data lintas perusahaan | Pengurangan duplikasi minimal 95% |
+| SC-004 | BO-023, BO-029 | Project Charter, Project Plan | Monitoring realisasi timeline dan budget oleh PMO | Deviasi maksimal ±10% |
+| SC-005 | BO-003 | Seluruh FR-xxx in-scope | Rekapitulasi hasil eksekusi test case UAT (TC-xxx) | Minimal 95% Pass, 100% untuk skenario kritikal |
+| SC-006 | BO-028 | NFR Security & Data Integrity (BAB 12) | Defect log dan incident report selama hypercare | 0 critical defect, major defect closed ≤ 5 hari |
+| SC-007 | BO-007 | NFR Availability (BAB 12) | System monitoring dan Application Performance Monitoring (APM) | Uptime minimal 99,5% per bulan |
+| SC-008 | BO-030 | NFR Performance (BAB 12) | Load testing dan performance monitoring produksi | 95% transaksi ≤ 3 detik, laporan standar ≤ 10 detik |
+| SC-009 | BO-034 | BR terkait User Management | Laporan analitik penggunaan sistem (usage analytics/login log) | Minimal 85% active user dalam 3 bulan |
+
+---
+
+## 19.6 Measurement Approach
+
+Pendekatan pengukuran Success Criteria dilaksanakan dengan prinsip sebagai berikut:
+
+- Setiap Success Criteria (SC-xxx) diukur secara berkala menggunakan metode pengukuran yang telah ditetapkan pada BAB 19.5, dengan pemilik pengukuran (metric owner) yang jelas untuk setiap SC.
+- Pengukuran dikoordinasikan dan dipantau oleh **Project Management Office (PMO)**, yang bertanggung jawab mengumpulkan data, memvalidasi keakuratan angka, dan mendokumentasikan hasil pengukuran.
+- Hasil pengukuran dilaporkan secara berkala kepada **Steering Committee** dalam bentuk laporan status proyek maupun laporan operasional pasca go-live, sebagai dasar pengambilan keputusan dan eskalasi jika target tidak tercapai.
+- Success Criteria direview pada setiap **milestone proyek** (antara lain akhir fase Blueprint, akhir fase UAT, saat go-live, dan setiap akhir periode hypercare), untuk memastikan target tetap relevan dan dapat dicapai sesuai kondisi aktual proyek.
+- Apabila terdapat Success Criteria yang tidak tercapai pada suatu periode pengukuran, PMO wajib menyusun akar masalah (root cause) dan rencana tindak lanjut (corrective action plan) yang disetujui oleh Steering Committee.
+- Seluruh data pengukuran didokumentasikan dan disimpan sebagai bagian dari project record untuk keperluan audit dan evaluasi pasca implementasi (post-implementation review).
+
+---
+
+## 19.7 Summary
+
+Bab ini menetapkan **9 (sembilan) Success Criteria (SC-001 s.d. SC-009)** yang menjadi ukuran konkret keberhasilan implementasi ERP, terbagi ke dalam tiga kategori: Business Success Metrics (SC-001–SC-003), Project Success Metrics (SC-004–SC-006), dan Operational Success Metrics (SC-007–SC-009).
+
+Success Criteria pada bab ini melengkapi Business Objective yang telah didefinisikan pada BAB 4, dengan menerjemahkan tujuan bisnis yang bersifat strategis menjadi target yang terukur, memiliki metode pengukuran yang jelas, serta dapat ditelusuri terhadap Business Objective, Business Requirement, dan Non-Functional Requirement terkait.
+
+Dengan adanya kriteria keberhasilan yang terdefinisi secara jelas, seluruh pemangku kepentingan — mulai dari Steering Committee, PMO, tim implementasi, hingga business user — memiliki acuan yang sama dalam menilai apakah proyek dan operasional ERP telah mencapai keberhasilan yang diharapkan, baik pada saat go-live maupun pada periode operasional berikutnya.

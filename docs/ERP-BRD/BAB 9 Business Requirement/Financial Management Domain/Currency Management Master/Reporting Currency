@@ -1,0 +1,209 @@
+# 9.5.3.16 Reporting Currency Requirements
+
+---
+
+# 9.5.3.16.1 Overview
+
+Reporting Currency merupakan mata uang yang digunakan untuk menyajikan laporan keuangan kepada manajemen, regulator, investor, maupun pemangku kepentingan lainnya. Reporting Currency dapat sama dengan Functional Currency atau berbeda sesuai kebutuhan bisnis, regulasi, maupun struktur grup perusahaan.
+
+ERP harus mendukung satu atau lebih Reporting Currency untuk setiap Legal Entity, Ledger, atau Financial Book. Pengelolaan Reporting Currency harus dilakukan sebagai objek bisnis yang mendukung *effective dating*, *versioning*, *approval workflow*, serta *audit trail* sehingga perubahan konfigurasi dapat dikelola tanpa memengaruhi data historis.
+
+---
+
+# 9.5.3.16.2 Business Capability
+
+Reporting Currency menyediakan kapabilitas berikut:
+
+* Reporting Currency Assignment.
+* Multiple Reporting Currency.
+* Assignment berdasarkan Legal Entity.
+* Assignment berdasarkan Ledger.
+* Assignment berdasarkan Financial Book.
+* Assignment berdasarkan Consolidation Group.
+* Effective dating.
+* Versioning.
+* Approval workflow.
+* Integrasi dengan Currency Translation.
+* Integrasi dengan Financial Reporting.
+* Audit trail.
+
+---
+
+# 9.5.3.16.3 Business Requirement Catalogue
+
+## BR-231 – Reporting Currency Master
+
+| Attribute           | Description                                                                                                                        |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-231                                                                                                                             |
+| Requirement Name    | Reporting Currency Master                                                                                                          |
+| Category            | Reporting Currency                                                                                                                 |
+| Priority            | Critical                                                                                                                           |
+| Business Objective  | BO-009                                                                                                                             |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                                   |
+| Description         | Sistem harus menyediakan konfigurasi Reporting Currency sebagai objek bisnis yang dikelola secara independen dari Currency Master. |
+| Business Value      | Memungkinkan penyajian laporan keuangan dalam satu atau lebih mata uang tanpa mengubah transaksi sumber.                           |
+| Acceptance Criteria | Administrator dapat mengelola penetapan Reporting Currency sesuai kewenangan.                                                      |
+
+---
+
+## BR-232 – Multiple Reporting Currency
+
+| Attribute        | Description                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-232                                                                                                                                                 |
+| Requirement Name | Multiple Reporting Currency                                                                                                                            |
+| Priority         | Critical                                                                                                                                               |
+| Description      | Sistem harus mendukung lebih dari satu Reporting Currency untuk setiap Legal Entity, Ledger, atau Financial Book sesuai kebutuhan bisnis dan regulasi. |
+
+---
+
+## BR-233 – Organizational Assignment
+
+| Attribute        | Description                                                                                                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-233                                                                                                                                                                |
+| Requirement Name | Reporting Currency Organizational Assignment                                                                                                                          |
+| Priority         | High                                                                                                                                                                  |
+| Description      | Reporting Currency harus dapat ditetapkan berdasarkan Holding, Sub Holding, Legal Entity, Financial Organization, Ledger, Financial Book, maupun Consolidation Group. |
+
+---
+
+## BR-234 – Effective Dating
+
+| Attribute        | Description                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-234                                                                                                                                |
+| Requirement Name | Reporting Currency Effective Dating                                                                                                   |
+| Priority         | High                                                                                                                                  |
+| Description      | Setiap penetapan Reporting Currency harus memiliki periode berlaku sehingga perubahan konfigurasi tidak memengaruhi laporan historis. |
+
+---
+
+## BR-235 – Version Management
+
+| Attribute        | Description                                                                               |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-235                                                                                    |
+| Requirement Name | Reporting Currency Versioning                                                             |
+| Priority         | High                                                                                      |
+| Description      | Sistem harus menyimpan histori perubahan Reporting Currency melalui mekanisme versioning. |
+
+---
+
+## BR-236 – Financial Reporting Integration
+
+| Attribute        | Description                                                                                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-236                                                                                                                                                         |
+| Requirement Name | Financial Reporting Integration                                                                                                                                |
+| Priority         | Critical                                                                                                                                                       |
+| Description      | Reporting Currency harus digunakan sebagai referensi utama dalam Financial Reporting, Management Reporting, Regulatory Reporting, dan Financial Consolidation. |
+
+---
+
+## BR-237 – Translation Integration
+
+| Attribute        | Description                                                                                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-237                                                                                                                                                |
+| Requirement Name | Currency Translation Integration                                                                                                                      |
+| Priority         | Critical                                                                                                                                              |
+| Description      | Sistem harus menghasilkan Reporting Currency melalui proses Currency Translation sesuai Translation Rule dan Currency Conversion Policy yang berlaku. |
+
+---
+
+## BR-238 – Approval Workflow
+
+| Attribute        | Description                                                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-238                                                                                                                            |
+| Requirement Name | Reporting Currency Approval Workflow                                                                                              |
+| Priority         | Critical                                                                                                                          |
+| Description      | Penambahan, perubahan, maupun penghentian penggunaan Reporting Currency harus melalui proses persetujuan sebelum berlaku efektif. |
+
+---
+
+## BR-239 – Dependency Validation
+
+| Attribute        | Description                                                                                                                                                                                          |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-239                                                                                                                                                                                               |
+| Requirement Name | Dependency Validation                                                                                                                                                                                |
+| Priority         | Critical                                                                                                                                                                                             |
+| Description      | Sistem harus mencegah perubahan atau penghapusan Reporting Currency yang masih digunakan oleh Ledger, Financial Book, laporan yang telah dipublikasikan, atau proses konsolidasi yang belum selesai. |
+
+---
+
+## BR-240 – Reporting Currency Auditability
+
+| Attribute        | Description                                                                                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-240                                                                                                                                                |
+| Requirement Name | Reporting Currency Auditability                                                                                                                       |
+| Priority         | Critical                                                                                                                                              |
+| Description      | Seluruh aktivitas konfigurasi, persetujuan, aktivasi, penonaktifan, dan penggunaan Reporting Currency harus dicatat secara lengkap dalam Audit Trail. |
+
+---
+
+# 9.5.3.16.4 Business Rules
+
+| Business Rule ID | Description                                                                                                                                         |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-RC-001     | Reporting Currency harus berasal dari Currency Master yang berstatus Active.                                                                        |
+| BRule-RC-002     | Satu Legal Entity dapat memiliki satu atau lebih Reporting Currency yang aktif secara bersamaan.                                                    |
+| BRule-RC-003     | Reporting Currency tidak boleh digunakan sebagai dasar pencatatan transaksi operasional; pencatatan dilakukan menggunakan Functional Currency.      |
+| BRule-RC-004     | Nilai dalam Reporting Currency harus dihasilkan melalui proses Currency Translation yang mengikuti Translation Rule dan Currency Conversion Policy. |
+| BRule-RC-005     | Perubahan Reporting Currency tidak boleh mengubah transaksi historis maupun hasil translasi yang telah dipublikasikan.                              |
+| BRule-RC-006     | Reporting Currency yang telah digunakan pada laporan historis tidak boleh dihapus secara permanen.                                                  |
+| BRule-RC-007     | Seluruh perubahan dan penggunaan Reporting Currency wajib tercatat dalam Audit Trail.                                                               |
+
+---
+
+# 9.5.3.16.5 Data Attributes
+
+| Attribute                    | Description                                             |
+| ---------------------------- | ------------------------------------------------------- |
+| Reporting Currency ID        | Identitas unik sistem.                                  |
+| Assignment Code              | Kode penetapan Reporting Currency.                      |
+| Reporting Currency           | Referensi ke Currency Master.                           |
+| Legal Entity Scope           | Ruang lingkup Legal Entity.                             |
+| Financial Organization Scope | Ruang lingkup organisasi keuangan.                      |
+| Ledger Scope                 | Ledger yang menggunakan Reporting Currency.             |
+| Financial Book Scope         | Financial Book terkait.                                 |
+| Consolidation Group Scope    | Grup konsolidasi (opsional).                            |
+| Translation Rule             | Aturan translasi yang digunakan.                        |
+| Currency Conversion Policy   | Referensi kebijakan konversi.                           |
+| Effective From               | Tanggal mulai berlaku.                                  |
+| Effective To                 | Tanggal akhir berlaku.                                  |
+| Approval Status              | Draft, Pending Approval, Approved, Published, Archived. |
+| Version                      | Nomor versi.                                            |
+| Status                       | Active, Suspended, Inactive, Archived.                  |
+| Remarks                      | Catatan bisnis.                                         |
+| Created By / Created Date    | Informasi pembuatan data.                               |
+| Updated By / Updated Date    | Informasi perubahan terakhir.                           |
+
+---
+
+# 9.5.3.16.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                    |
+| -------------- | ------------------ | ----------- | --------------------------------- |
+| BR-231         | BO-009             | SH-003      | Reporting Currency Administration |
+| BR-232         | BO-011             | SH-003      | Multi-Currency Reporting          |
+| BR-233         | BO-009             | SH-003      | Organizational Assignment         |
+| BR-234         | BO-029             | SH-010      | Effective Date Governance         |
+| BR-235         | BO-029             | SH-010      | Version Management                |
+| BR-236         | BO-011             | SH-003      | Financial Reporting               |
+| BR-237         | BO-011             | SH-003      | Currency Translation              |
+| BR-238         | BO-029             | SH-003      | Approval Workflow                 |
+| BR-239         | BO-029             | SH-010      | Dependency Validation             |
+| BR-240         | BO-029             | SH-010      | Audit & Compliance                |
+
+---
+
+# 9.5.3.16.7 Summary
+
+Reporting Currency menyediakan mekanisme standar untuk menyajikan laporan keuangan dalam satu atau lebih mata uang tanpa mengubah transaksi sumber yang dicatat menggunakan Functional Currency. Dengan dukungan multi-reporting currency, assignment berdasarkan organisasi, *effective dating*, *versioning*, *approval workflow*, dan *audit trail*, ERP mampu memenuhi kebutuhan pelaporan internal, regulator, investor, maupun grup perusahaan secara konsisten dan dapat diaudit.
+
+Reporting Currency menjadi fondasi bagi **Financial Reporting**, **Management Reporting**, **Regulatory Reporting**, **Financial Consolidation**, **Business Intelligence**, dan **Enterprise Performance Management (EPM)**.

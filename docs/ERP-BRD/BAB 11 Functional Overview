@@ -1,0 +1,235 @@
+# BAB 11. Functional Overview
+
+## 11.1 Overview
+
+Bab ini menyajikan gambaran fungsional tingkat tinggi (*high-level functional overview*) atas keseluruhan modul ERP yang telah didefinisikan kebutuhannya secara rinci pada BAB 9 Business Requirement. Tujuan utama bab ini adalah menghubungkan puluhan dokumen requirement modul (BR-xxx) menjadi satu peta fungsional yang utuh, sehingga pembaca memahami bagaimana setiap modul berperan, saling terhubung, dan membentuk satu kesatuan platform sebelum masuk ke pembahasan Non-Functional Requirements pada bab berikutnya.
+
+Berbeda dengan BAB 9 yang menjabarkan kebutuhan secara detail per modul (business requirement, business rule, hingga level field/atribut), bab ini **tidak mengulang detail requirement**. Bab ini berfokus pada:
+
+* Arsitektur fungsional lintas layer yang menjadi fondasi seluruh modul.
+* Peran dan keterkaitan setiap **Core Module** yang menjadi tulang punggung platform.
+* Peran fungsional setiap sub-domain pada **Financial Management Domain**, domain dengan cakupan terbesar dalam sistem ini.
+* Peran fungsional setiap **Supporting/Operational Module**.
+* Contoh *use case* lintas modul yang merepresentasikan skenario bisnis nyata.
+* Narasi alur interaksi antar modul dalam proses bisnis end-to-end.
+
+Dengan pemetaan ini, seluruh pemangku kepentingan — mulai dari Business Analyst, Solution Architect, hingga Development Team — memperoleh pemahaman yang sama mengenai bentuk akhir sistem sebelum requirement diturunkan ke tahap desain teknis.
+
+---
+
+## 11.2 Functional Architecture
+
+Sistem ERP dirancang dengan arsitektur berlapis (*layered architecture*) agar setiap modul dapat dikembangkan, diperluas, dan dipelihara secara independen tanpa mengganggu modul lain. Prinsip **Configuration over Customization**, **Organization Tree First**, dan **Scope-Based Everything** diterapkan secara konsisten pada seluruh layer, bukan hanya pada satu modul tertentu.
+
+Karakteristik utama arsitektur fungsional:
+
+* **Presentation Layer** menyediakan antarmuka pengguna yang bersifat modular dan konfigurabel, mengikuti hak akses dan cakupan organisasi pengguna yang sedang login.
+* **API Gateway Layer** menjadi satu-satunya pintu masuk (*single entry point*) bagi seluruh permintaan, baik dari front-end internal, aplikasi mobile, maupun sistem pihak ketiga, sejalan dengan prinsip **API First**.
+* **Business Logic/Module Layer** memuat seluruh logika bisnis per modul (Financial, Procurement, Inventory, HR, dan lain-lain) yang berjalan sebagai unit fungsional yang dapat diaktifkan/dinonaktifkan sesuai kebutuhan organisasi (**Modular & Extensible**).
+* **Workflow Engine** bersifat *cross-cutting* — tidak berdiri sebagai satu modul yang berdiri sendiri, melainkan dipakai oleh seluruh modul lain untuk mengatur proses persetujuan, eskalasi, dan notifikasi secara konsisten.
+* **Master Data Layer** menyediakan data acuan bersama (Chart of Accounts, Customer, Vendor, Item, Employee, dan lain-lain) yang dapat dikonfigurasi sebagai *shared* maupun *isolated* per organisasi.
+* **Data Access Layer** mengatur akses data secara terkontrol dan konsisten, menerapkan **Scope-Based Access Control** sebelum data dikembalikan ke layer di atasnya.
+* **Database Layer** menyimpan seluruh data transaksi, master, dan konfigurasi dalam struktur yang mendukung **Multi-Tenant Ready** dan **Cloud Ready**.
+* **Integration Layer** menghubungkan sistem ERP dengan aplikasi eksternal (bank, e-Faktur, marketplace, sistem pihak ketiga lain) melalui API maupun mekanisme integrasi terstandarisasi.
+
+Yang membuat arsitektur ini berbeda dari ERP konvensional adalah posisi **Organization Tree** dan **Scope-Based Access**, yang tidak diletakkan pada satu modul saja, melainkan menjadi fondasi horizontal yang dirujuk oleh setiap layer — mulai dari tampilan menu di Presentation Layer, otorisasi permintaan di API Gateway, validasi hak akses di Business Logic, hingga filter data di Data Access Layer. Dengan demikian, penambahan entitas organisasi baru (Company, Business Unit, Branch, Warehouse, Project Site, dan seterusnya, tanpa batas level) tidak memerlukan perubahan source code pada layer manapun, melainkan cukup melalui konfigurasi pada Organization Management.
+
+```text
+┌───────────────────────────────────────────────────────────────┐
+│                      PRESENTATION LAYER                        │
+│         (Web App, Mobile App, Executive Dashboard, Portal)     │
+├───────────────────────────────────────────────────────────────┤
+│                      API GATEWAY LAYER                          │
+│      (Authentication, Routing, Rate Limiting, API Versioning)  │
+├───────────────────────────────────────────────────────────────┤
+│                 BUSINESS LOGIC / MODULE LAYER                   │
+│  Financial | Procurement | Inventory | Manufacturing | Project  │
+│  Asset | HR | Payroll | Sales | CRM | Maintenance | ...          │
+│                                                                   │
+│        ══════════ WORKFLOW ENGINE (cross-cutting) ══════════    │
+│        ══════ ORGANIZATION TREE & SCOPE-BASED ACCESS ══════     │
+│                (dipakai oleh seluruh modul di atas)              │
+├───────────────────────────────────────────────────────────────┤
+│                      MASTER DATA LAYER                          │
+│      (Chart of Accounts, Customer, Vendor, Item, Employee)      │
+├───────────────────────────────────────────────────────────────┤
+│                      DATA ACCESS LAYER                          │
+│           (Scope Filtering, Query Builder, Caching)            │
+├───────────────────────────────────────────────────────────────┤
+│                       DATABASE LAYER                            │
+│         (Multi-Tenant Ready, Cloud Ready, Scalable)             │
+├───────────────────────────────────────────────────────────────┤
+│                      INTEGRATION LAYER                          │
+│         (Bank, e-Faktur, Marketplace, External Systems)         │
+└───────────────────────────────────────────────────────────────┘
+```
+
+Organization Tree & Scope-Based Access digambarkan menembus (*cross-cutting*) layer Business Logic karena keduanya bukan modul yang berdiri sendiri, melainkan kapabilitas platform yang dikonsumsi oleh setiap modul untuk menentukan data apa yang boleh dilihat, diproses, dan dilaporkan oleh setiap pengguna pada setiap level organisasi.
+
+---
+
+## 11.2.1 Pemetaan Tumpukan Teknologi pada Arsitektur Berlapis
+
+Arsitektur berlapis pada subbab 11.2 bersifat konseptual dan netral; pada tingkat implementasi, setiap layer direalisasikan menggunakan **tumpukan teknologi standar** yang ditetapkan pada BAB 4.6.1. Pemetaan berikut menghubungkan setiap layer fungsional dengan teknologi konkret beserta perannya. Rincian tingkat HLD/LLD-lite (dekomposisi layanan, katalog *topic* Kafka, dan strategi skema PostgreSQL) dijabarkan pada BAB 13.7 s.d. BAB 13.13.
+
+| Layer Fungsional                    | Teknologi Implementasi                                   | Peran Teknis Utama                                                                                   |
+| ----------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Presentation Layer                  | **React 19 + Vite + TanStack Query**                     | Backoffice Web SPA, Executive Dashboard, dan Portal; komponen modular per modul dengan Zustand & Tailwind CSS v4. |
+| API Gateway Layer                   | **Kong API Gateway** + layanan **Go**                    | *Single entry point*, autentikasi/otorisasi (OAuth2/OIDC), *routing*, *rate limiting*, dan *API versioning*. |
+| Business Logic / Module Layer       | **Go (Golang)** *microservices*                          | Logika bisnis per modul sebagai layanan independen yang dapat di-*deploy* dan diskalakan terpisah.   |
+| Workflow Engine (*cross-cutting*)   | Layanan **Go** + **Apache Kafka**                        | Orkestrasi approval, eskalasi, dan notifikasi lintas modul secara asinkron melalui *event*.          |
+| Master Data Layer                   | Layanan **Go** + **PostgreSQL**                          | Tata kelola data master (shared/isolated) dengan konsistensi transaksional.                          |
+| Data Access Layer                   | **Go** (*query builder*/ORM, mis. sqlc/GORM)             | Penerapan *Scope-Based Access Control* dan *query filtering* sebelum data dikembalikan.              |
+| Database Layer                      | **PostgreSQL** (HA, *partitioning*, *row-level scoping*) | Penyimpanan transaksi, master, dan konfigurasi sebagai *system of record*; mendukung Multi-Tenant.   |
+| Integration Layer                   | *Connector* **Go** + **Apache Kafka**                    | Integrasi internal (*event-driven*) dan eksternal (bank, e-Faktur, *marketplace*) via API & *streaming*. |
+
+Diagram berikut menyajikan arsitektur berlapis dengan anotasi teknologi konkret pada masing-masing layer:
+
+```text
+┌───────────────────────────────────────────────────────────────┐
+│                      PRESENTATION LAYER                        │
+│     React 19 + Vite SPA — Backoffice App, Dashboard, Portal   │
+├───────────────────────────────────────────────────────────────┤
+│                      API GATEWAY LAYER                          │
+│   API Gateway + Go — AuthN/AuthZ (OAuth2/OIDC), Routing,        │
+│              Rate Limiting, API Versioning                      │
+├───────────────────────────────────────────────────────────────┤
+│                 BUSINESS LOGIC / MODULE LAYER                   │
+│         Go (Golang) Microservices — 1 layanan per domain        │
+│  Financial | Procurement | Inventory | Manufacturing | Project  │
+│  Asset | HR | Payroll | Sales | CRM | Maintenance | ...          │
+│                                                                   │
+│     ═════ WORKFLOW ENGINE (Go) — via Apache Kafka events ═════   │
+│     ═════ ORGANIZATION TREE & SCOPE-BASED ACCESS (Go) ═════      │
+├───────────────────────────────────────────────────────────────┤
+│         ◄───────  APACHE KAFKA — EVENT BACKBONE  ───────►        │
+│   (publish/subscribe antar-modul, outbox, integrasi asinkron)   │
+├───────────────────────────────────────────────────────────────┤
+│                      MASTER DATA LAYER                          │
+│           Go services + PostgreSQL (shared/isolated)           │
+├───────────────────────────────────────────────────────────────┤
+│                      DATA ACCESS LAYER                          │
+│        Go — Scope Filtering, Query Builder, Caching            │
+├───────────────────────────────────────────────────────────────┤
+│                       DATABASE LAYER                            │
+│     PostgreSQL — HA, Partitioning, Multi-Tenant Ready          │
+├───────────────────────────────────────────────────────────────┤
+│                      INTEGRATION LAYER                          │
+│   Go Connectors + Kafka Connect — Bank, e-Faktur, External      │
+└───────────────────────────────────────────────────────────────┘
+```
+
+Penempatan **Apache Kafka** sebagai *event backbone* horizontal menegaskan pola **Event-Driven** dan **Loose Coupling**: modul (layanan Go) berkomunikasi secara asinkron melalui *event* tanpa ketergantungan langsung, sehingga kegagalan sementara satu modul tidak menghentikan modul lain (selaras dengan INT-004 dan NFR-009). Adapun **PostgreSQL** menjadi *system of record* transaksional yang menjamin integritas dan konsistensi data (selaras dengan NFR-007 dan NFR-008), sementara **React 19 + Vite** menyediakan Presentation Layer yang modular dan responsif lintas perangkat (selaras dengan NFR-025 s.d. NFR-027).
+
+---
+
+## 11.3 Core Modules
+
+Core Modules merupakan modul fondasi yang menjadi prasyarat operasional seluruh modul lain. Modul-modul ini tidak berdiri sendiri sebagai fungsi bisnis, melainkan menyediakan kapabilitas platform yang digunakan bersama.
+
+| Module | Fungsi Utama | Modul Terkait |
+| --- | --- | --- |
+| Organization Management | Mengelola struktur organisasi berjenjang tanpa batas level (Holding s.d. Warehouse/Project Site) beserta atribut, relasi, dan efektivitas periode. | Seluruh modul (fondasi Organization Tree First) |
+| User Management | Mengelola identitas pengguna, autentikasi, role, dan penugasan akses berbasis organisasi. | Security, Workflow, seluruh modul transaksional |
+| Workflow Management | Menyediakan mesin alur persetujuan yang dapat dikonfigurasi (approval matrix, eskalasi, delegasi) lintas modul. | Seluruh modul transaksional |
+| Security Management | Mengatur kebijakan keamanan, RBAC, Scope-Based Access Control, dan audit akses. | User Management, Audit Trail, seluruh modul |
+| Master Data Management | Menyediakan tata kelola data master bersama (shared/isolated) seperti Customer, Vendor, Item, Employee. | Financial Domain, Procurement, Inventory, Sales, CRM, HR |
+| Localization and Multi Language | Mengelola bahasa, format regional, dan kepatuhan lokal (mata uang, format tanggal, satuan). | Seluruh modul yang menampilkan antarmuka dan dokumen |
+| Audit Trail | Mencatat jejak perubahan data dan aktivitas pengguna secara menyeluruh untuk kebutuhan kepatuhan. | Security Management, seluruh modul transaksional |
+| Dashboard and Executive Reporting | Menyediakan visualisasi data operasional dan konsolidasi lintas organisasi bagi manajemen. | Financial Domain, seluruh modul operasional |
+
+---
+
+## 11.4 Supporting Modules — Financial Management Domain
+
+Financial Management merupakan domain dengan cakupan sub-domain terbesar dalam sistem ini, mencakup pengelolaan keuangan mulai dari transaksi harian hingga konsolidasi laporan tingkat Holding.
+
+| Sub-Domain | Fungsi Utama |
+| --- | --- |
+| Financial Organization | Mendefinisikan struktur entitas keuangan (legal entity, ledger, company code) yang selaras dengan Organization Tree. |
+| Fiscal Calendar | Mengatur periode akuntansi, tahun buku, dan penutupan periode per entitas. |
+| Currency Management Master | Mengelola mata uang, pasangan mata uang, dan berbagai jenis nilai tukar (spot, historical, budget, average) yang menjadi acuan seluruh transaksi lintas mata uang. |
+| Chart of Accounts | Mendefinisikan struktur akun, segmen, kombinasi akun, posting rule, dan pemetaan akun sebagai kerangka pencatatan keuangan seluruh modul. |
+| General Ledger | Mencatat seluruh jurnal transaksi keuangan sebagai buku besar utama organisasi. |
+| Accounts Payable | Mengelola kewajiban pembayaran kepada vendor/pemasok. |
+| Accounts Receivable | Mengelola piutang dan penagihan kepada pelanggan. |
+| Fixed Asset | Mengelola siklus hidup aset tetap, termasuk penyusutan dan revaluasi. |
+| Treasury | Mengelola likuiditas, instrumen keuangan, dan posisi kas organisasi. |
+| Cash & Bank | Mengelola transaksi kas dan rekonsiliasi bank. |
+| Cost Center | Mengelola alokasi dan pelacakan biaya berdasarkan unit organisasi. |
+| Profit Center | Mengelola pengukuran kinerja profitabilitas per unit bisnis. |
+| Budget Management | Mengelola perencanaan, alokasi, dan pengendalian anggaran. |
+| Tax Management | Mengelola perhitungan, pelaporan, dan kepatuhan perpajakan. |
+| Financial Close | Mengelola proses tutup buku periodik secara terstruktur dan terjadwal. |
+| Financial Consolidation | Mengonsolidasikan laporan keuangan lintas entitas/Holding-Sub Holding. |
+| Financial Reporting | Menyediakan laporan keuangan standar (neraca, laba rugi, arus kas) sesuai kebutuhan internal maupun regulasi. |
+| Financial Analytics | Menyediakan analisis keuangan lanjutan (rasio, tren, prediksi) sebagai dukungan pengambilan keputusan. |
+
+---
+
+## 11.5 Supporting Modules — Operational
+
+Modul operasional mendukung proses bisnis inti di luar keuangan, namun seluruh transaksinya pada akhirnya terhubung ke domain keuangan melalui integrasi otomatis.
+
+| Module | Fungsi Utama | Modul Terkait |
+| --- | --- | --- |
+| Procurement | Mengelola proses pengadaan barang/jasa mulai dari permintaan hingga penerimaan. | Inventory, Accounts Payable, Master Data Management |
+| Inventory | Mengelola persediaan barang, pergudangan, dan pergerakan stok. | Procurement, Manufacturing, Sales, Fixed Asset |
+| Manufacturing | Mengelola perencanaan dan pelaksanaan produksi. | Inventory, Cost Center, Project Management |
+| Project Management | Mengelola perencanaan, pelaksanaan, dan pemantauan proyek. | Procurement, Budget Management, Cost Center |
+| Asset Management | Mengelola aset operasional non-keuangan (selain Fixed Asset) termasuk pemantauan kondisi dan lokasi. | Maintenance Management, Fixed Asset, Inventory |
+| Human Resource Management | Mengelola data kepegawaian, organisasi jabatan, dan siklus SDM. | Payroll Management, Organization Management |
+| Sales Management | Mengelola proses penjualan mulai dari order hingga penagihan. | Inventory, Accounts Receivable, CRM |
+| Customer Relationship Management (CRM) | Mengelola interaksi dan hubungan dengan pelanggan/prospek. | Sales Management, Dashboard and Executive Reporting |
+| Maintenance Management | Mengelola pemeliharaan preventif dan korektif aset/fasilitas. | Asset Management, Inventory, Procurement |
+| Payroll Management | Mengelola perhitungan dan pembayaran gaji karyawan. | Human Resource Management, General Ledger, Cash & Bank |
+
+---
+
+## 11.6 High-Level Use Cases
+
+Tabel berikut menyajikan contoh *use case* lintas modul yang merepresentasikan interaksi fungsional utama dalam sistem, bukan daftar lengkap seluruh skenario yang telah dijabarkan pada requirement modul di BAB 9.
+
+| Use Case ID | Use Case Name | Actor | Related Module |
+| --- | --- | --- | --- |
+| UC-001 | Membuat dan mengonfigurasi struktur organisasi baru | Organization Administrator | Organization Management |
+| UC-002 | Mengajukan dan menyetujui Purchase Requisition | Requester, Approver | Procurement, Workflow Management |
+| UC-003 | Menerima barang dan memperbarui stok gudang | Warehouse Staff | Procurement, Inventory |
+| UC-004 | Mencatat invoice vendor dan memproses pembayaran | AP Officer, Treasury Officer | Accounts Payable, Cash & Bank, General Ledger |
+| UC-005 | Membuat Sales Order dan memproses pengiriman | Sales Officer, Warehouse Staff | Sales Management, Inventory |
+| UC-006 | Menerbitkan invoice pelanggan dan mencatat piutang | AR Officer | Accounts Receivable, General Ledger |
+| UC-007 | Menyusun dan menyetujui anggaran tahunan | Budget Owner, Finance Manager | Budget Management, Workflow Management |
+| UC-008 | Melakukan proses tutup buku bulanan | Finance Controller | Financial Close, General Ledger |
+| UC-009 | Mengonsolidasikan laporan keuangan grup perusahaan | Group Finance Manager | Financial Consolidation, Financial Reporting |
+| UC-010 | Merekrut dan mengaktifkan data karyawan baru | HR Officer | Human Resource Management, User Management |
+| UC-011 | Memproses payroll bulanan dan posting ke GL | Payroll Officer | Payroll Management, General Ledger |
+| UC-012 | Membuat perencanaan produksi berdasarkan sales order | Production Planner | Manufacturing, Sales Management, Inventory |
+| UC-013 | Menjadwalkan dan melaksanakan pemeliharaan aset | Maintenance Technician | Maintenance Management, Asset Management |
+| UC-014 | Memantau kinerja bisnis melalui dashboard eksekutif | Executive Management | Dashboard and Executive Reporting |
+| UC-015 | Menelusuri jejak perubahan data transaksi keuangan | Internal Auditor | Audit Trail, Security Management |
+
+---
+
+## 11.7 Module Interaction Overview
+
+Kekuatan utama sistem ERP ini terletak pada keterhubungan otomatis antar modul, sehingga setiap transaksi operasional pada akhirnya bermuara pada satu sumber kebenaran keuangan (*single source of truth*) di General Ledger. Berikut beberapa alur interaksi utama sebagai ilustrasi:
+
+**Alur Sales → Inventory → AR → GL.** Proses dimulai ketika Sales Management menerima pesanan pelanggan (Sales Order). Ketersediaan barang divalidasi melalui Inventory, dan pada saat pengiriman dilakukan, Inventory mencatat pengurangan stok sekaligus memicu pembentukan invoice pada Accounts Receivable. Invoice tersebut secara otomatis membentuk jurnal piutang dan pendapatan pada General Ledger, tanpa memerlukan input ulang oleh pengguna. Cost Center dan Profit Center pada level organisasi terkait turut ter-update untuk kebutuhan analisis profitabilitas.
+
+**Alur Procurement → AP → GL.** Proses dimulai dari permintaan pengadaan (Purchase Requisition) yang melalui Workflow Management untuk persetujuan berjenjang sesuai struktur organisasi. Setelah barang/jasa diterima, Procurement mencatat penerimaan yang menjadi dasar pembentukan invoice vendor pada Accounts Payable. Invoice tersebut kembali membentuk jurnal utang dan beban/persediaan pada General Ledger, sekaligus memperbarui posisi kas yang dipantau oleh Treasury dan Cash & Bank pada saat pembayaran dilakukan.
+
+**Alur HR → Payroll → GL.** Data kepegawaian yang dikelola pada Human Resource Management (struktur jabatan, status kepegawaian, komponen kompensasi) menjadi dasar perhitungan pada Payroll Management setiap periode penggajian. Hasil perhitungan payroll — gaji, tunjangan, potongan, dan pajak — diposting secara otomatis ke General Ledger sebagai beban personalia, sekaligus memicu instruksi pembayaran melalui Cash & Bank.
+
+Ketiga alur di atas menggambarkan pola umum yang berlaku pada seluruh modul operasional lain (Manufacturing, Project Management, Maintenance Management, Asset Management): transaksi operasional dicatat pada modul asalnya, divalidasi melalui Workflow Management sesuai kebutuhan approval, dan pada titik tertentu terintegrasi otomatis ke Financial Management Domain melalui mekanisme posting yang dikonfigurasi pada Chart of Accounts dan Posting Rule. Seluruh proses ini berjalan dalam cakupan (*scope*) organisasi yang sesuai, sehingga data, hak akses, dan pelaporan senantiasa konsisten dengan posisi setiap entitas dalam Organization Tree.
+
+---
+
+## 11.8 Summary
+
+Bab ini menegaskan bahwa sistem ERP dibangun sebagai satu platform fungsional yang terintegrasi, bukan kumpulan aplikasi terpisah. Delapan Core Module menyediakan fondasi platform yang dipakai bersama oleh seluruh modul lain, tujuh belas sub-domain pada Financial Management Domain membentuk tulang punggung pencatatan dan pelaporan keuangan, dan sepuluh modul operasional menjalankan proses bisnis inti yang pada akhirnya terhubung otomatis ke domain keuangan.
+
+Arsitektur berlapis dengan Organization Tree dan Scope-Based Access sebagai fondasi horizontal memastikan bahwa penambahan entitas organisasi, modul baru, maupun perluasan proses bisnis di masa depan dapat dilakukan melalui konfigurasi, sejalan dengan prinsip **Configuration over Customization**, **Modular & Extensible**, **Multi-Tenant Ready**, **API First**, dan **Cloud Ready** yang menjadi pedoman keseluruhan proyek ini.
+
+Pada tingkat implementasi, arsitektur ini direalisasikan menggunakan tumpukan teknologi standar (BAB 4.6.1): **React 19 + Vite SPA** pada Presentation Layer, *microservices* **Go (Golang)** pada Business Logic Layer, **Apache Kafka** sebagai *event backbone* antar-modul, dan **PostgreSQL** sebagai *system of record*, seluruhnya berjalan pada platform *container* (Docker/Kubernetes) yang Cloud Ready. Pemetaan teknologi per layer disajikan pada subbab 11.2.1, sementara cetak biru rinci (HLD/LLD-lite) dijabarkan pada BAB 13.7 s.d. BAB 13.13.
+
+Pemahaman atas peta fungsional ini menjadi dasar bagi pembahasan kebutuhan nonfungsional (*Non-Functional Requirements*) pada BAB 12, yang akan menjabarkan aspek performa, keamanan, skalabilitas, ketersediaan, dan kualitas sistem secara menyeluruh.

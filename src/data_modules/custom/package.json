@@ -1,0 +1,11 @@
+{
+  "name": "custom",
+  "version": "1.0.0",
+  "description": "Cortex Framework V7 Data Products for Holding Consolidation",
+  "dependencies": {
+    "@dataform/core": "^3.1.5"
+  },
+  "devDependencies": {
+    "@dataform/cli": "^3.1.5"
+  }
+}

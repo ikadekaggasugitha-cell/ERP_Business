@@ -1,0 +1,186 @@
+# 9.10 Project Management Requirements
+
+## 9.10.1 Overview
+
+Project Management merupakan modul yang mengelola seluruh siklus hidup proyek, mulai dari pembentukan Project Master, penguraian ruang lingkup pekerjaan melalui Work Breakdown Structure (WBS), penyusunan anggaran proyek, pencatatan biaya aktual, pemantauan kemajuan pekerjaan (*progress monitoring*), penagihan proyek (*project billing*), hingga pelaporan kinerja proyek berbasis *earned value*.
+
+Modul ini harus terintegrasi penuh dengan struktur organisasi (Organization Tree), General Ledger, Accounts Payable, Accounts Receivable, Procurement, Inventory, dan Human Resource, sehingga setiap transaksi yang terkait dengan proyek dapat ditelusuri secara konsisten ke entitas organisasi, akun keuangan, dan sumber daya yang digunakan.
+
+ERP harus mendukung proyek lintas organisasi (Company, Business Unit, Branch, Project Site) tanpa batasan jumlah level struktur, serta memungkinkan konfigurasi jenis proyek, struktur WBS, metode pembebanan biaya, dan skema penagihan sesuai kebutuhan bisnis tanpa perubahan source code (*Configuration over Customization*).
+
+Seluruh kebutuhan bisnis pada bagian ini menggunakan **Requirement ID (BR-xxx)** agar dapat ditelusuri ke Business Objectives (BO-xxx), Stakeholder (SH-xxx), Functional Requirements (FR-xxx), dan Test Cases (TC-xxx).
+
+---
+
+# 9.10.2 Business Requirement Catalogue
+
+## BR-726 – Project Master Data Management
+
+| Attribute              | Description                                                                                                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID         | BR-726                                                                                                                                                                             |
+| Requirement Name       | Project Master Data Management                                                                                                                                                    |
+| Category               | Project Management                                                                                                                                                                |
+| Priority               | Critical                                                                                                                                                                           |
+| Business Objective     | BO-008, BO-033                                                                                                                                                                     |
+| Stakeholder Owner      | SH-014 (PMO)                                                                                                                                                                       |
+| Description            | Sistem harus menyediakan Project Master sebagai data induk proyek yang mencakup kode proyek, nama proyek, jenis proyek, organisasi pemilik, periode pelaksanaan, mata uang proyek, status proyek, serta keterkaitannya dengan struktur organisasi (Company, Business Unit, Branch, Project Site). |
+| Business Rationale     | Setiap transaksi keuangan, anggaran, biaya, progres, dan penagihan proyek harus mengacu pada satu data induk proyek yang konsisten agar tidak terjadi duplikasi maupun ambiguitas data antar modul.  |
+| Business Value         | Ketersediaan data proyek yang akurat dan real-time sebagai dasar pengambilan keputusan manajemen serta mendukung pertumbuhan jumlah proyek seiring ekspansi organisasi.           |
+| Acceptance Criteria    | Pengguna dapat membuat, mengubah, mengaktifkan, dan menonaktifkan Project Master; setiap proyek wajib terhubung ke minimal satu node organisasi; sistem menolak transaksi pada proyek yang berstatus non-aktif atau closed. |
+| Related Modules        | Project Management, Organization Management, General Ledger                                                                                                                       |
+| Related Business Rules | BRule-PRJ-001, BRule-PRJ-002                                                                                                                                                       |
+
+---
+
+## BR-727 – Work Breakdown Structure (WBS)
+
+| Attribute           | Description                                                                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-727                                                                                                                                                        |
+| Requirement Name    | Work Breakdown Structure (WBS)                                                                                                                               |
+| Priority            | Critical                                                                                                                                                      |
+| Description         | Sistem harus mendukung penguraian ruang lingkup proyek ke dalam struktur WBS berjenjang tanpa batas level, mencakup fase, paket pekerjaan, hingga aktivitas.  |
+| Acceptance Criteria | Pengguna dapat menyusun, mengubah struktur, dan menautkan setiap elemen WBS ke anggaran, biaya, dan progres pekerjaan tanpa perubahan source code.           |
+| Business Value      | Ruang lingkup proyek terdefinisi secara terstruktur sehingga memudahkan pengendalian dan pelaporan kinerja per elemen pekerjaan.                              |
+
+---
+
+## BR-728 – Project Budgeting
+
+| Attribute           | Description                                                                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-728                                                                                                                                                              |
+| Requirement Name    | Project Budgeting                                                                                                                                                  |
+| Priority            | Critical                                                                                                                                                            |
+| Description         | Sistem harus menyediakan penyusunan dan persetujuan anggaran proyek (Project Budget) pada level WBS, termasuk revisi anggaran (*budget revision*) yang tercatat historinya. |
+| Acceptance Criteria | Anggaran proyek dapat disusun berjenjang mengikuti WBS, memerlukan approval sebelum menjadi baseline, dan setiap revisi tercatat dengan jejak audit.                |
+| Business Value      | Pengendalian biaya proyek sejak tahap perencanaan serta dasar perbandingan anggaran terhadap realisasi secara real-time.                                            |
+
+---
+
+## BR-729 – Project Costing dan Cost Capture
+
+| Attribute           | Description                                                                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-729                                                                                                                                                        |
+| Requirement Name    | Project Costing dan Cost Capture                                                                                                                              |
+| Priority            | Critical                                                                                                                                                      |
+| Description         | Sistem harus mencatat seluruh biaya aktual proyek (tenaga kerja, material, subkontraktor, overhead) yang bersumber dari Procurement, Inventory, Human Resource, dan General Ledger ke elemen WBS terkait. |
+| Acceptance Criteria | Setiap transaksi biaya dari modul lain otomatis terposting ke elemen WBS proyek yang sesuai dan dapat direkonsiliasi dengan General Ledger.                    |
+| Business Value      | Akurasi biaya proyek secara real-time serta konsistensi data biaya antar modul.                                                                                |
+
+---
+
+## BR-730 – Progress Monitoring
+
+| Attribute           | Description                                                                                                                                            |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-730                                                                                                                                                |
+| Requirement Name    | Progress Monitoring                                                                                                                                   |
+| Priority            | High                                                                                                                                                  |
+| Description         | Sistem harus menyediakan pencatatan dan pemantauan persentase kemajuan pekerjaan (*physical progress*) pada setiap elemen WBS secara periodik.        |
+| Acceptance Criteria | Pengguna dapat menginput progres pekerjaan per periode, sistem menghitung agregasi progres proyek secara otomatis dari level WBS terendah ke level proyek. |
+| Business Value      | Visibilitas kemajuan proyek secara real-time bagi manajemen untuk pengambilan keputusan yang tepat waktu.                                             |
+
+---
+
+## BR-731 – Project Billing dan Invoicing
+
+| Attribute           | Description                                                                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-731                                                                                                                                                      |
+| Requirement Name    | Project Billing dan Invoicing                                                                                                                               |
+| Priority            | Critical                                                                                                                                                    |
+| Description         | Sistem harus mendukung penagihan proyek kepada pelanggan berdasarkan skema yang dapat dikonfigurasi, antara lain *milestone billing*, *progress billing*, dan *time and material billing*. |
+| Acceptance Criteria | Sistem dapat membangkitkan tagihan proyek sesuai skema yang dikonfigurasi dan mengintegrasikannya dengan Accounts Receivable.                               |
+| Business Value      | Percepatan siklus penagihan dan peningkatan arus kas proyek.                                                                                                  |
+
+---
+
+## BR-732 – Earned Value Management (EVM)
+
+| Attribute           | Description                                                                                                                                                                 |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-732                                                                                                                                                                     |
+| Requirement Name    | Earned Value Management (EVM)                                                                                                                                             |
+| Priority            | High                                                                                                                                                                       |
+| Description         | Sistem harus menghitung indikator kinerja proyek berbasis *earned value*, meliputi Planned Value (PV), Earned Value (EV), Actual Cost (AC), Cost Performance Index (CPI), dan Schedule Performance Index (SPI). |
+| Acceptance Criteria | Sistem menampilkan indikator EVM secara real-time pada level WBS maupun level proyek dan dapat diekspor ke laporan kinerja proyek.                                          |
+| Business Value      | Pengukuran kinerja proyek secara obyektif untuk mendukung keputusan berbasis data.                                                                                          |
+
+---
+
+## BR-733 – Project Change Order Management
+
+| Attribute           | Description                                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-733                                                                                                                                            |
+| Requirement Name    | Project Change Order Management                                                                                                                   |
+| Priority            | Medium                                                                                                                                             |
+| Description         | Sistem harus mendukung pengelolaan perubahan ruang lingkup, anggaran, dan jadwal proyek melalui mekanisme *change order* yang memerlukan persetujuan berjenjang. |
+| Acceptance Criteria | Setiap change order tercatat dengan status, dampak terhadap anggaran dan jadwal, serta riwayat persetujuan yang lengkap.                          |
+| Business Value      | Tata kelola perubahan proyek yang transparan dan terdokumentasi.                                                                                   |
+
+---
+
+## BR-734 – Project Resource Allocation
+
+| Attribute           | Description                                                                                                                                       |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-734                                                                                                                                            |
+| Requirement Name    | Project Resource Allocation                                                                                                                       |
+| Priority            | Medium                                                                                                                                             |
+| Description         | Sistem harus mendukung alokasi sumber daya (tenaga kerja, peralatan, subkontraktor) ke elemen WBS beserta pemantauan tingkat utilisasinya.        |
+| Acceptance Criteria | Pengguna dapat mengalokasikan sumber daya ke WBS dan sistem menampilkan laporan utilisasi sumber daya per periode.                                |
+| Business Value      | Optimalisasi penggunaan sumber daya proyek dan efisiensi biaya operasional.                                                                        |
+
+---
+
+## BR-735 – Project Performance Dashboard dan Reporting
+
+| Attribute           | Description                                                                                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-735                                                                                                                                                        |
+| Requirement Name    | Project Performance Dashboard dan Reporting                                                                                                                   |
+| Priority            | High                                                                                                                                                           |
+| Description         | Sistem harus menyediakan dashboard dan pelaporan kinerja proyek secara konsolidasi lintas organisasi, mencakup status anggaran, biaya, progres, dan EVM.      |
+| Acceptance Criteria | Dashboard menampilkan data kinerja proyek secara real-time dan dapat difilter berdasarkan organisasi, periode, maupun jenis proyek.                           |
+| Business Value      | Transparansi kinerja proyek bagi manajemen dan dukungan konsolidasi laporan lintas organisasi.                                                                 |
+
+---
+
+# 9.10.3 Project Management Business Rules Reference
+
+| Business Rule ID | Description                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| BRule-PRJ-001     | Setiap proyek wajib terhubung ke minimal satu node organisasi (Company, Business Unit, Branch, atau Project Site).             |
+| BRule-PRJ-002     | Transaksi biaya, anggaran, dan penagihan tidak dapat diproses pada proyek yang berstatus non-aktif atau closed.                |
+| BRule-PRJ-003     | Setiap elemen WBS harus memiliki relasi parent-child yang membentuk struktur hierarkis tanpa batas level.                      |
+| BRule-PRJ-004     | Anggaran proyek yang telah disetujui menjadi baseline dan setiap revisi berikutnya wajib melalui proses persetujuan ulang.     |
+| BRule-PRJ-005     | Biaya aktual proyek hanya dapat diposting pada elemen WBS yang berstatus aktif dan memiliki anggaran yang tersedia.            |
+| BRule-PRJ-006     | Perhitungan Earned Value (EV) mengacu pada persentase progres fisik yang telah diverifikasi pada level WBS terendah.           |
+| BRule-PRJ-007     | Perubahan ruang lingkup, anggaran, atau jadwal proyek hanya sah setelah change order disetujui sesuai jenjang otorisasi.       |
+
+---
+
+# 9.10.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process       |
+| --------------- | ------------------- | ----------- | --------------------- |
+| BR-726          | BO-008, BO-033       | SH-014      | Project Management    |
+| BR-727          | BO-033               | SH-014      | Project Management    |
+| BR-728          | BO-008               | SH-014      | Project Management    |
+| BR-729          | BO-008               | SH-014      | Project Management    |
+| BR-730          | BO-008               | SH-014      | Project Management    |
+| BR-731          | BO-008, BO-033       | SH-014      | Project Management    |
+| BR-732          | BO-008               | SH-014      | Project Management    |
+| BR-733          | BO-033               | SH-014      | Project Management    |
+| BR-734          | BO-033               | SH-014      | Project Management    |
+| BR-735          | BO-008, BO-033       | SH-014      | Project Management    |
+
+---
+
+# 9.10.5 Summary
+
+Modul **Project Management** menyediakan pengelolaan proyek secara menyeluruh mulai dari Project Master, Work Breakdown Structure, Project Budgeting, Project Costing, Progress Monitoring, Project Billing, hingga pelaporan kinerja berbasis *earned value*. Seluruh requirement pada bagian ini dirancang agar dapat dikonfigurasi tanpa perubahan source code serta terintegrasi penuh dengan struktur organisasi dan modul keuangan lainnya, sehingga mendukung pertumbuhan jumlah proyek dan kompleksitas organisasi secara berkelanjutan. Requirement ini akan diturunkan lebih lanjut menjadi Functional Requirements, desain basis data, spesifikasi API, dan skenario pengujian pada dokumen lanjutan.

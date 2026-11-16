@@ -1,0 +1,23 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc", "s4"],
+  description: "SAP Storage Location Data for Material staging view with CDC deduplication"
+}
+
+SELECT
+  MANDT AS mandt,
+  MATNR AS material_number,
+  WERKS AS plant,
+  LGORT AS storage_location,
+  LABST AS unrestricted_stock,
+  EINME AS restricted_stock,
+  SPEME AS blocked_stock,
+  UMLME AS in_transfer_stock,
+  INSME AS quality_inspection_stock,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "mard")}
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY MANDT, MATNR, WERKS, LGORT
+  ORDER BY recordstamp DESC
+) = 1

@@ -1,0 +1,11 @@
+defaultProject: erp-enterprise-analytics
+defaultDataset: erp_analytics
+defaultAssertionDataset: erp_analytics_assertions
+defaultLocation: asia-southeast2
+vars:
+  staging_dataset: erp_staging
+  target_dataset: erp_analytics
+  sap_ddic_dataset: sap_ddic_replica
+  holding_presentation_currency: USD
+  execution_env: dev
+  sap_source_mode: coexistence

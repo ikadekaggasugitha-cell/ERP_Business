@@ -1,0 +1,206 @@
+# BAB 5. Financial Transactions Schema
+
+## 5.1 Overview
+
+Bab ini mendesain skema transaksi finansial: **General Ledger (GL)** sebagai muara pencatatan, serta sub-ledger **Accounts Payable (AP)**, **Accounts Receivable (AR)**, **Tax**, dan **Treasury/Cash & Bank**. Setiap domain berada pada basis data terpisah (ADR-001); relasi lintas domain bersifat logis dan disinkronkan via event (Saga/Outbox, SAD BAB 5). Tabel bervolume tinggi dipartisi RANGE per periode fiskal (DBS-013).
+
+Proses berkonsistensi absolut pada domain ini (Journal Posting, Payment) menerapkan **Exactly-Once** (ADR-005).
+
+---
+
+## 5.2 General Ledger (`gl_db`)
+
+Merealisasikan BRD 9.5.4 (BR-556 s.d. BR-562+): mesin jurnal inti, jurnal manual & otomatis, recurring, revaluasi, period lock, reversal.
+
+```mermaid
+erDiagram
+  JOURNAL_ENTRY ||--|{ JOURNAL_LINE : contains
+  JOURNAL_BATCH ||--o{ JOURNAL_ENTRY : groups
+  JOURNAL_ENTRY ||--o{ JOURNAL_ENTRY : reverses
+  RECURRING_JOURNAL_TEMPLATE ||--o{ JOURNAL_ENTRY : generates
+```
+
+### `gl.journal_entry` (PARTITION BY RANGE (`posting_date`))
+
+| Column            | Type          | Null | Key | Description                                                    |
+| ----------------- | ------------- | ---- | --- | -------------------------------------------------------------- |
+| `id`              | UUID          | No   | PK  | Identitas jurnal.                                             |
+| `journal_no`      | VARCHAR(50)   | No   | U   | Nomor jurnal (unik per entitas/periode).                      |
+| `financial_organization_id`| UUID | No   | IDX | Entitas keuangan (ref logis `coa_db`).                        |
+| `ledger_id`       | UUID          | No   | IDX | Ledger.                                                       |
+| `fiscal_period_id`| UUID          | No   | IDX | Periode fiskal (validasi period lock, BR-562).               |
+| `posting_date`    | DATE          | No   | IDX | Tanggal posting (kunci partisi).                             |
+| `journal_source`  | VARCHAR(30)   | No   |     | Manual/SubLedger/Recurring/Revaluation/Allocation (BR-557/558/559/560/561). |
+| `source_module`   | VARCHAR(50)   | Yes  |     | Modul sumber untuk jurnal otomatis (AP/AR/Inventory/…).       |
+| `source_document_ref`| VARCHAR(100)| Yes | IDX | Referensi dokumen sumber (drill-down).                        |
+| `currency_code`   | VARCHAR(3)    | No   |     | Mata uang transaksi.                                          |
+| `exchange_rate`   | NUMERIC(20,8) | No   |     | Kurs ke mata uang fungsional.                                |
+| `status`          | VARCHAR(20)   | No   | IDX | Draft/Posted/Reversed (BR-556).                              |
+| `reversed_entry_id`| UUID         | Yes  | FK  | Jurnal yang dibalik (reversal).                              |
+| `correlation_id`  | UUID          | No   | IDX | Korelasi lintas layanan (Saga).                             |
+| `posted_at`       | TIMESTAMPTZ   | Yes  |     | Waktu posting.                                              |
+
+### `gl.journal_line`
+
+| Column          | Type          | Null | Key | Description                                                    |
+| --------------- | ------------- | ---- | --- | -------------------------------------------------------------- |
+| `journal_entry_id`| UUID        | No   | FK  | Induk jurnal (`ON DELETE CASCADE`).                          |
+| `line_no`       | INTEGER       | No   |     | Nomor baris.                                                  |
+| `account_id`    | UUID          | No   | IDX | Akun GL (ref logis `coa_db`).                                |
+| `account_combination_id`| UUID  | Yes  |     | Kombinasi segmen (bila dipakai).                            |
+| `debit_amount`  | NUMERIC(20,4) | No   |     | Nilai debit (0 jika kredit).                                 |
+| `credit_amount` | NUMERIC(20,4) | No   |     | Nilai kredit (0 jika debit).                                 |
+| `functional_amount`| NUMERIC(20,4)| No |     | Nilai dalam mata uang fungsional.                           |
+| `cost_center_id`| UUID          | Yes  |     | Cost center (ref logis).                                     |
+| `project_id`    | UUID          | Yes  |     | Project (ref logis).                                         |
+| `description`   | TEXT          | Yes  |     | Keterangan baris.                                            |
+
+**Constraint kunci (BR-556):** aplikasi memvalidasi `SUM(debit_amount) = SUM(credit_amount)` per jurnal sebelum `status = Posted` (balanced). **Indeks:** `idx_journal_line_account (account_id)`; `idx_journal_entry_org_period (organization_id, fiscal_period_id)`.
+
+### `gl.recurring_journal_template` (BR-559)
+
+| Column        | Type        | Null | Key | Description                                    |
+| ------------- | ----------- | ---- | --- | ---------------------------------------------- |
+| `code`        | VARCHAR(50) | No   | U   | Kode template.                                 |
+| `frequency`   | VARCHAR(20) | No   |     | Monthly/Quarterly/…                            |
+| `next_run_date`| DATE       | Yes  |     | Jadwal berikutnya.                             |
+| `template_lines`| JSONB     | No   |     | Definisi baris jurnal berulang.                |
+
+### `gl.account_balance` (saldo agregat per akun/periode — mendukung pelaporan cepat)
+
+| Column          | Type          | Null | Key | Description                                    |
+| --------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `account_id`    | UUID          | No   | IDX | Akun.                                          |
+| `fiscal_period_id`| UUID        | No   | IDX | Periode.                                       |
+| `ledger_id`     | UUID          | No   |     | Ledger.                                        |
+| `opening_balance`| NUMERIC(20,4)| No  |     | Saldo awal.                                    |
+| `period_debit`  | NUMERIC(20,4) | No   |     | Total debit periode.                           |
+| `period_credit` | NUMERIC(20,4) | No   |     | Total kredit periode.                          |
+| `closing_balance`| NUMERIC(20,4)| No  |     | Saldo akhir.                                   |
+
+**Unique:** `uq_account_balance (organization_id, ledger_id, account_id, fiscal_period_id)`.
+
+---
+
+## 5.3 Accounts Payable (`ap_db`)
+
+Merealisasikan BRD 9.5.5: kewajiban vendor; sumber `procurement.goods.received`; menerbitkan `ap.invoice.recorded` (INT-002).
+
+```mermaid
+erDiagram
+  AP_INVOICE ||--|{ AP_INVOICE_LINE : contains
+  AP_INVOICE ||--o{ AP_PAYMENT_ALLOCATION : settled_by
+```
+
+### `ap.ap_invoice`
+
+| Column          | Type          | Null | Key | Description                                            |
+| --------------- | ------------- | ---- | --- | ------------------------------------------------------ |
+| `invoice_no`    | VARCHAR(50)   | No   | U   | Nomor invoice vendor.                                  |
+| `vendor_id`     | UUID          | No   | IDX | Vendor (ref logis `masterdata_db`).                    |
+| `invoice_date`  | DATE          | No   |     | Tanggal invoice.                                       |
+| `due_date`      | DATE          | No   | IDX | Jatuh tempo.                                           |
+| `currency_code` | VARCHAR(3)    | No   |     | Mata uang.                                             |
+| `total_amount`  | NUMERIC(20,4) | No   |     | Total kewajiban.                                       |
+| `outstanding_amount`| NUMERIC(20,4)| No |    | Sisa belum dibayar.                                    |
+| `status`        | VARCHAR(20)   | No   | IDX | Draft/Recorded/PartiallyPaid/Paid/Cancelled.          |
+| `goods_receipt_ref`| VARCHAR(100)| Yes | IDX | Referensi GR (ref logis `procurement_db`).            |
+| `gl_journal_ref`| VARCHAR(50)   | Yes  |     | Referensi jurnal GL yang dihasilkan.                  |
+
+### `ap.ap_invoice_line`, `ap.ap_payment_allocation` — pola standar (kolom: `ap_invoice_id`, `account_id`/`amount`, alokasi ke `payment_id`).
+
+---
+
+## 5.4 Accounts Receivable (`ar_db`)
+
+Merealisasikan BRD 9.5.6: piutang pelanggan; sumber `inventory.goods.issued`/`sales.order`; menerbitkan `ar.invoice.issued` (INT-001).
+
+### `ar.ar_invoice`
+
+| Column          | Type          | Null | Key | Description                                            |
+| --------------- | ------------- | ---- | --- | ------------------------------------------------------ |
+| `invoice_no`    | VARCHAR(50)   | No   | U   | Nomor invoice pelanggan.                              |
+| `customer_id`   | UUID          | No   | IDX | Pelanggan (ref logis `masterdata_db`).               |
+| `invoice_date`  | DATE          | No   |     | Tanggal invoice.                                      |
+| `due_date`      | DATE          | No   | IDX | Jatuh tempo.                                          |
+| `currency_code` | VARCHAR(3)    | No   |     | Mata uang.                                            |
+| `total_amount`  | NUMERIC(20,4) | No   |     | Total piutang.                                        |
+| `outstanding_amount`| NUMERIC(20,4)| No |    | Sisa belum tertagih.                                  |
+| `status`        | VARCHAR(20)   | No   | IDX | Issued/PartiallyPaid/Paid/Overdue/Cancelled.         |
+| `sales_order_ref`| VARCHAR(100) | Yes  | IDX | Referensi Sales Order (ref logis `sales_db`).        |
+| `gl_journal_ref`| VARCHAR(50)   | Yes  |     | Referensi jurnal GL.                                 |
+
+### `ar.ar_invoice_line`, `ar.ar_receipt_allocation` — pola standar.
+
+---
+
+## 5.5 Tax Management (`tax_db`)
+
+Merealisasikan BRD 9.5.13: perhitungan & pelaporan pajak; integrasi e-Faktur (INT-006).
+
+### `tax.tax_code`
+
+| Column      | Type          | Null | Key | Description                              |
+| ----------- | ------------- | ---- | --- | ---------------------------------------- |
+| `code`      | VARCHAR(30)   | No   | U   | Kode pajak (PPN/PPh/…).                  |
+| `rate`      | NUMERIC(9,4)  | No   |     | Tarif (%).                               |
+| `tax_type`  | VARCHAR(30)   | No   |     | Jenis (VAT/WHT/…).                       |
+| `gl_account_id`| UUID       | Yes  |     | Akun GL pajak (ref logis).               |
+
+### `tax.tax_transaction`
+
+| Column          | Type          | Null | Key | Description                                            |
+| --------------- | ------------- | ---- | --- | ------------------------------------------------------ |
+| `source_document_ref`| VARCHAR(100)| No | IDX | Dokumen sumber (AR/AP invoice).                       |
+| `tax_code_id`   | UUID          | No   | FK  | Kode pajak.                                            |
+| `base_amount`   | NUMERIC(20,4) | No   |     | Dasar pengenaan pajak.                                 |
+| `tax_amount`    | NUMERIC(20,4) | No   |     | Nilai pajak.                                           |
+| `efaktur_no`    | VARCHAR(50)   | Yes  | U   | Nomor faktur pajak (e-Faktur, INT-006).               |
+| `efaktur_status`| VARCHAR(20)   | Yes  |     | Status faktur (Draft/Approved/Reported).              |
+
+---
+
+## 5.6 Treasury, Cash & Bank (`treasury_db`)
+
+Merealisasikan BRD 9.5.8–9.5.9: likuiditas, kas, rekonsiliasi bank; **Payment** bersifat Exactly-Once (ADR-005); integrasi bank (INT-005).
+
+```mermaid
+erDiagram
+  BANK_ACCOUNT ||--o{ PAYMENT : from
+  PAYMENT ||--|{ PAYMENT_ALLOCATION : allocates
+  BANK_ACCOUNT ||--o{ BANK_STATEMENT_LINE : reconciled_with
+```
+
+### `trs.bank_account`
+
+| Column          | Type          | Null | Key | Description                                    |
+| --------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `code`          | VARCHAR(50)   | No   | U   | Kode rekening internal.                        |
+| `bank_name`     | VARCHAR(150)  | No   |     | Nama bank.                                     |
+| `account_no`    | VARCHAR(50)   | No   |     | Nomor rekening.                                |
+| `currency_code` | VARCHAR(3)    | No   |     | Mata uang rekening.                            |
+| `gl_account_id` | UUID          | No   |     | Akun kas/bank GL (ref logis).                  |
+
+### `trs.payment`
+
+| Column          | Type          | Null | Key | Description                                            |
+| --------------- | ------------- | ---- | --- | ------------------------------------------------------ |
+| `payment_no`    | VARCHAR(50)   | No   | U   | Nomor pembayaran/penerimaan.                          |
+| `payment_type`  | VARCHAR(20)   | No   |     | Outgoing (AP)/Incoming (AR).                          |
+| `bank_account_id`| UUID         | No   | FK  | Rekening sumber/tujuan.                                |
+| `party_id`      | UUID          | Yes  | IDX | Vendor/Customer (ref logis).                          |
+| `amount`        | NUMERIC(20,4) | No   |     | Nilai pembayaran.                                     |
+| `payment_date`  | DATE          | No   | IDX | Tanggal pembayaran.                                   |
+| `status`        | VARCHAR(20)   | No   | IDX | Draft/Settled/Reconciled/Failed.                     |
+| `external_ref`  | VARCHAR(100)  | Yes  |     | Referensi transaksi bank/payment gateway (INT-005).  |
+| `correlation_id`| UUID          | No   | IDX | Korelasi (EOS payment).                              |
+
+### `trs.bank_statement_line` & `trs.payment_allocation` — pola standar (rekonsiliasi otomatis dgn `payment`/invoice).
+
+---
+
+## 5.7 Summary
+
+Bab ini mendesain skema transaksi finansial dengan **GL** sebagai inti (jurnal header/lines yang selalu *balanced*, dipartisi per `posting_date`, dengan status Draft/Posted/Reversed, sumber manual/sub-ledger/recurring/revaluation, serta tabel saldo agregat), dan sub-ledger **AP/AR/Tax/Treasury** yang menghasilkan jurnal otomatis ke GL melalui Posting Rule (BAB 4.5) dan disinkronkan via event (INT-001/002). Proses Journal Posting dan Payment menerapkan Exactly-Once (ADR-005). Referensi lintas domain bersifat logis (tanpa FK fisik) sesuai database-per-service.
+
+---

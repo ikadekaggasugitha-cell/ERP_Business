@@ -1,0 +1,139 @@
+# 9.5.12 Budget Management Requirements
+
+---
+
+# 9.5.12.1 Overview
+
+Budget Management merupakan domain yang mengatur keseluruhan siklus hidup anggaran, mulai dari penyusunan budget tahunan, revisi budget, alokasi budget ke unit organisasi maupun proyek, hingga pengendalian anggaran (budgetary control) terhadap transaksi keuangan yang berjalan.
+
+Dalam arsitektur ERP yang bersifat multi-organisasi dan berbasis scope, budget harus dapat disusun dan dialokasikan pada berbagai level struktur organisasi (Holding, Sub Holding, Company, Business Unit, Branch, Department, Warehouse, Project Site) maupun pada dimensi keuangan lain seperti Cost Center dan Project, tanpa memerlukan perubahan source code. Sistem harus memastikan bahwa setiap transaksi yang berpotensi memengaruhi anggaran dapat divalidasi secara real-time terhadap sisa anggaran yang tersedia, serta menyediakan perbandingan antara realisasi dan anggaran sebagai dasar pengambilan keputusan manajemen.
+
+Domain ini terintegrasi erat dengan Financial Organization, Cost Center, Chart of Accounts, dan Fiscal Calendar sebagai dimensi rujukan utama dalam penyusunan dan pengendalian anggaran.
+
+---
+
+# 9.5.12.2 Business Requirement Catalogue
+
+## BR-636 – Annual Budget Preparation
+
+| Attribute           | Description                                                                                                                                                                       |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-636                                                                                                                                                                             |
+| Requirement Name    | Annual Budget Preparation                                                                                                                                                          |
+| Category            | Budget Management                                                                                                                                                                  |
+| Priority            | Critical                                                                                                                                                                           |
+| Business Objective  | BO-004, BO-009                                                                                                                                                                     |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                                                                                   |
+| Description         | Sistem harus menyediakan fungsi penyusunan budget tahunan yang memungkinkan pembuatan budget per periode fiskal, per organisasi/cost center/project, dan per kategori akun secara terstruktur. |
+| Business Rationale  | Penyusunan budget yang terstruktur dan tersentralisasi diperlukan agar seluruh entitas organisasi memiliki acuan anggaran yang konsisten sebagai satu sumber kebenaran untuk perencanaan keuangan tahunan. |
+| Business Value      | Menjadikan proses penyusunan budget lebih terkendali, konsisten antar unit organisasi, dan mengurangi duplikasi penyusunan anggaran secara manual di luar sistem.                 |
+| Acceptance Criteria | Pengguna dengan otorisasi dapat membuat draft budget tahunan yang mencakup periode fiskal, unit organisasi, cost center/project, dan akun anggaran, serta menyimpannya sebagai versi budget yang belum final. |
+
+---
+
+## BR-637 – Budget Line Item Detail
+
+| Requirement ID | Requirement Name         | Priority | Description                                                                                                                            | Business Value                                                                                    |
+| -------------- | ------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| BR-637         | Budget Line Item Detail   | Critical | Sistem harus mendukung penyusunan budget pada level rincian (line item) berdasarkan kombinasi akun, cost center/project, dan periode (bulanan/kuartalan/tahunan) dalam satu budget header. | Memberikan granularitas anggaran yang memadai untuk kebutuhan pengendalian dan pelaporan yang detail. |
+
+---
+
+## BR-638 – Budget Approval Workflow
+
+| Requirement ID | Requirement Name        | Priority | Description                                                                                                                           | Business Value                                                                                       |
+| -------------- | ------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| BR-638         | Budget Approval Workflow  | Critical | Sistem harus menyediakan alur persetujuan budget yang configurable berdasarkan level organisasi, nilai anggaran, dan hierarki approval sebelum budget berstatus final/aktif. | Memastikan tata kelola anggaran berjalan sesuai kebijakan perusahaan dan meningkatkan transparansi proses persetujuan. |
+
+---
+
+## BR-639 – Budget Revision
+
+| Requirement ID | Requirement Name | Priority | Description                                                                                                                                 | Business Value                                                                                     |
+| -------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| BR-639         | Budget Revision    | High     | Sistem harus memungkinkan revisi budget yang telah aktif (revised budget) dengan mekanisme approval ulang, sambil tetap mempertahankan histori versi budget sebelumnya. | Memberikan fleksibilitas menyesuaikan anggaran terhadap perubahan kondisi bisnis tanpa kehilangan jejak audit. |
+
+---
+
+## BR-640 – Budget Allocation per Cost Center/Project
+
+| Requirement ID | Requirement Name                              | Priority | Description                                                                                                                                    | Business Value                                                                                        |
+| -------------- | ----------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| BR-640         | Budget Allocation per Cost Center/Project       | Critical | Sistem harus mendukung alokasi budget ke satu atau lebih Cost Center dan/atau Project Site sesuai struktur organisasi dan dimensi keuangan yang berlaku. | Memungkinkan pengendalian biaya yang lebih akurat pada level unit kerja maupun proyek tertentu.               |
+
+---
+
+## BR-641 – Budgetary Control Validation
+
+| Requirement ID | Requirement Name              | Priority | Description                                                                                                                                                    | Business Value                                                                                                | Acceptance Criteria                                                                                              |
+| -------------- | -------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| BR-641         | Budgetary Control Validation     | Critical | Sistem harus melakukan validasi transaksi (permintaan pembelian, purchase order, pengeluaran biaya, dan transaksi lain yang dikonfigurasikan) terhadap sisa anggaran yang tersedia secara real-time. | Mencegah pengeluaran melampaui anggaran yang telah ditetapkan dan mendukung otomatisasi pengendalian lintas departemen. | Transaksi yang melampaui sisa anggaran akan ditolak, diberi peringatan (warning), atau memerlukan approval tambahan sesuai konfigurasi kebijakan budgetary control. |
+
+---
+
+## BR-642 – Budget Control Policy Configuration
+
+| Requirement ID | Requirement Name                  | Priority | Description                                                                                                                                     | Business Value                                                                                     |
+| -------------- | ------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| BR-642         | Budget Control Policy Configuration  | High     | Sistem harus menyediakan konfigurasi kebijakan pengendalian anggaran (hard stop, soft warning, atau approval override) yang dapat berbeda per organisasi, kategori akun, atau jenis transaksi. | Memberikan fleksibilitas kebijakan pengendalian anggaran sesuai kebutuhan masing-masing entitas bisnis. |
+
+---
+
+## BR-643 – Budget vs Actual Comparison Report
+
+| Requirement ID | Requirement Name                    | Priority | Description                                                                                                                                    | Business Value                                                                                             |
+| -------------- | --------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| BR-643         | Budget vs Actual Comparison Report      | Critical | Sistem harus menyediakan laporan perbandingan antara anggaran (budget), realisasi (actual), dan varians (selisih) per periode, cost center/project, dan akun. | Mendukung pengambilan keputusan berbasis data terkait kinerja anggaran secara real-time.                          |
+
+---
+
+## BR-644 – Budget Commitment Tracking
+
+| Requirement ID | Requirement Name           | Priority | Description                                                                                                                                        | Business Value                                                                                       |
+| -------------- | ----------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| BR-644         | Budget Commitment Tracking    | High     | Sistem harus mencatat komitmen anggaran (encumbrance) dari dokumen yang belum terealisasi penuh, seperti purchase order terbuka, sebagai pengurang sisa anggaran yang tersedia. | Memberikan gambaran sisa anggaran yang lebih akurat dengan memperhitungkan komitmen yang belum terselesaikan. |
+
+---
+
+## BR-645 – Budget Dashboard & Notification
+
+| Requirement ID | Requirement Name             | Priority | Description                                                                                                                                  | Business Value                                                                                       |
+| -------------- | -------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| BR-645         | Budget Dashboard & Notification  | Medium   | Sistem harus menyediakan dashboard pemantauan status anggaran serta notifikasi otomatis ketika penggunaan anggaran mendekati atau melampaui ambang batas tertentu. | Meningkatkan transparansi dan kecepatan respons manajemen terhadap risiko pelampauan anggaran.               |
+
+---
+
+# 9.5.12.3 Business Rules Reference
+
+| Business Rule ID | Description                                                                                                                    |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-BUD-001     | Setiap budget harus terikat pada satu periode fiskal yang mengacu pada Fiscal Calendar yang berlaku.                          |
+| BRule-BUD-002     | Budget hanya dapat digunakan untuk pengendalian transaksi setelah berstatus final/aktif melalui alur persetujuan yang telah dikonfigurasi. |
+| BRule-BUD-003     | Setiap revisi budget wajib melalui proses approval ulang dan menghasilkan versi baru tanpa menghapus versi budget sebelumnya. |
+| BRule-BUD-004     | Sisa anggaran dihitung dari nilai budget dikurangi realisasi dan komitmen (encumbrance) yang belum terselesaikan.             |
+| BRule-BUD-005     | Kebijakan pengendalian anggaran (hard stop/soft warning/approval override) ditentukan melalui konfigurasi, bukan hardcode pada aplikasi. |
+| BRule-BUD-006     | Alokasi budget ke Cost Center dan/atau Project harus mengacu pada struktur organisasi dan dimensi keuangan yang aktif pada periode budget bersangkutan. |
+| BRule-BUD-007     | Setiap perubahan status budget (draft, submitted, approved, revised, closed) harus tercatat dalam audit trail secara lengkap. |
+
+---
+
+# 9.5.12.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                        |
+| -------------- | ------------------- | ------------ | --------------------------------------- |
+| BR-636         | BO-004, BO-009      | SH-003       | Annual Budget Preparation               |
+| BR-637         | BO-004              | SH-003       | Budget Line Item Configuration          |
+| BR-638         | BO-009              | SH-003       | Budget Approval Workflow                |
+| BR-639         | BO-004              | SH-003       | Budget Revision Management              |
+| BR-640         | BO-004              | SH-003       | Budget Allocation Administration        |
+| BR-641         | BO-009              | SH-003       | Budgetary Control Validation            |
+| BR-642         | BO-009              | SH-003       | Budget Control Policy Configuration     |
+| BR-643         | BO-004              | SH-003       | Budget vs Actual Reporting              |
+| BR-644         | BO-009              | SH-003       | Budget Commitment Tracking              |
+| BR-645         | BO-004              | SH-003       | Budget Monitoring & Notification        |
+
+---
+
+# 9.5.12.5 Summary
+
+Budget Management menjadi domain krusial dalam pengendalian keuangan organisasi yang menghubungkan proses perencanaan (budget preparation), pengendalian (budgetary control), dan evaluasi (budget vs actual) secara terintegrasi. Dengan dukungan konfigurasi alokasi budget ke Cost Center dan Project Site di berbagai level struktur organisasi, serta validasi transaksi secara real-time terhadap sisa anggaran, domain ini memastikan disiplin anggaran tetap terjaga tanpa menghambat kecepatan proses bisnis. Seluruh requirement pada bagian ini akan menjadi acuan bagi desain teknis lanjutan pada dokumen berikutnya.

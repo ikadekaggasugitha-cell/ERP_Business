@@ -1,0 +1,495 @@
+# BAB 12. Non-Functional Requirements
+
+## 12.1 Overview
+
+Non-Functional Requirements (NFR) mendefinisikan kebutuhan kualitas sistem (*system quality attributes*) yang harus dipenuhi oleh platform **Enterprise Resource Planning (ERP)** agar dapat beroperasi secara andal, aman, dan efisien pada skala multi-organisasi (Holding, Sub Holding, Company, Branch, Warehouse, Project Site) tanpa batas level.
+
+Jika BAB 9 Business Requirement mendefinisikan **apa** yang harus dilakukan sistem (*what the system does*) melalui Requirement ID (BR-xxx) per modul fungsional, maka bab ini mendefinisikan **seberapa baik** sistem harus melakukannya (*how well the system performs*), mencakup atribut kinerja, ketersediaan, keandalan, skalabilitas, kemudahan pemeliharaan, keamanan, kepatuhan, lokalisasi, aksesibilitas, dan pemulihan bencana.
+
+Bab ini bersifat melengkapi, bukan menggantikan, kebutuhan yang telah dibahas pada modul fungsional terkait. Beberapa kebutuhan kualitas telah dibahas secara mendalam pada:
+
+- **Security Management** (BAB 9.4, BR-031 s.d. BR-040) — mekanisme Role-Based Access Control (RBAC) dan Scope-Based Access Control sebagai kebutuhan fungsional keamanan;
+- **Audit Trail** (BAB 9.20, BR-826 s.d. BR-835) — kebutuhan fungsional pencatatan jejak audit;
+- **Localization and Multi Language** (BAB 9.19, BR-816 s.d. BR-825) — kebutuhan fungsional dukungan multi bahasa dan format regional.
+
+Bab ini **tidak menduplikasi** BR-xxx tersebut, melainkan mereferensikannya sebagai *cross-link* pada subseksi terkait, serta menambahkan dimensi non-fungsional (target metrik, Service Level Agreement/SLA, dan kebutuhan kualitas sistem secara keseluruhan) yang berlaku lintas seluruh modul.
+
+Setiap kebutuhan pada bab ini menggunakan skema **Requirement ID (NFR-xxx)** yang terpisah dari BR-xxx, agar dapat ditelusuri secara independen ke Business Objectives (BO-xxx), arsitektur solusi, serta rencana pengujian non-fungsional (*performance testing*, *security testing*, *disaster recovery drill*).
+
+Prinsip arsitektur yang menjadi acuan seluruh NFR pada bab ini adalah **Configuration over Customization**, **Organization Tree First**, **Scope-Based Everything**, **Cloud Ready**, **API First**, dan **Multi-Tenant Ready**, sebagaimana ditetapkan pada BAB 3 Business Vision.
+
+---
+
+## 12.2 Performance
+
+Kebutuhan kinerja memastikan sistem responsif terhadap interaksi pengguna dan mampu memproses volume transaksi tinggi khas organisasi multi-entitas.
+
+### NFR-001 – API Response Time
+
+| Attribute        | Description                                                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | NFR-001                                                                                                                        |
+| Requirement Name | API Response Time                                                                                                              |
+| Priority         | Critical                                                                                                                       |
+| Description      | Seluruh panggilan API sinkron (query dan command sederhana) harus memberikan respon dalam batas waktu yang wajar bagi pengalaman pengguna, tidak terpengaruh oleh jumlah level organisasi maupun volume data historis. |
+| Target/Metric    | Response time < 2 detik untuk 95% request (P95); < 5 detik untuk 99% request (P99), diukur pada beban operasional normal.     |
+
+---
+
+### NFR-002 – Transaction Throughput
+
+| Attribute        | Description                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-002                                                                                                                     |
+| Requirement Name | Transaction Throughput                                                                                                       |
+| Priority         | High                                                                                                                        |
+| Description      | Sistem harus mampu memproses volume transaksi bisnis (penjualan, pembelian, produksi, jurnal keuangan) secara paralel dari beberapa organisasi tanpa penurunan kinerja yang signifikan. |
+| Target/Metric    | Minimum 500 transaksi tulis per detik (peak load) pada skala referensi (multi-company, multi-branch) dengan degradasi performa < 10%. |
+
+---
+
+### NFR-003 – Dashboard Rendering Time
+
+| Attribute        | Description                                                                                                              |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | NFR-003                                                                                                                   |
+| Requirement Name | Dashboard Rendering Time                                                                                                  |
+| Priority         | High                                                                                                                     |
+| Description      | Dashboard dan laporan ringkasan (termasuk agregasi lintas organisasi) harus dapat dimuat dan dirender dalam waktu yang wajar bagi pengambilan keputusan operasional. |
+| Target/Metric    | Waktu render awal dashboard < 3 detik; refresh data berikutnya (*subsequent load*) < 1.5 detik untuk 90% permintaan.       |
+
+---
+
+## 12.3 Availability
+
+Kebutuhan ketersediaan memastikan sistem dapat diakses secara konsisten oleh seluruh entitas organisasi yang beroperasi lintas zona waktu.
+
+### NFR-004 – System Uptime SLA
+
+| Attribute        | Description                                                                                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | NFR-004                                                                                                        |
+| Requirement Name | System Uptime SLA                                                                                               |
+| Priority         | Critical                                                                                                       |
+| Description      | Sistem produksi harus tersedia secara konsisten guna mendukung operasional bisnis yang berjalan lintas Company, Branch, dan Project Site tanpa henti. |
+| Target/Metric    | Service Level Agreement (SLA) uptime minimum 99.5% per bulan untuk modul transaksional inti (di luar *planned maintenance*). |
+
+---
+
+### NFR-005 – Infrastructure Redundancy
+
+| Attribute        | Description                                                                                                       |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | NFR-005                                                                                                        |
+| Requirement Name | Infrastructure Redundancy                                                                                       |
+| Priority         | Critical                                                                                                       |
+| Description      | Komponen kritikal (aplikasi, basis data, load balancer) harus memiliki redundansi (*active-active* atau *active-passive*) agar kegagalan satu instans tidak menyebabkan gangguan layanan menyeluruh, selaras dengan prinsip Cloud Ready. |
+| Target/Metric    | Tidak ada *single point of failure* pada komponen kritikal; automatic failover ke komponen redundan < 60 detik. |
+
+---
+
+### NFR-006 – Planned Maintenance Window
+
+| Attribute        | Description                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | NFR-006                                                                                                       |
+| Requirement Name | Planned Maintenance Window                                                                                    |
+| Priority         | Medium                                                                                                       |
+| Description      | Pemeliharaan terjadwal (*planned maintenance*, patching, deployment mayor) harus dijadwalkan pada jendela waktu yang meminimalkan gangguan operasional dan diinformasikan terlebih dahulu kepada seluruh organisasi terdampak. |
+| Target/Metric    | Maksimum 4 jam per bulan pada jendela pemeliharaan terjadwal, dengan notifikasi minimal H-3 hari kerja sebelum pelaksanaan. |
+
+---
+
+## 12.4 Reliability
+
+Kebutuhan keandalan memastikan integritas data dan konsistensi transaksi terjaga meskipun terjadi kegagalan parsial pada sistem.
+
+### NFR-007 – Data Integrity Assurance
+
+| Attribute        | Description                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-007                                                                                                      |
+| Requirement Name | Data Integrity Assurance                                                                                     |
+| Priority         | Critical                                                                                                    |
+| Description      | Sistem harus menjaga integritas relasional dan referensial data lintas modul (mis. jurnal akuntansi vs dokumen sumber) sehingga tidak terjadi data yatim (*orphan data*) atau ketidaksesuaian saldo. |
+| Target/Metric    | Zero tolerance terhadap ketidaksesuaian saldo buku besar (*general ledger*) akibat kegagalan sistem; validasi integritas otomatis berjalan setiap siklus tutup periode. |
+
+---
+
+### NFR-008 – Transaction Consistency (ACID Compliance)
+
+| Attribute        | Description                                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | NFR-008                                                                                                       |
+| Requirement Name | Transaction Consistency (ACID Compliance)                                                                     |
+| Priority         | Critical                                                                                                     |
+| Description      | Transaksi lintas modul yang saling bergantung (mis. penerbitan Sales Order yang memicu alokasi stok dan pencatatan piutang) harus bersifat atomik; kegagalan pada salah satu langkah harus membatalkan seluruh rangkaian transaksi (*rollback*). |
+| Target/Metric    | 100% transaksi kritikal memenuhi prinsip Atomicity, Consistency, Isolation, Durability (ACID) atau mekanisme *compensating transaction* setara pada arsitektur terdistribusi. |
+
+---
+
+### NFR-009 – Graceful Error Recovery
+
+| Attribute        | Description                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | NFR-009                                                                                                      |
+| Requirement Name | Graceful Error Recovery                                                                                       |
+| Priority         | High                                                                                                          |
+| Description      | Sistem harus dapat pulih dari kegagalan sementara (*transient failure*, mis. koneksi basis data terputus) secara otomatis tanpa kehilangan data transaksi yang sedang diproses, serta menampilkan pesan kesalahan yang informatif kepada pengguna. |
+| Target/Metric    | Automatic retry mechanism dengan maksimum 3 percobaan; tidak ada kehilangan data transaksi (*zero data loss*) pada kegagalan yang tertangani. |
+
+---
+
+## 12.5 Scalability
+
+Kebutuhan skalabilitas memastikan sistem dapat tumbuh mengikuti penambahan entitas organisasi, pengguna, dan volume transaksi tanpa perubahan arsitektur.
+
+### NFR-010 – Horizontal Scaling
+
+| Attribute        | Description                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-010                                                                                                     |
+| Requirement Name | Horizontal Scaling                                                                                          |
+| Priority         | Critical                                                                                                    |
+| Description      | Arsitektur sistem harus mendukung penambahan kapasitas komputasi (*horizontal scaling*) melalui penambahan instans aplikasi/layanan tanpa downtime, selaras dengan prinsip Cloud Ready dan API First. |
+| Target/Metric    | Penambahan instans aplikasi dapat dilakukan tanpa downtime; kapasitas throughput meningkat secara linear terhadap jumlah instans (minimum efisiensi 80%). |
+
+---
+
+### NFR-011 – Organizational and Transactional Growth
+
+| Attribute        | Description                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-011                                                                                                     |
+| Requirement Name | Organizational and Transactional Growth                                                                     |
+| Priority         | Critical                                                                                                    |
+| Description      | Sistem harus tetap memenuhi target kinerja (NFR-001 s.d. NFR-003) seiring pertambahan jumlah unit organisasi (Company, Branch, Warehouse, Project Site) dan volume transaksi historis, tanpa memerlukan perubahan source code, selaras dengan prinsip Organization Tree First. |
+| Target/Metric    | Degradasi response time < 15% pada pertumbuhan volume data hingga 10x baseline; penambahan unit organisasi baru tidak memerlukan downtime. |
+
+---
+
+### NFR-012 – Multi-Tenant Load Isolation
+
+| Attribute        | Description                                                                                                  |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | NFR-012                                                                                                    |
+| Requirement Name | Multi-Tenant Load Isolation                                                                                 |
+| Priority         | High                                                                                                       |
+| Description      | Pada mode Multi-Tenant Ready, beban kerja (*workload*) satu tenant/holding tidak boleh menurunkan kinerja tenant lain yang berbagi infrastruktur yang sama (*noisy neighbor* problem). |
+| Target/Metric    | Isolasi kuota sumber daya (CPU, memori, koneksi basis data) per tenant; deviasi response time antar tenant akibat beban tenant lain < 10%. |
+
+---
+
+## 12.6 Maintainability
+
+Kebutuhan kemudahan pemeliharaan memastikan sistem modular dapat dikembangkan, diperbarui, dan didokumentasikan secara berkelanjutan tanpa mengganggu modul lain.
+
+### NFR-013 – Modular and Independent Deployment
+
+| Attribute        | Description                                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | NFR-013                                                                                                        |
+| Requirement Name | Modular and Independent Deployment                                                                              |
+| Priority         | High                                                                                                           |
+| Description      | Setiap modul fungsional (Financial Management, Procurement, Inventory, Manufacturing, dll.) harus dapat di-*deploy*, diperbarui, atau di-*rollback* secara independen tanpa memerlukan penghentian layanan modul lain, selaras dengan prinsip Configuration over Customization. |
+| Target/Metric    | Minimum 90% modul dapat di-deploy secara independen; waktu rollback modul individual < 15 menit.               |
+
+---
+
+### NFR-014 – API and Data Schema Versioning
+
+| Attribute        | Description                                                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | NFR-014                                                                                                    |
+| Requirement Name | API and Data Schema Versioning                                                                             |
+| Priority         | High                                                                                                       |
+| Description      | Seluruh API dan skema data harus menerapkan strategi *versioning* yang jelas agar perubahan/pembaruan tidak menyebabkan gangguan (*breaking change*) terhadap integrasi yang telah berjalan, selaras dengan prinsip API First. |
+| Target/Metric    | Setiap versi API mayor didukung minimum 12 bulan setelah versi baru dirilis (*deprecation policy*); dokumentasi versi tersedia untuk seluruh versi aktif. |
+
+---
+
+### NFR-015 – Technical Documentation Currency
+
+| Attribute        | Description                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-015                                                                                                    |
+| Requirement Name | Technical Documentation Currency                                                                            |
+| Priority         | Medium                                                                                                     |
+| Description      | Dokumentasi teknis (API reference, skema basis data, arsitektur sistem, panduan konfigurasi) harus selalu mutakhir mengikuti perubahan sistem agar mendukung pengembangan dan pemeliharaan berkelanjutan. |
+| Target/Metric    | Dokumentasi teknis diperbarui maksimum 5 hari kerja setelah rilis perubahan mayor; cakupan dokumentasi API minimum 95% endpoint aktif. |
+
+---
+
+## 12.7 Security
+
+Kebutuhan keamanan non-fungsional pada bagian ini bersifat lintas modul dan melengkapi kebutuhan fungsional keamanan yang telah dibahas secara rinci pada **BAB 9.4 Security Management Requirements (BR-031 s.d. BR-040)** — mencakup Role-Based Access Control, Scope-Based Access Control, Multi-Factor Authentication, dan enkripsi data — serta akan dielaborasi lebih lanjut secara arsitektural pada **BAB 15 Security Requirements**. Bagian ini tidak menduplikasi BR-031 s.d. BR-040, melainkan menetapkan target kualitas keamanan secara sistemik.
+
+### NFR-016 – Security Vulnerability Response Time
+
+| Attribute        | Description                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-016                                                                                                      |
+| Requirement Name | Security Vulnerability Response Time                                                                          |
+| Priority         | Critical                                                                                                     |
+| Description      | Kerentanan keamanan (*vulnerability*) yang teridentifikasi melalui *penetration testing*, *bug bounty*, atau audit internal harus ditangani sesuai tingkat keparahan, selaras dengan kebijakan RBAC/Scope-Based Access Control pada BR-031 dan akan dirinci lebih lanjut pada BAB 15. |
+| Target/Metric    | Kerentanan kritikal ditangani < 24 jam; kerentanan tinggi < 7 hari; kerentanan menengah/rendah < 30 hari sejak identifikasi. |
+
+---
+
+### NFR-017 – Periodic Security Assessment
+
+| Attribute        | Description                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-017                                                                                                        |
+| Requirement Name | Periodic Security Assessment                                                                                    |
+| Priority         | High                                                                                                           |
+| Description      | Sistem harus menjalani penilaian keamanan berkala (*vulnerability scanning*, *penetration testing*) untuk memvalidasi efektivitas kontrol keamanan yang mencakup enkripsi (BR-033), otentikasi berlapis (BR-032), serta pengendalian akses; rincian ruang lingkup pengujian mengikuti BAB 15 Security Requirements. |
+| Target/Metric    | Penetration testing menyeluruh minimum 1 kali per tahun; vulnerability scanning otomatis minimum 1 kali per bulan. |
+
+---
+
+### NFR-018 – Security Incident Response Time
+
+| Attribute        | Description                                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | NFR-018                                                                                                    |
+| Requirement Name | Security Incident Response Time                                                                             |
+| Priority         | Critical                                                                                                   |
+| Description      | Insiden keamanan (mis. percobaan akses tidak sah, kebocoran data) harus terdeteksi dan direspons secara cepat, memanfaatkan pencatatan aktivitas keamanan yang tercakup dalam Audit Trail (BAB 9.20, BR-826 s.d. BR-835) sebagai sumber data forensik utama. |
+| Target/Metric    | Waktu deteksi insiden keamanan (*mean time to detect*) < 1 jam; waktu respons awal (*mean time to respond*) < 4 jam sejak deteksi. |
+
+---
+
+## 12.8 Compliance
+
+Kebutuhan kepatuhan memastikan sistem selaras dengan regulasi dan standar yang berlaku di Indonesia serta standar akuntansi yang relevan bagi organisasi multi-entitas.
+
+### NFR-019 – Kepatuhan terhadap Undang-Undang Pelindungan Data Pribadi (UU PDP)
+
+| Attribute        | Description                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-019                                                                                                        |
+| Requirement Name | Kepatuhan terhadap Undang-Undang Pelindungan Data Pribadi (UU PDP)                                              |
+| Priority         | Critical                                                                                                       |
+| Description      | Sistem harus memenuhi ketentuan Undang-Undang Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi (UU PDP), termasuk pengelolaan persetujuan (*consent*), hak subjek data (akses, koreksi, penghapusan), pembatasan tujuan pemrosesan, serta pelaporan insiden kebocoran data. |
+| Target/Metric    | 100% data pribadi yang dikelola tercakup dalam register pemrosesan data (*records of processing activities*); pelaporan insiden kebocoran data ke otoritas dalam waktu maksimum 3x24 jam sesuai ketentuan UU PDP. |
+
+---
+
+### NFR-020 – Kepatuhan terhadap Regulasi Sektoral (OJK, bila relevan)
+
+| Attribute        | Description                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-020                                                                                                      |
+| Requirement Name | Kepatuhan terhadap Regulasi Sektoral (OJK, bila relevan)                                                       |
+| Priority         | High                                                                                                         |
+| Description      | Bagi entitas dalam grup usaha yang berada di bawah pengawasan Otoritas Jasa Keuangan (OJK) — mis. entitas dengan aktivitas keuangan, investasi, atau properti yang diatur — sistem harus mendukung kebutuhan pelaporan dan pengendalian internal sesuai ketentuan OJK yang berlaku bagi entitas tersebut. |
+| Target/Metric    | Konfigurasi kepatuhan OJK dapat diaktifkan per entitas organisasi tanpa memengaruhi entitas lain yang tidak diatur OJK; laporan kepatuhan tersedia sesuai siklus pelaporan yang dipersyaratkan regulator. |
+
+---
+
+### NFR-021 – Kepatuhan terhadap Standar Akuntansi (PSAK/IFRS)
+
+| Attribute        | Description                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-021                                                                                                        |
+| Requirement Name | Kepatuhan terhadap Standar Akuntansi (PSAK/IFRS)                                                                |
+| Priority         | Critical                                                                                                       |
+| Description      | Modul keuangan harus menghasilkan laporan keuangan dan perlakuan akuntansi yang selaras dengan Pernyataan Standar Akuntansi Keuangan (PSAK) yang berlaku di Indonesia, dengan opsi konfigurasi tambahan untuk penyajian selaras International Financial Reporting Standards (IFRS) bagi entitas yang memerlukan pelaporan internasional. |
+| Target/Metric    | 100% modul Financial Management Domain menghasilkan laporan sesuai struktur PSAK terkini; opsi pemetaan ke IFRS tersedia melalui konfigurasi Chart of Accounts tanpa perubahan source code. |
+
+---
+
+## 12.9 Localization
+
+Kebutuhan lokalisasi non-fungsional pada bagian ini melengkapi kebutuhan fungsional yang telah dibahas secara rinci pada **BAB 9.19 Localization and Multi Language Requirements (BR-816 s.d. BR-825)** — mencakup antarmuka multi bahasa, manajemen terjemahan, serta format tanggal/angka/mata uang regional. Bagian ini menetapkan target kualitas dan cakupan lokalisasi secara terukur.
+
+### NFR-022 – Bahasa Cakupan Minimum
+
+| Attribute        | Description                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-022                                                                                                     |
+| Requirement Name | Bahasa Cakupan Minimum                                                                                       |
+| Priority         | High                                                                                                        |
+| Description      | Sistem harus menyediakan cakupan terjemahan yang lengkap untuk Bahasa Indonesia dan Bahasa Inggris sebagai bahasa minimum wajib, memanfaatkan mekanisme Multi Language User Interface pada BR-816 dan Translation Management pada BR-817. |
+| Target/Metric    | Cakupan terjemahan minimum 98% label antarmuka dan pesan sistem untuk Bahasa Indonesia dan Bahasa Inggris pada setiap rilis. |
+
+---
+
+### NFR-023 – Konsistensi Format Regional
+
+| Attribute        | Description                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-023                                                                                                     |
+| Requirement Name | Konsistensi Format Regional                                                                                  |
+| Priority         | High                                                                                                        |
+| Description      | Perubahan preferensi bahasa atau format regional (tanggal, angka, mata uang) pada tingkat pengguna atau organisasi tidak boleh memengaruhi konsistensi data yang tersimpan pada basis data, sesuai prinsip yang telah ditetapkan pada modul Localization. |
+| Target/Metric    | Zero data corruption akibat perubahan locale; validasi konsistensi format berjalan pada 100% transaksi lintas locale. |
+
+---
+
+### NFR-024 – Waktu Aktivasi Bahasa Baru
+
+| Attribute        | Description                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-024                                                                                                    |
+| Requirement Name | Waktu Aktivasi Bahasa Baru                                                                                  |
+| Priority         | Medium                                                                                                      |
+| Description      | Penambahan bahasa baru pada sistem (di luar bahasa cakupan minimum) harus dapat dilakukan melalui konfigurasi tanpa memerlukan downtime, memanfaatkan mekanisme Translation Management pada BR-817. |
+| Target/Metric    | Aktivasi bahasa baru dapat dilakukan tanpa downtime; waktu implementasi bahasa baru (setelah terjemahan tersedia) < 1 hari kerja. |
+
+---
+
+## 12.10 Accessibility
+
+Kebutuhan aksesibilitas memastikan sistem dapat digunakan oleh pengguna dengan berbagai kemampuan dan perangkat.
+
+### NFR-025 – Kepatuhan Web Content Accessibility Guidelines (WCAG)
+
+| Attribute        | Description                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-025                                                                                                     |
+| Requirement Name | Kepatuhan Web Content Accessibility Guidelines (WCAG)                                                        |
+| Priority         | Medium                                                                                                      |
+| Description      | Antarmuka pengguna berbasis web harus memenuhi standar aksesibilitas Web Content Accessibility Guidelines (WCAG) agar dapat digunakan oleh pengguna dengan keterbatasan penglihatan, pendengaran, atau motorik. |
+| Target/Metric    | Kepatuhan minimum WCAG 2.1 level AA untuk seluruh modul antarmuka pengguna utama.                            |
+
+---
+
+### NFR-026 – Dukungan Perangkat Lintas Platform
+
+| Attribute        | Description                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-026                                                                                                    |
+| Requirement Name | Dukungan Perangkat Lintas Platform                                                                          |
+| Priority         | High                                                                                                       |
+| Description      | Antarmuka pengguna harus dapat diakses secara responsif melalui berbagai perangkat (desktop, tablet, mobile) dan browser utama tanpa kehilangan fungsionalitas inti, mendukung pengguna lapangan pada Project Site maupun Warehouse. |
+| Target/Metric    | Fungsionalitas inti tersedia penuh pada resolusi layar minimum 360px (mobile) hingga desktop; kompatibel dengan 2 versi terakhir browser utama (Chrome, Edge, Safari, Firefox). |
+
+---
+
+### NFR-027 – Dukungan Teknologi Bantu (Assistive Technology)
+
+| Attribute        | Description                                                                                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | NFR-027                                                                                                   |
+| Requirement Name | Dukungan Teknologi Bantu (Assistive Technology)                                                             |
+| Priority         | Medium                                                                                                    |
+| Description      | Elemen antarmuka kritikal (formulir transaksi, navigasi utama, notifikasi) harus kompatibel dengan pembaca layar (*screen reader*) dan navigasi keyboard penuh. |
+| Target/Metric    | 100% formulir transaksi utama dapat dioperasikan melalui navigasi keyboard tanpa mouse; label ARIA tersedia pada seluruh elemen interaktif utama. |
+
+---
+
+## 12.11 Disaster Recovery
+
+Kebutuhan pemulihan bencana memastikan kelangsungan operasional bisnis apabila terjadi kegagalan besar pada infrastruktur utama.
+
+### NFR-028 – Recovery Time Objective (RTO) dan Recovery Point Objective (RPO)
+
+| Attribute        | Description                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-028                                                                                                        |
+| Requirement Name | Recovery Time Objective (RTO) dan Recovery Point Objective (RPO)                                                |
+| Priority         | Critical                                                                                                       |
+| Description      | Sistem harus mendefinisikan dan memenuhi target waktu pemulihan layanan (RTO) dan target maksimum kehilangan data (RPO) apabila terjadi bencana atau kegagalan besar pada pusat data utama. |
+| Target/Metric    | RTO maksimum 4 jam untuk modul transaksional inti; RPO maksimum 15 menit (kehilangan data maksimum 15 menit transaksi terakhir). |
+
+---
+
+### NFR-029 – Kebijakan Backup Data
+
+| Attribute        | Description                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-029                                                                                                    |
+| Requirement Name | Kebijakan Backup Data                                                                                       |
+| Priority         | Critical                                                                                                   |
+| Description      | Sistem harus melakukan pencadangan data (*backup*) secara terjadwal dan otomatis, disimpan pada lokasi terpisah secara geografis (*offsite/geo-redundant*) dari pusat data utama, serta diverifikasi keutuhannya secara berkala. |
+| Target/Metric    | Backup penuh minimum harian, backup incremental setiap 4 jam; uji pemulihan (*restore test*) dari backup dilakukan minimum 1 kali per kuartal dengan tingkat keberhasilan 100%. |
+
+---
+
+### NFR-030 – Mekanisme Failover Otomatis
+
+| Attribute        | Description                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | NFR-030                                                                                                    |
+| Requirement Name | Mekanisme Failover Otomatis                                                                                 |
+| Priority         | High                                                                                                       |
+| Description      | Apabila pusat data utama tidak dapat diakses, sistem harus dapat beralih (*failover*) secara otomatis atau semi-otomatis ke pusat data cadangan (*disaster recovery site*) tanpa kehilangan konfigurasi organisasi maupun data transaksi yang telah tersimpan. |
+| Target/Metric    | Uji failover menyeluruh (*disaster recovery drill*) dilakukan minimum 1 kali per tahun; waktu aktivasi disaster recovery site sesuai RTO pada NFR-028. |
+
+---
+
+## 12.12 Realisasi Teknologi terhadap Non-Functional Requirements
+
+Bagian ini memetakan bagaimana **tumpukan teknologi standar** (BAB 4.6.1 — Go, React 19 SPA, Apache Kafka, PostgreSQL, di atas Docker/Kubernetes) merealisasikan target NFR pada bab ini. Pemetaan bersifat arsitektural (tingkat HLD); rincian implementasi (dekomposisi layanan, katalog *topic*, strategi partisi) dijabarkan pada BAB 13.7 s.d. BAB 13.13.
+
+| NFR / Kategori                         | Mekanisme Realisasi Teknologi                                                                                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| NFR-001 API Response Time              | Layanan **Go** berlatensi rendah (konkurensi *goroutine*), *indexing* & *connection pooling* **PostgreSQL**, *caching* pada Data Access Layer, respons via API Gateway. |
+| NFR-002 Transaction Throughput         | Layanan **Go** *stateless* yang dapat diskalakan; **Kafka** sebagai penyangga (*buffer*) tulis asinkron untuk meredam lonjakan beban; *batch/COPY* PostgreSQL.  |
+| NFR-003 Dashboard Rendering            | **React 19 + TanStack Query** (Virtual Grid & caching); *read model* (CQRS) yang dibangun dari *event* **Kafka**; *materialized view* / *read replica* **PostgreSQL**.               |
+| NFR-004 Uptime SLA, NFR-005 Redundancy | *Self-healing* **Kubernetes** (multi-replica); **PostgreSQL** HA *primary–standby* (mis. Patroni); *replication factor* **Kafka** ≥ 3 broker; tanpa *single point of failure*. |
+| NFR-007 Data Integrity, NFR-008 ACID   | Transaksi **PostgreSQL** yang memenuhi ACID untuk konsistensi intra-layanan; **Saga** + **Transactional Outbox** melalui **Kafka** untuk konsistensi lintas-layanan (*eventual consistency* dengan *compensating transaction*). |
+| NFR-009 Graceful Error Recovery        | *Retry* & *Dead Letter Queue* pada konsumen **Kafka**; pola *retry with backoff* dan *circuit breaker* pada klien **Go**; jaminan *at-least-once delivery*.     |
+| NFR-010 Horizontal Scaling             | Layanan **Go** *stateless* dengan *Horizontal Pod Autoscaler* **Kubernetes**; penambahan *partition* **Kafka**; *read replica* **PostgreSQL**.                 |
+| NFR-011 Organizational/Tx Growth       | *Table partitioning* **PostgreSQL** (per periode/organisasi); penskalaan *partition* & *consumer group* **Kafka** tanpa perubahan *source code*.               |
+| NFR-012 Multi-Tenant Isolation         | *Resource quota* **Kubernetes** per tenant; *schema-per-tenant* / *Row-Level Security* **PostgreSQL**; *client quota* **Kafka**.                               |
+| NFR-013 Modular Deployment             | Satu *microservice* **Go** per modul domain; *independent deploy/rollback* melalui **Kubernetes** dan CI/CD (BAB 13.13).                                        |
+| NFR-014 API & Schema Versioning        | *API versioning* pada API Gateway (REST/OpenAPI); **Kafka Schema Registry** (Avro/Protobuf) dengan aturan kompatibilitas *backward/forward*.                    |
+| NFR-016–018 Security                   | **OAuth2/OIDC** pada API Gateway; TLS *in-transit*; enkripsi *at-rest* **PostgreSQL**; log keamanan diaruskan (*stream*) via **Kafka** ke penyimpanan audit.    |
+| NFR-019, NFR-021 Compliance            | **PostgreSQL** sebagai *system of record* yang auditable; jejak audit (BAB 9.20) untuk kepatuhan UU PDP, PSAK/IFRS.                                             |
+| NFR-022–024 Localization               | Modul lokalisasi i18n pada Presentation Layer (React 19); tabel terjemahan & *locale* pada **PostgreSQL**; aktivasi bahasa via konfigurasi tanpa *downtime*.                       |
+| NFR-025–027 Accessibility              | Komponen **React 19 / Tailwind** yang memenuhi WCAG 2.1 AA, *ARIA*, dan navigasi *keyboard*; *responsive* lintas perangkat.                                                   |
+| NFR-028–030 Disaster Recovery          | *Point-in-Time Recovery* & *WAL archiving* **PostgreSQL** ke lokasi *geo-redundant*; **Kafka MirrorMaker** antar-region; *failover* orkestrasi **Kubernetes**. |
+
+Catatan penting mengenai NFR-008: pada arsitektur *microservices* Go yang terdistribusi, jaminan ACID penuh hanya berlaku di dalam batas satu layanan/basis data PostgreSQL. Untuk transaksi lintas-modul (mis. Sales → Inventory → AR → GL pada INT-001), konsistensi dijaga melalui pola **Saga** dengan **Transactional Outbox** di atas Kafka, sehingga memenuhi klausul *"atau mekanisme compensating transaction setara pada arsitektur terdistribusi"* pada target metrik NFR-008. Secara spesifik, sub-proses finansial berkonsistensi absolut — **General Ledger, Journal Posting, Payment, dan Inventory Reservation** — menerapkan **Exactly-Once Semantics** (Kafka transactions), sedangkan proses lainnya menggunakan **At-Least-Once + idempotensi** (strategi *Selective Exactly-Once*, lihat BAB 13.10.4 dan ADR-005 pada BAB 13.7.1).
+
+---
+
+## 12.13 Non-Functional Requirement Traceability
+
+Tabel berikut memetakan keterlacakan (*traceability*) setiap Non-Functional Requirement terhadap kategori, prioritas, dan tujuan bisnis (Business Objective) terkait sebagaimana ditetapkan pada BAB 4 Business Objectives.
+
+| NFR ID  | Category           | Priority | Related Business Objective                          |
+| ------- | ------------------ | -------- | ----------------------------------------------------- |
+| NFR-001 | Performance         | Critical | BO-008 (Pengambilan keputusan berbasis data real-time) |
+| NFR-002 | Performance         | High     | BO-003 (Integrasi seluruh proses bisnis)              |
+| NFR-003 | Performance         | High     | BO-008 (Pengambilan keputusan berbasis data real-time) |
+| NFR-004 | Availability        | Critical | BO-001 (Platform ERP terintegrasi seluruh entitas)     |
+| NFR-005 | Availability        | Critical | BO-006 (Arsitektur modular Cloud Ready)               |
+| NFR-006 | Availability        | Medium   | BO-006 (Arsitektur modular Cloud Ready)               |
+| NFR-007 | Reliability         | Critical | BO-004 (Single Source of Truth)                       |
+| NFR-008 | Reliability         | Critical | BO-004 (Single Source of Truth)                       |
+| NFR-009 | Reliability         | High     | BO-001 (Platform ERP terintegrasi seluruh entitas)     |
+| NFR-010 | Scalability         | Critical | BO-005 (Ekspansi organisasi tanpa perubahan source code) |
+| NFR-011 | Scalability         | Critical | BO-002 (Struktur organisasi bertingkat tanpa batas)    |
+| NFR-012 | Scalability         | High     | BO-005 (Ekspansi organisasi tanpa perubahan source code) |
+| NFR-013 | Maintainability     | High     | BO-006 (Arsitektur modular yang mudah dikembangkan)    |
+| NFR-014 | Maintainability     | High     | BO-006 (Arsitektur modular yang mudah dikembangkan)    |
+| NFR-015 | Maintainability     | Medium   | BO-006 (Arsitektur modular yang mudah dikembangkan)    |
+| NFR-016 | Security            | Critical | BO-028 (Tata kelola keamanan informasi)                |
+| NFR-017 | Security            | High     | BO-028 (Tata kelola keamanan informasi)                |
+| NFR-018 | Security            | Critical | BO-028 (Tata kelola keamanan informasi)                |
+| NFR-019 | Compliance          | Critical | BO-007 (Tata kelola dan transparansi organisasi)       |
+| NFR-020 | Compliance          | High     | BO-007 (Tata kelola dan transparansi organisasi)       |
+| NFR-021 | Compliance          | Critical | BO-007 (Tata kelola dan transparansi organisasi)       |
+| NFR-022 | Localization        | High     | BO-027 (Dukungan multi bahasa dan multi wilayah)       |
+| NFR-023 | Localization        | High     | BO-027 (Dukungan multi bahasa dan multi wilayah)       |
+| NFR-024 | Localization        | Medium   | BO-027 (Dukungan multi bahasa dan multi wilayah)       |
+| NFR-025 | Accessibility       | Medium   | BO-006 (Arsitektur modular yang mudah dikembangkan)    |
+| NFR-026 | Accessibility       | High     | BO-001 (Platform ERP terintegrasi seluruh entitas)     |
+| NFR-027 | Accessibility       | Medium   | BO-001 (Platform ERP terintegrasi seluruh entitas)     |
+| NFR-028 | Disaster Recovery   | Critical | BO-004 (Single Source of Truth)                        |
+| NFR-029 | Disaster Recovery   | Critical | BO-004 (Single Source of Truth)                        |
+| NFR-030 | Disaster Recovery   | High     | BO-006 (Arsitektur modular Cloud Ready)                |
+
+---
+
+## 12.14 Summary
+
+Bab ini menetapkan **30 Non-Functional Requirement (NFR-001 s.d. NFR-030)** yang mendefinisikan kebutuhan kualitas sistem ERP secara menyeluruh, mencakup sepuluh kategori: Performance, Availability, Reliability, Scalability, Maintainability, Security, Compliance, Localization, Accessibility, dan Disaster Recovery.
+
+Seluruh NFR pada bab ini bersifat melengkapi, bukan menggantikan, kebutuhan fungsional yang telah didefinisikan pada BAB 9 Business Requirement — khususnya BR-031 s.d. BR-040 (Security Management), BR-816 s.d. BR-825 (Localization and Multi Language), dan BR-826 s.d. BR-835 (Audit Trail) — serta akan dielaborasi lebih lanjut secara arsitektural pada BAB 15 Security Requirements.
+
+Setiap NFR harus diverifikasi melalui pengujian non-fungsional yang sesuai (*performance testing*, *load testing*, *security testing*, *disaster recovery drill*, *accessibility audit*) sebelum sistem dinyatakan siap untuk *go-live*, dan target metrik pada bab ini menjadi acuan utama dalam penyusunan Service Level Agreement (SLA) antara penyedia layanan dan organisasi pengguna.

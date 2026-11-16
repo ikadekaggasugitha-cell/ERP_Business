@@ -1,0 +1,207 @@
+# Database Design Document — Table of Contents
+
+Dokumen ini merupakan **Database Design Document (DBDD)** untuk platform Enterprise Resource Planning (ERP) multi-organisasi. DBDD merupakan artefak turunan teknis dari **Software Architecture Document (SAD) BAB 6 (Data Architecture)** dan menjabarkan **desain fisik basis data PostgreSQL**: Entity Relationship Diagram (ERD), Data Dictionary, kunci & indeks, strategi partisi, serta pola fisik multi-tenancy.
+
+> **Konsistensi:** DBDD mengikuti keputusan arsitektur ADR-001 (**database-per-service**), ADR-002 (**Hybrid Multi-Tenancy**), CONS-014 (**PostgreSQL sebagai system of record**), dan Service Catalog SVC-001–019 (SAD BAB 4.5).
+>
+> **Cakupan:** entitas inti (*core*) dan berprioritas tinggi didesain lengkap; entitas turunan mengikuti pola standar (BAB 2). Aturan bisnis level field mengacu pada BRD BAB 9 (BR-xxx) dan tidak diciptakan ulang.
+
+---
+
+## Front Matter
+
+## Cover
+
+## Revision History
+
+## Table of Contents
+
+## Conventions and Legend
+
+---
+
+# BAB 1. Introduction
+
+### 1.1 Purpose
+
+### 1.2 Scope
+
+### 1.3 Relationship to SAD and BRD
+
+### 1.4 Database Topology (Database-per-Service)
+
+### 1.5 Identifier and Notation Conventions
+
+### 1.6 How to Read This Document
+
+---
+
+# BAB 2. Design Standards and Conventions
+
+### 2.1 Overview
+
+### 2.2 Naming Conventions
+
+### 2.3 Standard Data Types
+
+### 2.4 Common Columns (Base Entity)
+
+### 2.5 Primary Keys, Foreign Keys, and Referential Integrity
+
+### 2.6 Soft Delete and Optimistic Locking
+
+### 2.7 Multi-Tenancy Physical Design
+
+### 2.8 Row-Level Security (RLS) Pattern
+
+### 2.9 Partitioning Standards
+
+### 2.10 Transactional Outbox and Idempotency Tables
+
+### 2.11 Indexing Standards
+
+### 2.12 Auditing and Effectivity (Temporal) Standards
+
+### 2.13 Summary
+
+---
+
+# BAB 3. Core and Platform Domain Schema
+
+### 3.1 Overview
+
+### 3.2 Organization Management (`org_db`)
+
+### 3.3 User Management (`user_db`)
+
+### 3.4 Security Management (`security_db`)
+
+### 3.5 Workflow Management (`workflow_db`)
+
+### 3.6 Master Data Management (`masterdata_db`)
+
+### 3.7 Audit Trail (`audit_db`)
+
+### 3.8 Summary
+
+---
+
+# BAB 4. Financial Foundation and Chart of Accounts Schema
+
+### 4.1 Overview
+
+### 4.2 Financial Organization (`coa_db` / `gl_db`)
+
+### 4.3 Fiscal Calendar
+
+### 4.4 Currency Management (`currency_db`)
+
+### 4.5 Chart of Accounts (`coa_db`)
+
+### 4.6 Summary
+
+---
+
+# BAB 5. Financial Transactions Schema
+
+### 5.1 Overview
+
+### 5.2 General Ledger (`gl_db`)
+
+### 5.3 Accounts Payable (`ap_db`)
+
+### 5.4 Accounts Receivable (`ar_db`)
+
+### 5.5 Tax Management (`tax_db`)
+
+### 5.6 Treasury, Cash & Bank (`treasury_db`)
+
+### 5.7 Summary
+
+---
+
+# BAB 6. Operational Domain Schema
+
+### 6.1 Overview
+
+### 6.2 Procurement (`procurement_db`)
+
+### 6.3 Inventory (`inventory_db`)
+
+### 6.4 Sales (`sales_db`)
+
+### 6.5 Manufacturing (`manufacturing_db`)
+
+### 6.6 Summary
+
+---
+
+# BAB 7. Human Resource and Payroll Schema
+
+### 7.1 Overview
+
+### 7.2 Human Resource Management (`hr_db`)
+
+### 7.3 Payroll Management (`payroll_db`)
+
+### 7.4 PII Protection and Data Subject Rights
+
+### 7.5 Summary
+
+---
+
+# BAB 8. Cross-Cutting, Indexing, Partitioning, and Appendix
+
+### 8.1 Overview
+
+### 8.2 Reporting Read Model (`reporting_db`, CQRS)
+
+### 8.3 Configuration Data
+
+### 8.4 Consolidated Indexing Strategy
+
+### 8.5 Consolidated Partitioning Strategy
+
+### 8.6 Data Retention and Archiving (Physical)
+
+### 8.7 Traceability Matrix (Table ↔ Service ↔ BR)
+
+### 8.8 Appendix A — Enumerations and Reference Values
+
+### 8.9 Appendix B — Open Items and Link to API Specification
+
+### 8.10 Revision History
+
+### 8.11 Summary
+
+---
+
+# BAB 9. Extended Domain Schema (Financial & Operational Extensions)
+
+### 9.1 Overview
+
+### 9.2 Fixed Asset (`fixedasset_db`)
+
+### 9.3 Cost & Profit Center (`dimension_db`)
+
+### 9.4 Budget Management (`budget_db`)
+
+### 9.5 Financial Close (`financialclose_db`)
+
+### 9.6 Financial Consolidation (`consolidation_db`)
+
+### 9.7 Project Management (`project_db`)
+
+### 9.8 Asset Management (`asset_db`)
+
+### 9.9 Maintenance Management (`maintenance_db`)
+
+### 9.10 Customer Relationship Management (`crm_db`)
+
+### 9.11 Localization & Multi-Language (`localization_db`)
+
+### 9.12 Cross-Cutting Notes
+
+### 9.13 Summary
+
+---

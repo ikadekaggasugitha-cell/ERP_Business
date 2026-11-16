@@ -1,0 +1,134 @@
+# BAB 9. Observability and Operations
+
+## 9.1 Overview
+
+Bab ini mendefinisikan arsitektur observability dan praktik operasional yang diperlukan untuk mengoperasikan sistem terdistribusi secara andal, merealisasikan **ADR-010 (Observability berbasis OpenTelemetry)**. Observability menjadi prasyarat untuk memenuhi SLA ketersediaan (NFR-004), respons insiden keamanan (NFR-018), serta pemantauan kinerja (NFR-001/002/003).
+
+Pada arsitektur *microservices* + *event-driven*, observability tidak opsional — ia adalah kapabilitas inti untuk mendeteksi, mendiagnosis, dan memulihkan gangguan lintas layanan (mitigasi RISK-013).
+
+---
+
+## 9.2 Observability Architecture — Three Pillars
+
+```text
+   Go Services / Web SPA / Kong ──(OpenTelemetry SDK)──┐
+                                                    ▼
+        ┌───────────── OTel Collector ─────────────┐
+        │  Metrics ─► Prometheus ─► Grafana         │
+        │  Logs (JSON) ─► Kafka ─► Loki/ELK ─► Grafana │
+        │  Traces ─► Jaeger/Tempo ─► Grafana        │
+        └───────────────────┬──────────────────────┘
+                            ▼
+                 Alertmanager ─► On-call / SIEM
+```
+
+Ketiga pilar dikorelasikan melalui **`correlation_id`** yang dipropagasikan lintas REST, gRPC, dan *event* Kafka (BAB 11.6).
+
+---
+
+## 9.3 Metrics
+
+| Aspek                | Realisasi                                                              | Referensi        |
+| -------------------- | --------------------------------------------------------------------- | ---------------- |
+| Koleksi metrik       | **Prometheus** (scrape endpoint `/metrics` tiap layanan).             | ADR-010          |
+| Visualisasi          | **Grafana** dashboard per layanan & platform.                        | NFR-003          |
+| Metode RED           | Rate, Errors, Duration untuk setiap layanan/endpoint.                 | NFR-001          |
+| Metode USE           | Utilization, Saturation, Errors untuk sumber daya (CPU, mem, disk).   | NFR-005          |
+| Metrik domain        | Kafka *consumer lag*, kedalaman DLQ, *outbox lag*, TPS transaksi.     | NFR-002, RISK-013|
+
+Metrik menjadi dasar *auto-scaling* (HPA, BAB 8.6) dan evaluasi SLO (§9.7).
+
+---
+
+## 9.4 Logging
+
+| Aspek                | Realisasi                                                              |
+| -------------------- | --------------------------------------------------------------------- |
+| Format               | *Structured logging* (JSON) dengan field standar (`correlation_id`, `organization_id`, `service`, `level`). |
+| Transport            | Log diaruskan via **Kafka** ke penyimpanan terpusat (Loki/ELK) — konsisten dengan arsitektur event. |
+| Retensi              | Sesuai kebijakan (operasional pendek, audit panjang — BAB 6.8).       |
+| Keamanan             | PII tidak di-log dalam bentuk *plaintext*; masking diterapkan.         |
+| Korelasi             | Setiap log membawa `correlation_id` untuk penelusuran lintas layanan.  |
+
+Log audit (security/compliance) dipisahkan dan diperlakukan immutable (BAB 7.7).
+
+---
+
+## 9.5 Distributed Tracing
+
+* **OpenTelemetry** menghasilkan *trace* *end-to-end* yang melintasi klien → Kong → layanan Go → Kafka → layanan konsumen.
+* `correlation_id`/`trace_id` disuntikkan pada header HTTP/gRPC dan header *event* Kafka, memungkinkan rekonstruksi alur bisnis lintas layanan (mis. Saga INT-001).
+* Backend *tracing* (Jaeger/Tempo) memvisualisasikan latensi per *span* untuk diagnosis *bottleneck* (NFR-001).
+* Sampling adaptif untuk menyeimbangkan visibilitas & biaya.
+
+---
+
+## 9.6 Alerting and Incident Response
+
+| Aspek                | Realisasi                                                              | Target NFR       |
+| -------------------- | --------------------------------------------------------------------- | ---------------- |
+| Alerting             | **Alertmanager** dengan aturan berbasis SLO & anomali.                | NFR-004          |
+| Eskalasi             | Rute *on-call* berjenjang; integrasi SIEM untuk *security event*.     | NFR-018          |
+| MTTD / MTTR          | Deteksi insiden < 1 jam; respons awal < 4 jam (keamanan).             | NFR-018          |
+| Alert kritikal       | *Consumer lag* melampaui ambang, DLQ bertumbuh, failover DB, error rate naik. | NFR-002, NFR-009 |
+| Runbook link         | Setiap alert menautkan *runbook* penanganan.                          | §9.9             |
+
+---
+
+## 9.7 SLO/SLA Management
+
+| SLI                          | SLO Target (contoh)                     | Sumber NFR       |
+| ---------------------------- | ---------------------------------------- | ---------------- |
+| API latency (P95)            | < 2 detik                                | NFR-001          |
+| API latency (P99)            | < 5 detik                                | NFR-001          |
+| Dashboard render awal        | < 3 detik                                | NFR-003          |
+| Availability (bulanan)       | ≥ 99,5%                                  | NFR-004          |
+| Transaction throughput       | ≥ 500 TPS (peak)                        | NFR-002          |
+
+* **Error budget** dikelola dari SLO ketersediaan; pelampauan memicu penahanan rilis fitur demi stabilitas.
+* SLA formal (antara penyedia & organisasi) diturunkan dari SLO ini (BRD 12.13).
+
+---
+
+## 9.8 Health Checks and Readiness
+
+| Probe                | Fungsi                                                                 |
+| -------------------- | --------------------------------------------------------------------- |
+| Liveness             | Mendeteksi *pod* macet → restart otomatis (self-healing).             |
+| Readiness            | Menahan trafik hingga layanan siap (dependensi DB/Kafka tersedia).    |
+| Startup              | Memberi waktu inisialisasi sebelum liveness aktif.                    |
+| Dependency check     | Verifikasi konektivitas PostgreSQL, Kafka, dan dependensi kritikal.   |
+| Consumer lag monitor | Memastikan konsumen event tidak tertinggal (indikator kesehatan async).|
+
+---
+
+## 9.9 Operational Runbooks
+
+Runbook operasional (didokumentasikan pada artefak Operations) mencakup minimal:
+
+* **Incident response** — triase, eskalasi, komunikasi.
+* **DR failover** — prosedur aktivasi DR site (uji berkala, NFR-030).
+* **Kafka operations** — penanganan *lag*, *rebalance*, DLQ, penambahan partisi.
+* **Database operations** — *failover*, *restore* dari PITR, *vacuum/tuning* (tanggung jawab self-managed, ADR-004).
+* **Deployment & rollback** — prosedur rilis dan pemulihan (BAB 10).
+* **Certificate & secret rotation** — rotasi terjadwal (BAB 7.9).
+
+---
+
+## 9.10 Observability Traceability
+
+| Kebutuhan (BRD)          | Realisasi (SAD)                                | Bagian     |
+| ------------------------ | ---------------------------------------------- | ---------- |
+| NFR-001/002/003 (kinerja)| Metrik RED, SLO, tracing latensi               | §9.3, §9.7 |
+| NFR-004 (uptime)         | Health checks, alerting, self-healing          | §9.6, §9.8 |
+| NFR-009 (recovery)       | Monitoring DLQ/lag, retry visibility           | §9.3, §9.6 |
+| NFR-018 (incident)       | Alerting + SIEM + MTTD/MTTR                     | §9.6       |
+| RISK-013 (Kafka ops)     | Consumer lag monitoring & runbook              | §9.3, §9.9 |
+
+---
+
+## 9.11 Summary
+
+Bab ini menetapkan arsitektur observability tiga-pilar (metrics, logs, traces) berbasis OpenTelemetry, Prometheus/Grafana, dan penyaluran log via Kafka, dengan korelasi `correlation_id` *end-to-end*. Praktik operasional — alerting berbasis SLO, respons insiden sesuai target NFR-018, health checks, dan runbook — memastikan sistem terdistribusi dapat dioperasikan secara andal dan gangguan dapat dideteksi serta dipulihkan dengan cepat. Observability menjadi kapabilitas kunci untuk menegakkan SLA dan memitigasi kompleksitas operasional (RISK-013).
+
+---

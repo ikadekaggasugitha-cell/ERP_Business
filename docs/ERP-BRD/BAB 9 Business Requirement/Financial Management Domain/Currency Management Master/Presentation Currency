@@ -1,0 +1,205 @@
+# 9.5.3.17 Presentation Currency Requirements
+
+---
+
+# 9.5.3.17.1 Overview
+
+Presentation Currency merupakan mata uang yang digunakan untuk menampilkan informasi keuangan kepada pengguna pada antarmuka aplikasi, dashboard, laporan analitis, maupun laporan manajemen. Presentation Currency tidak mengubah transaksi sumber, General Ledger, maupun Reporting Currency yang telah dihasilkan melalui proses akuntansi.
+
+Presentation Currency memberikan fleksibilitas kepada pengguna untuk melihat informasi keuangan dalam mata uang yang paling relevan dengan kebutuhan analisis, tanpa memengaruhi integritas data maupun hasil pelaporan resmi.
+
+---
+
+# 9.5.3.17.2 Business Capability
+
+Presentation Currency menyediakan kapabilitas berikut:
+
+* User-specific Presentation Currency.
+* Organization-specific Presentation Currency.
+* Dashboard Currency Conversion.
+* Report Currency Conversion.
+* Real-time Currency Conversion.
+* Multi Presentation Currency.
+* Currency Preference.
+* Session-based Currency Selection.
+* Integration dengan Reporting Currency.
+* Integration dengan Business Intelligence.
+* Audit trail untuk perubahan preferensi dan konfigurasi.
+
+---
+
+# 9.5.3.17.3 Business Requirement Catalogue
+
+## BR-241 – Presentation Currency Configuration
+
+| Attribute           | Description                                                                                                                                                                               |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-241                                                                                                                                                                                    |
+| Requirement Name    | Presentation Currency Configuration                                                                                                                                                       |
+| Category            | Presentation Currency                                                                                                                                                                     |
+| Priority            | High                                                                                                                                                                                      |
+| Business Objective  | BO-012                                                                                                                                                                                    |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                                                                                          |
+| Description         | Sistem harus menyediakan konfigurasi Presentation Currency yang dapat digunakan untuk menampilkan data keuangan pada antarmuka pengguna tanpa mengubah data transaksi atau laporan resmi. |
+| Business Value      | Memberikan fleksibilitas analisis bagi pengguna lintas negara dan lintas organisasi.                                                                                                      |
+| Acceptance Criteria | Pengguna dapat memilih Presentation Currency sesuai hak akses dan konfigurasi yang berlaku.                                                                                               |
+
+---
+
+## BR-242 – User Preference
+
+| Attribute        | Description                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-242                                                                                                                    |
+| Requirement Name | User Presentation Currency Preference                                                                                     |
+| Priority         | High                                                                                                                      |
+| Description      | Sistem harus memungkinkan setiap pengguna menyimpan preferensi Presentation Currency sebagai bagian dari profil pengguna. |
+
+---
+
+## BR-243 – Multiple Presentation Currency
+
+| Attribute        | Description                                                                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-243                                                                                                                                                  |
+| Requirement Name | Multiple Presentation Currency                                                                                                                          |
+| Priority         | High                                                                                                                                                    |
+| Description      | Sistem harus mendukung tampilan data dalam berbagai Presentation Currency tanpa menghasilkan perubahan pada Reporting Currency maupun transaksi sumber. |
+
+---
+
+## BR-244 – Real-Time Conversion
+
+| Attribute        | Description                                                                                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-244                                                                                                                                                                  |
+| Requirement Name | Real-Time Presentation Currency Conversion                                                                                                                              |
+| Priority         | Critical                                                                                                                                                                |
+| Description      | Sistem harus melakukan konversi nilai secara real-time berdasarkan Exchange Rate dan Currency Conversion Policy yang dikonfigurasi untuk kebutuhan penyajian informasi. |
+
+---
+
+## BR-245 – Reporting Integration
+
+| Attribute        | Description                                                                                                                                                                      |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-245                                                                                                                                                                           |
+| Requirement Name | Reporting Integration                                                                                                                                                            |
+| Priority         | Critical                                                                                                                                                                         |
+| Description      | Presentation Currency harus dapat diterapkan pada Financial Reporting, Management Reporting, Dashboard, Business Intelligence, dan Executive Cockpit tanpa mengubah data sumber. |
+
+---
+
+## BR-246 – Exchange Rate Resolution
+
+| Attribute        | Description                                                                                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-246                                                                                                                                                                  |
+| Requirement Name | Exchange Rate Resolution                                                                                                                                                |
+| Priority         | High                                                                                                                                                                    |
+| Description      | Konversi ke Presentation Currency harus menggunakan Exchange Rate Type, Exchange Rate Version, dan Currency Conversion Policy yang sesuai dengan konfigurasi pelaporan. |
+
+---
+
+## BR-247 – Performance Optimization
+
+| Attribute        | Description                                                                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-247                                                                                                                                                                                |
+| Requirement Name | Presentation Currency Performance                                                                                                                                                     |
+| Priority         | High                                                                                                                                                                                  |
+| Description      | Sistem harus mendukung mekanisme caching, pre-calculation, atau materialized view untuk menjaga performa ketika melakukan konversi Presentation Currency pada volume data yang besar. |
+
+---
+
+## BR-248 – Access Control
+
+| Attribute        | Description                                                                                                                      |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-248                                                                                                                           |
+| Requirement Name | Presentation Currency Access Control                                                                                             |
+| Priority         | High                                                                                                                             |
+| Description      | Hak untuk memilih atau mengubah Presentation Currency harus mengikuti Role-Based Access Control (RBAC) dan kebijakan organisasi. |
+
+---
+
+## BR-249 – Dependency Validation
+
+| Attribute        | Description                                                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-249                                                                                                                                                        |
+| Requirement Name | Dependency Validation                                                                                                                                         |
+| Priority         | High                                                                                                                                                          |
+| Description      | Sistem harus memastikan bahwa Presentation Currency hanya menggunakan mata uang yang aktif dan memiliki Exchange Rate yang valid terhadap Reporting Currency. |
+
+---
+
+## BR-250 – Presentation Currency Auditability
+
+| Attribute        | Description                                                                                                                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-250                                                                                                                                                                                                  |
+| Requirement Name | Presentation Currency Auditability                                                                                                                                                                      |
+| Priority         | High                                                                                                                                                                                                    |
+| Description      | Seluruh perubahan konfigurasi global, perubahan preferensi pengguna, serta penggunaan Presentation Currency pada laporan harus tercatat dalam Audit Trail apabila diwajibkan oleh kebijakan organisasi. |
+
+---
+
+# 9.5.3.17.4 Business Rules
+
+| Business Rule ID | Description                                                                                                                                   |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-PC-001     | Presentation Currency harus berasal dari Currency Master yang berstatus Active.                                                               |
+| BRule-PC-002     | Presentation Currency tidak boleh mengubah nilai transaksi sumber, Functional Currency, maupun Reporting Currency.                            |
+| BRule-PC-003     | Konversi ke Presentation Currency dilakukan pada saat penyajian data (*render time*) atau menggunakan hasil pra-perhitungan yang tervalidasi. |
+| BRule-PC-004     | Exchange Rate yang digunakan harus mengikuti Currency Conversion Policy yang ditetapkan untuk pelaporan atau analitik.                        |
+| BRule-PC-005     | Pengguna hanya dapat memilih Presentation Currency yang diizinkan oleh kebijakan organisasi dan hak aksesnya.                                 |
+| BRule-PC-006     | Perubahan Presentation Currency tidak menghasilkan jurnal akuntansi maupun perubahan pada General Ledger.                                     |
+| BRule-PC-007     | Seluruh konfigurasi global dan perubahan preferensi pengguna harus dapat ditelusuri melalui Audit Trail sesuai kebijakan organisasi.          |
+
+---
+
+# 9.5.3.17.5 Data Attributes
+
+| Attribute                    | Description                                          |
+| ---------------------------- | ---------------------------------------------------- |
+| Presentation Currency ID     | Identitas unik sistem.                               |
+| Currency ID                  | Referensi ke Currency Master.                        |
+| User Scope                   | Pengguna yang menggunakan preferensi ini (opsional). |
+| Role Scope                   | Peran pengguna yang berlaku (opsional).              |
+| Organization Scope           | Ruang lingkup organisasi (opsional).                 |
+| Reporting Currency Reference | Reporting Currency sebagai sumber konversi.          |
+| Exchange Rate Type           | Jenis kurs yang digunakan.                           |
+| Exchange Rate Version        | Versi kurs yang digunakan.                           |
+| Currency Conversion Policy   | Referensi kebijakan konversi.                        |
+| Effective From               | Tanggal mulai berlaku.                               |
+| Effective To                 | Tanggal akhir berlaku.                               |
+| Status                       | Active, Inactive, Archived.                          |
+| Remarks                      | Catatan bisnis.                                      |
+| Created By / Created Date    | Informasi pembuatan data.                            |
+| Updated By / Updated Date    | Informasi perubahan terakhir.                        |
+
+---
+
+# 9.5.3.17.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                       |
+| -------------- | ------------------ | ----------- | ------------------------------------ |
+| BR-241         | BO-012             | SH-003      | Presentation Currency Administration |
+| BR-242         | BO-012             | SH-004      | User Preference Management           |
+| BR-243         | BO-012             | SH-003      | Multi-Currency Presentation          |
+| BR-244         | BO-010             | SH-003      | Real-Time Currency Conversion        |
+| BR-245         | BO-011             | SH-003      | Financial & Management Reporting     |
+| BR-246         | BO-010             | SH-003      | Exchange Rate Resolution             |
+| BR-247         | BO-027             | SH-007      | Performance Optimization             |
+| BR-248         | BO-028             | SH-009      | Access Control                       |
+| BR-249         | BO-029             | SH-010      | Dependency Validation                |
+| BR-250         | BO-029             | SH-010      | Audit & Compliance                   |
+
+---
+
+# 9.5.3.17.7 Summary
+
+Presentation Currency menyediakan lapisan penyajian yang fleksibel bagi pengguna untuk melihat informasi keuangan dalam mata uang pilihan mereka tanpa memengaruhi transaksi, General Ledger, maupun Reporting Currency. Dengan dukungan preferensi pengguna, konversi real-time, integrasi dengan dashboard dan Business Intelligence, kontrol akses, optimasi performa, serta audit trail, ERP mampu memberikan pengalaman analitis yang lebih baik sekaligus menjaga integritas data keuangan.
+
+Presentation Currency menjadi komponen penting bagi **Executive Dashboard**, **Business Intelligence**, **Enterprise Performance Management (EPM)**, **Management Reporting**, **Self-Service Analytics**, dan **Mobile Financial Reporting**.

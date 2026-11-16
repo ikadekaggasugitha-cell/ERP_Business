@@ -1,0 +1,85 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["dimension", "cortex_v7", "organization"],
+  clusterBy: ["ancestor_id", "descendant_id"],
+  description: "Hierarchical closure table for organization rollups"
+}
+
+WITH orgs AS (
+  SELECT
+    org_id,
+    parent_org_id
+  FROM ${ref("dim_organization")}
+),
+
+-- Depth 0: Self-reference
+level_0 AS (
+  SELECT
+    org_id AS ancestor_id,
+    org_id AS descendant_id,
+    0 AS depth_level
+  FROM orgs
+),
+
+-- Depth 1: Direct parent-child
+level_1 AS (
+  SELECT
+    parent_org_id AS ancestor_id,
+    org_id AS descendant_id,
+    1 AS depth_level
+  FROM orgs
+  WHERE parent_org_id IS NOT NULL
+),
+
+-- Depth 2: Grandparent
+level_2 AS (
+  SELECT
+    p.parent_org_id AS ancestor_id,
+    c.org_id AS descendant_id,
+    2 AS depth_level
+  FROM orgs c
+  INNER JOIN orgs p ON c.parent_org_id = p.org_id
+  WHERE p.parent_org_id IS NOT NULL
+),
+
+-- Depth 3: Great-grandparent
+level_3 AS (
+  SELECT
+    gp.parent_org_id AS ancestor_id,
+    c.org_id AS descendant_id,
+    3 AS depth_level
+  FROM orgs c
+  INNER JOIN orgs p ON c.parent_org_id = p.org_id
+  INNER JOIN orgs gp ON p.parent_org_id = gp.org_id
+  WHERE gp.parent_org_id IS NOT NULL
+),
+
+all_closures AS (
+  SELECT * FROM level_0
+  UNION ALL
+  SELECT * FROM level_1
+  UNION ALL
+  SELECT * FROM level_2
+  UNION ALL
+  SELECT * FROM level_3
+),
+
+leaf_check AS (
+  SELECT
+    o.org_id,
+    CASE WHEN COUNT(children.org_id) = 0 THEN TRUE ELSE FALSE END AS is_leaf
+  FROM orgs o
+  LEFT JOIN orgs children ON o.org_id = children.parent_org_id
+  GROUP BY o.org_id
+)
+
+SELECT
+  c.ancestor_id,
+  c.descendant_id,
+  c.depth_level,
+  COALESCE(l.is_leaf, FALSE) AS is_leaf
+FROM all_closures c
+LEFT JOIN leaf_check l ON c.descendant_id = l.org_id
+WHERE c.ancestor_id IS NOT NULL
+QUALIFY ROW_NUMBER() OVER (PARTITION BY c.ancestor_id, c.descendant_id ORDER BY c.depth_level ASC) = 1

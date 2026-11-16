@@ -1,0 +1,607 @@
+name: erp-slice
+
+x-service-base: &service-base
+  restart: unless-stopped
+  depends_on:
+    seeds:
+      condition: service_completed_successfully
+    broker:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null 2>&1 || exit 1"]
+    interval: 5s
+    timeout: 3s
+    retries: 15
+    start_period: 5s
+
+x-migrate-depends: &migrate-depends
+  bootstrap:
+    condition: service_completed_successfully
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: erp-slice-db-1
+    command: ["postgres", "-c", "max_connections=250"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  broker:
+    image: redpandadata/redpanda:v24.2.7
+    container_name: erp-slice-broker-1
+    command:
+      - redpanda
+      - start
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://broker:9092,external://localhost:19092
+      - --pandaproxy-addr
+      - internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr
+      - internal://broker:8082,external://localhost:18082
+      - --schema-registry-addr
+      - internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr
+      - broker:33145
+      - --advertise-rpc-addr
+      - broker:33145
+      - --mode
+      - dev-container
+      - --smp
+      - "1"
+      - --memory
+      - 512M
+      - --default-log-level=warn
+    ports:
+      - "9092:9092"
+      - "19092:19092"
+    volumes:
+      - redpanda:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -Eq 'Healthy:\\s*true' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 25
+      start_period: 5s
+
+  bootstrap:
+    image: postgres:16-alpine
+    container_name: erp-slice-bootstrap-1
+    environment:
+      PGHOST: db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      ERP_APP_USER: ${ERP_APP_USER:-erp_app}
+      ERP_APP_PASSWORD: ${ERP_APP_PASSWORD:-app}
+    volumes:
+      - ./deploy/bootstrap.sh:/bootstrap.sh:ro
+      - ./db/ops:/ops:ro
+    entrypoint: ["/bin/sh", "/bootstrap.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  migrate-gl:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/gl_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/gl_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-ap:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/ap_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/ap_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-ar:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/ar_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/ar_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-coa:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/coa_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/coa_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-tax:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/tax_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/tax_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-treasury:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/treasury_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/treasury_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-user:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/user_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/user_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-security:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/security_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/security_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-masterdata:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/masterdata_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/masterdata_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-org:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/org_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/org_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-workflow:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/workflow_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/workflow_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-procurement:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/procurement_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/procurement_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-inventory:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/inventory_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/inventory_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-manufacturing:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/manufacturing_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/manufacturing_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-sales:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/sales_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/sales_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-hr:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/hr_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/hr_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-payroll:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/payroll_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/payroll_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-reporting:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/reporting_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/reporting_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-audit:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/audit_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/audit_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-currency:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/currency_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/currency_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-asset:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/asset_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/asset_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-budget:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/budget_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/budget_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-consolidation:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/consolidation_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/consolidation_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-crm:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/crm_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/crm_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-dimension:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/dimension_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/dimension_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-financialclose:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/financialclose_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/financialclose_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-fixedasset:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/fixedasset_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/fixedasset_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-localization:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/localization_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/localization_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-maintenance:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/maintenance_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/maintenance_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  migrate-project:
+    image: migrate/migrate:v4.18.1
+    volumes: ["./db/migrations/project_db:/migrations:ro"]
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/project_db?sslmode=disable", "up"]
+    depends_on: *migrate-depends
+    restart: "no"
+
+  grants:
+    image: postgres:16-alpine
+    container_name: erp-slice-grants-1
+    environment:
+      PGHOST: db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - ./deploy/grants.sh:/grants.sh:ro
+      - ./db/ops:/ops:ro
+    entrypoint: ["/bin/sh", "/grants.sh"]
+    depends_on:
+      migrate-gl: { condition: service_completed_successfully }
+      migrate-ap: { condition: service_completed_successfully }
+      migrate-ar: { condition: service_completed_successfully }
+      migrate-coa: { condition: service_completed_successfully }
+      migrate-tax: { condition: service_completed_successfully }
+      migrate-treasury: { condition: service_completed_successfully }
+      migrate-user: { condition: service_completed_successfully }
+      migrate-security: { condition: service_completed_successfully }
+      migrate-masterdata: { condition: service_completed_successfully }
+      migrate-org: { condition: service_completed_successfully }
+      migrate-workflow: { condition: service_completed_successfully }
+      migrate-procurement: { condition: service_completed_successfully }
+      migrate-inventory: { condition: service_completed_successfully }
+      migrate-manufacturing: { condition: service_completed_successfully }
+      migrate-sales: { condition: service_completed_successfully }
+      migrate-hr: { condition: service_completed_successfully }
+      migrate-payroll: { condition: service_completed_successfully }
+      migrate-reporting: { condition: service_completed_successfully }
+      migrate-audit: { condition: service_completed_successfully }
+      migrate-currency: { condition: service_completed_successfully }
+      migrate-asset: { condition: service_completed_successfully }
+      migrate-budget: { condition: service_completed_successfully }
+      migrate-consolidation: { condition: service_completed_successfully }
+      migrate-crm: { condition: service_completed_successfully }
+      migrate-dimension: { condition: service_completed_successfully }
+      migrate-financialclose: { condition: service_completed_successfully }
+      migrate-fixedasset: { condition: service_completed_successfully }
+      migrate-localization: { condition: service_completed_successfully }
+      migrate-maintenance: { condition: service_completed_successfully }
+      migrate-project: { condition: service_completed_successfully }
+    restart: "no"
+
+  seeds:
+    image: postgres:16-alpine
+    container_name: erp-slice-seeds-1
+    environment:
+      PGHOST: db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - ./deploy/seeds.sh:/seeds.sh:ro
+      - ./db/seeds:/seeds:ro
+    entrypoint: ["/bin/sh", "/seeds.sh"]
+    depends_on:
+      grants:
+        condition: service_completed_successfully
+    restart: "no"
+
+  gl-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: gl-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/gl_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8081:8080"]
+
+  ap-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: ap-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/ap_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8082:8080"]
+
+  audit-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: audit-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/audit_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8083:8080"]
+
+  ar-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: ar-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/ar_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8084:8080"]
+
+  coa-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: coa-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/coa_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8085:8080"]
+
+  tax-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: tax-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/tax_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8086:8080"]
+
+  treasury-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: treasury-cashbank-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/treasury_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    networks:
+      default:
+        aliases:
+          - treasury-cashbank-service
+    ports: ["8087:8080"]
+
+  user-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: user-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/user_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8088:8080"]
+
+  security-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: security-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/security_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8089:8080"]
+
+  masterdata-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: masterdata-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/masterdata_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8090:8080"]
+
+  org-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: org-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/org_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8091:8080"]
+
+  workflow-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: workflow-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/workflow_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8092:8080"]
+
+  procurement-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: procurement-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/procurement_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8093:8080"]
+
+  inventory-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: inventory-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/inventory_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8094:8080"]
+
+  manufacturing-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: manufacturing-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/manufacturing_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8095:8080"]
+
+  sales-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: sales-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/sales_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8096:8080"]
+
+  hr-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: hr-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/hr_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+      PII_ENCRYPTION_KEY: ${PII_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+    ports: ["8097:8080"]
+
+  payroll-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: payroll-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/payroll_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+      PII_ENCRYPTION_KEY: ${PII_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+    ports: ["8098:8080"]
+
+  reporting-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: reporting-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/reporting_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8099:8080"]
+
+  currency-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: currency-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/currency_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8100:8080"]
+
+  dimension-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: dimension-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/dimension_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8102:8080"]
+
+  localization-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: localization-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/localization_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8110:8080"]
+
+  api-gateway:
+    restart: unless-stopped
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: api-gateway } }
+    environment:
+      HTTP_ADDR: ":8000"
+      KAFKA_BROKERS: broker:9092
+      DEV_AUTH_MODE: "true"
+      DEV_AUTH_ALLOW_ANON: "false"
+      JWT_SECRET: ${JWT_SECRET:-dev-erp-jwt-secret-change-in-prod}
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
+      CORS_ALLOW_CHROME_EXTENSIONS: "true"
+    ports: ["8000:8000"]
+    depends_on:
+      broker:
+        condition: service_healthy
+      gl-service:
+        condition: service_healthy
+      ap-service:
+        condition: service_healthy
+      audit-service:
+        condition: service_healthy
+      currency-service:
+        condition: service_healthy
+      dimension-service:
+        condition: service_healthy
+      localization-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+volumes:
+  pgdata:
+  redpanda:
+

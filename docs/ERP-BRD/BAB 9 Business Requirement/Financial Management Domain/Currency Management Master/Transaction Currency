@@ -1,0 +1,206 @@
+# 9.5.3.15 Transaction Currency Requirements
+
+---
+
+# 9.5.3.15.1 Overview
+
+Transaction Currency merupakan mata uang yang digunakan pada saat suatu transaksi bisnis dibuat dan disepakati oleh para pihak. Mata uang ini menjadi dasar pencatatan nilai transaksi sebelum dilakukan konversi ke Functional Currency, Reporting Currency, maupun Group Currency sesuai kebijakan organisasi.
+
+Transaction Currency harus dikelola sebagai objek bisnis yang terhubung dengan seluruh kerangka kerja Currency Management agar setiap transaksi memiliki konteks mata uang yang lengkap, konsisten, dan dapat ditelusuri sepanjang siklus hidupnya.
+
+---
+
+# 9.5.3.15.2 Business Capability
+
+Transaction Currency menyediakan kapabilitas berikut:
+
+* Penetapan Transaction Currency pada setiap transaksi.
+* Dukungan multi-currency transaction.
+* Integrasi dengan Currency Conversion Policy.
+* Integrasi dengan Exchange Rate.
+* Integrasi dengan Functional Currency.
+* Integrasi dengan Reporting Currency.
+* Integrasi dengan Settlement Currency.
+* Validasi Currency Pair.
+* Effective dating.
+* Audit trail.
+
+---
+
+# 9.5.3.15.3 Business Requirement Catalogue
+
+## BR-221 – Transaction Currency Assignment
+
+| Attribute           | Description                                                                                                                   |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-221                                                                                                                        |
+| Requirement Name    | Transaction Currency Assignment                                                                                               |
+| Category            | Transaction Currency                                                                                                          |
+| Priority            | Critical                                                                                                                      |
+| Business Objective  | BO-011                                                                                                                        |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                              |
+| Description         | Sistem harus menetapkan Transaction Currency pada setiap transaksi keuangan maupun operasional yang melibatkan nilai moneter. |
+| Business Value      | Menjamin setiap transaksi memiliki referensi mata uang yang jelas dan konsisten.                                              |
+| Acceptance Criteria | Transaction Currency tersimpan sebagai bagian dari konteks transaksi dan tidak dapat kosong.                                  |
+
+---
+
+## BR-222 – Multi-Currency Transaction
+
+| Attribute        | Description                                                                                                                              |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-222                                                                                                                                   |
+| Requirement Name | Multi-Currency Transaction                                                                                                               |
+| Priority         | Critical                                                                                                                                 |
+| Description      | Sistem harus mendukung transaksi dengan mata uang yang berbeda dari Functional Currency, Reporting Currency, maupun Settlement Currency. |
+
+---
+
+## BR-223 – Currency Validation
+
+| Attribute        | Description                                                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-223                                                                                                                                                               |
+| Requirement Name | Transaction Currency Validation                                                                                                                                      |
+| Priority         | Critical                                                                                                                                                             |
+| Description      | Sistem harus memvalidasi bahwa Transaction Currency merupakan mata uang aktif dan memiliki Currency Pair serta Exchange Rate yang valid apabila diperlukan konversi. |
+
+---
+
+## BR-224 – Exchange Rate Resolution
+
+| Attribute        | Description                                                                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-224                                                                                                                                                                    |
+| Requirement Name | Exchange Rate Resolution                                                                                                                                                  |
+| Priority         | Critical                                                                                                                                                                  |
+| Description      | Sistem harus menentukan nilai tukar berdasarkan Currency Conversion Policy, Exchange Rate Type, Exchange Rate Version, Provider, Source, dan Effective Date yang berlaku. |
+
+---
+
+## BR-225 – Currency Conversion
+
+| Attribute        | Description                                                                                                                                                                              |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-225                                                                                                                                                                                   |
+| Requirement Name | Transaction Currency Conversion                                                                                                                                                          |
+| Priority         | Critical                                                                                                                                                                                 |
+| Description      | Sistem harus secara otomatis mengonversi nilai Transaction Currency ke Functional Currency, Reporting Currency, atau mata uang lain yang diperlukan tanpa mengubah nilai asli transaksi. |
+
+---
+
+## BR-226 – Financial Module Integration
+
+| Attribute        | Description                                                                                                                                                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-226                                                                                                                                                                                                                       |
+| Requirement Name | Financial Module Integration                                                                                                                                                                                                 |
+| Priority         | High                                                                                                                                                                                                                         |
+| Description      | Transaction Currency harus didukung oleh seluruh modul keuangan termasuk General Ledger, Accounts Payable, Accounts Receivable, Fixed Assets, Cash Management, Treasury, Inventory Costing, Project Accounting, dan Payroll. |
+
+---
+
+## BR-227 – Change Restriction
+
+| Attribute        | Description                                                                                                                                                                                          |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-227                                                                                                                                                                                               |
+| Requirement Name | Transaction Currency Change Restriction                                                                                                                                                              |
+| Priority         | Critical                                                                                                                                                                                             |
+| Description      | Setelah transaksi diposting, Transaction Currency tidak boleh diubah. Koreksi dilakukan melalui mekanisme pembatalan, pembalikan (*reversal*), atau dokumen penyesuaian sesuai kebijakan perusahaan. |
+
+---
+
+## BR-228 – Approval Workflow
+
+| Attribute        | Description                                                                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-228                                                                                                                                       |
+| Requirement Name | Transaction Currency Approval Workflow                                                                                                       |
+| Priority         | High                                                                                                                                         |
+| Description      | Perubahan Transaction Currency sebelum proses posting harus mengikuti matriks persetujuan apabila melebihi batas kewenangan yang ditentukan. |
+
+---
+
+## BR-229 – Dependency Validation
+
+| Attribute        | Description                                                                                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-229                                                                                                                                                                  |
+| Requirement Name | Dependency Validation                                                                                                                                                   |
+| Priority         | High                                                                                                                                                                    |
+| Description      | Sistem harus memastikan bahwa perubahan Transaction Currency tidak menyebabkan inkonsistensi terhadap Exchange Rate, Currency Pair, maupun jurnal yang belum diposting. |
+
+---
+
+## BR-230 – Transaction Currency Auditability
+
+| Attribute        | Description                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-230                                                                                                                                |
+| Requirement Name | Transaction Currency Auditability                                                                                                     |
+| Priority         | Critical                                                                                                                              |
+| Description      | Seluruh penetapan, perubahan, validasi, konversi, dan penggunaan Transaction Currency harus dicatat secara lengkap dalam Audit Trail. |
+
+---
+
+# 9.5.3.15.4 Business Rules
+
+| Business Rule ID | Description                                                                                                 |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| BRule-TC-001     | Setiap transaksi yang memiliki nilai moneter harus memiliki tepat satu Transaction Currency.                |
+| BRule-TC-002     | Transaction Currency harus berasal dari Currency Master yang berstatus Active.                              |
+| BRule-TC-003     | Transaction Currency dapat berbeda dari Functional Currency, Reporting Currency, dan Settlement Currency.   |
+| BRule-TC-004     | Konversi ke mata uang lain harus menggunakan Currency Conversion Policy yang aktif.                         |
+| BRule-TC-005     | Nilai asli dalam Transaction Currency tidak boleh diubah oleh proses konversi, revaluasi, maupun translasi. |
+| BRule-TC-006     | Setelah transaksi diposting, Transaction Currency bersifat tidak dapat diubah (*immutable*).                |
+| BRule-TC-007     | Seluruh aktivitas terkait Transaction Currency harus dapat ditelusuri melalui Audit Trail.                  |
+
+---
+
+# 9.5.3.15.5 Data Attributes
+
+| Attribute                  | Description                                      |
+| -------------------------- | ------------------------------------------------ |
+| Transaction Currency ID    | Identitas unik.                                  |
+| Transaction Reference      | Referensi transaksi bisnis.                      |
+| Currency ID                | Referensi ke Currency Master.                    |
+| Functional Currency        | Mata uang fungsional pada saat transaksi dibuat. |
+| Reporting Currency         | Mata uang pelaporan terkait.                     |
+| Group Currency             | Mata uang konsolidasi (opsional).                |
+| Settlement Currency        | Mata uang penyelesaian pembayaran (opsional).    |
+| Exchange Rate Type         | Jenis kurs yang digunakan.                       |
+| Exchange Rate Version      | Versi kurs yang digunakan.                       |
+| Exchange Rate              | Nilai tukar yang diterapkan.                     |
+| Currency Conversion Policy | Referensi ke kebijakan konversi.                 |
+| Precision Rule             | Referensi ke Currency Precision.                 |
+| Rounding Rule              | Referensi ke Currency Rounding Rule.             |
+| Conversion Timestamp       | Waktu konversi dilakukan.                        |
+| Status                     | Draft, Validated, Posted, Reversed, Archived.    |
+| Created By / Created Date  | Informasi pembuatan.                             |
+| Updated By / Updated Date  | Informasi perubahan terakhir.                    |
+
+---
+
+# 9.5.3.15.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                   |
+| -------------- | ------------------ | ----------- | -------------------------------- |
+| BR-221         | BO-011             | SH-003      | Transaction Creation             |
+| BR-222         | BO-011             | SH-003      | Multi-Currency Processing        |
+| BR-223         | BO-010             | SH-003      | Currency Validation              |
+| BR-224         | BO-010             | SH-003      | Exchange Rate Resolution         |
+| BR-225         | BO-011             | SH-003      | Currency Conversion              |
+| BR-226         | BO-011             | SH-003      | Financial Transaction Processing |
+| BR-227         | BO-029             | SH-010      | Transaction Governance           |
+| BR-228         | BO-029             | SH-003      | Approval Workflow                |
+| BR-229         | BO-029             | SH-010      | Dependency Validation            |
+| BR-230         | BO-029             | SH-010      | Audit & Compliance               |
+
+---
+
+# 9.5.3.15.7 Summary
+
+Transaction Currency merupakan konteks mata uang asli dari setiap transaksi bisnis dan menjadi titik awal seluruh proses konversi, revaluasi, translasi, serta pelaporan keuangan. Dengan memodelkannya sebagai objek bisnis yang terhubung dengan Currency Master, Exchange Rate, Currency Conversion Policy, Currency Precision, dan Currency Rounding Rule, ERP mampu menjaga integritas nilai transaksi, mendukung operasi multi-mata uang, serta menyediakan jejak audit yang lengkap dari transaksi hingga laporan keuangan.
+
+Transaction Currency menjadi fondasi bagi **General Ledger**, **Accounts Payable**, **Accounts Receivable**, **Procurement**, **Sales**, **Treasury**, **Cash Management**, **Inventory**, **Project Accounting**, **Payroll**, **Financial Consolidation**, dan **Financial Reporting**.

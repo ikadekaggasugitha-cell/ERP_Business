@@ -1,0 +1,208 @@
+# 9.5.3.4 Exchange Rate Provider Requirements
+
+---
+
+# 9.5.3.4.1 Overview
+
+Exchange Rate Provider merupakan master data yang mendefinisikan sumber resmi nilai tukar mata uang yang digunakan oleh Enterprise Resource Planning (ERP).
+
+Provider dapat berasal dari lembaga pemerintah, bank sentral, institusi keuangan, penyedia data pasar, treasury internal perusahaan, maupun proses input manual yang telah memperoleh otorisasi sesuai kebijakan organisasi.
+
+Dengan memisahkan Provider dari Exchange Rate, sistem mampu menjaga jejak asal data (*data lineage*), memenuhi kebutuhan audit, mendukung berbagai regulasi internasasional, serta memberikan fleksibilitas bagi setiap Financial Organization dalam menentukan sumber kurs yang digunakan.
+
+---
+
+# 9.5.3.4.2 Business Capability
+
+Exchange Rate Provider menyediakan kapabilitas berikut:
+
+* Pengelolaan master penyedia kurs.
+* Dukungan provider internal dan eksternal.
+* Penentuan provider default.
+* Assignment ke Financial Organization, Ledger, dan Financial Book.
+* Integrasi dengan layanan API penyedia kurs.
+* Pengelolaan SLA dan status provider.
+* Prioritas provider (provider precedence).
+* Effective dating.
+* Lifecycle management.
+* Audit trail.
+
+---
+
+# 9.5.3.4.3 Business Requirement Catalogue
+
+## BR-111 – Exchange Rate Provider Master
+
+| Attribute           | Description                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-111                                                                                                                               |
+| Requirement Name    | Exchange Rate Provider Master                                                                                                        |
+| Category            | Exchange Rate Provider                                                                                                               |
+| Priority            | Critical                                                                                                                             |
+| Business Objective  | BO-009                                                                                                                               |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                                     |
+| Description         | Sistem harus menyediakan master data Exchange Rate Provider sebagai referensi resmi sumber nilai tukar.                              |
+| Business Value      | Menjamin konsistensi dan keterlacakan asal nilai tukar.                                                                              |
+| Acceptance Criteria | Administrator dapat membuat, mengubah, mengaktifkan, dan menonaktifkan Provider tanpa memengaruhi histori kurs yang telah digunakan. |
+
+---
+
+## BR-112 – Internal & External Provider
+
+| Attribute        | Description                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-112                                                                                            |
+| Requirement Name | Internal & External Provider                                                                      |
+| Priority         | Critical                                                                                          |
+| Description      | Sistem harus mendukung Provider yang berasal dari organisasi internal maupun institusi eksternal. |
+
+---
+
+## BR-113 – Organization Assignment
+
+| Attribute        | Description                                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-113                                                                                                             |
+| Requirement Name | Provider Assignment                                                                                                |
+| Priority         | High                                                                                                               |
+| Description      | Provider harus dapat ditetapkan untuk Financial Organization, Ledger, Financial Book, atau Business Unit tertentu. |
+
+---
+
+## BR-114 – Provider Priority
+
+| Attribute        | Description                                                                                                                                                                               |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-114                                                                                                                                                                                    |
+| Requirement Name | Provider Priority                                                                                                                                                                         |
+| Priority         | High                                                                                                                                                                                      |
+| Description      | Sistem harus mendukung konfigurasi prioritas provider sehingga ketika terdapat lebih dari satu sumber kurs, sistem dapat menentukan provider yang digunakan berdasarkan urutan prioritas. |
+
+---
+
+## BR-115 – Default Provider
+
+| Attribute        | Description                                                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-115                                                                                                                       |
+| Requirement Name | Default Provider                                                                                                             |
+| Priority         | High                                                                                                                         |
+| Description      | Sistem harus memungkinkan penetapan satu provider sebagai sumber kurs bawaan pada setiap Financial Organization atau Ledger. |
+
+---
+
+## BR-116 – Provider Connectivity
+
+| Attribute        | Description                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-116                                                                                                   |
+| Requirement Name | Provider Connectivity                                                                                    |
+| Priority         | High                                                                                                     |
+| Description      | Sistem harus mendukung integrasi dengan layanan API, file, atau mekanisme impor data dari penyedia kurs. |
+
+---
+
+## BR-117 – Effective Dating
+
+| Attribute        | Description                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-117                                                                                                              |
+| Requirement Name | Effective Dating                                                                                                    |
+| Priority         | Medium                                                                                                              |
+| Description      | Setiap Provider harus memiliki periode berlaku sehingga perubahan konfigurasi tidak memengaruhi histori penggunaan. |
+
+---
+
+## BR-118 – Provider Lifecycle
+
+| Attribute        | Description                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-118                                                                                                            |
+| Requirement Name | Provider Lifecycle                                                                                                |
+| Priority         | Medium                                                                                                            |
+| Description      | Sistem harus mendukung status Draft, Active, Suspended, Deprecated, Inactive, dan Archived untuk setiap Provider. |
+
+---
+
+## BR-119 – Dependency Validation
+
+| Attribute        | Description                                                                                                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-119                                                                                                                        |
+| Requirement Name | Dependency Validation                                                                                                         |
+| Priority         | Critical                                                                                                                      |
+| Description      | Sistem harus mencegah penghapusan Provider yang masih digunakan oleh Exchange Rate, Currency Policy, atau transaksi keuangan. |
+
+---
+
+## BR-120 – Exchange Rate Provider Auditability
+
+| Attribute        | Description                                                                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-120                                                                                                                                          |
+| Requirement Name | Exchange Rate Provider Auditability                                                                                                             |
+| Priority         | Critical                                                                                                                                        |
+| Description      | Seluruh perubahan Provider harus dicatat dalam Audit Trail lengkap dengan pengguna, waktu perubahan, dan nilai sebelum serta sesudah perubahan. |
+
+---
+
+# 9.5.3.4.4 Business Rules
+
+| Business Rule ID | Description                                                                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-ERP-001    | Setiap Provider harus memiliki kode unik dalam ruang lingkup implementasi ERP.                                                                                  |
+| BRule-ERP-002    | Provider dapat ditandai sebagai Internal atau External Provider.                                                                                                |
+| BRule-ERP-003    | Satu Financial Organization dapat memiliki lebih dari satu Provider dengan urutan prioritas yang berbeda.                                                       |
+| BRule-ERP-004    | Hanya satu Provider yang dapat menjadi Default Provider untuk kombinasi Financial Organization, Ledger, Financial Book, dan Exchange Rate Type pada satu waktu. |
+| BRule-ERP-005    | Provider yang telah digunakan pada Exchange Rate tidak boleh dihapus secara permanen.                                                                           |
+| BRule-ERP-006    | Provider dengan status Inactive atau Archived tidak dapat digunakan untuk Exchange Rate baru.                                                                   |
+| BRule-ERP-007    | Seluruh perubahan konfigurasi Provider wajib tercatat pada Audit Trail.                                                                                         |
+
+---
+
+# 9.5.3.4.5 Data Attributes
+
+| Attribute                 | Description                                                                    |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| Provider ID               | Identitas unik sistem.                                                         |
+| Provider Code             | Kode unik provider.                                                            |
+| Provider Name             | Nama provider.                                                                 |
+| Provider Type             | Internal, Central Bank, Commercial Bank, Market Data, Treasury, Manual, Other. |
+| Provider Category         | Government, Financial Institution, Internal Organization, Third Party.         |
+| Organization Scope        | Financial Organization terkait.                                                |
+| Ledger Scope              | Ledger terkait.                                                                |
+| Financial Book Scope      | Financial Book terkait.                                                        |
+| Default Provider          | Penanda provider bawaan.                                                       |
+| Priority Sequence         | Urutan prioritas provider.                                                     |
+| Integration Method        | API, File Import, Manual Entry, Middleware, Message Queue.                     |
+| Effective From            | Tanggal mulai berlaku.                                                         |
+| Effective To              | Tanggal akhir berlaku.                                                         |
+| Status                    | Draft, Active, Suspended, Deprecated, Inactive, Archived.                      |
+| Version                   | Nomor versi konfigurasi.                                                       |
+| Created By / Created Date | Informasi pembuatan data.                                                      |
+| Updated By / Updated Date | Informasi perubahan terakhir.                                                  |
+
+---
+
+# 9.5.3.4.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                 |
+| -------------- | ------------------ | ----------- | ------------------------------ |
+| BR-111         | BO-009             | SH-003      | Provider Administration        |
+| BR-112         | BO-009             | SH-003      | Provider Classification        |
+| BR-113         | BO-009             | SH-003      | Organization Assignment        |
+| BR-114         | BO-010             | SH-003      | Provider Selection             |
+| BR-115         | BO-010             | SH-003      | Default Provider Configuration |
+| BR-116         | BO-027             | SH-007      | External Integration           |
+| BR-117         | BO-029             | SH-010      | Effective Date Governance      |
+| BR-118         | BO-029             | SH-010      | Lifecycle Management           |
+| BR-119         | BO-029             | SH-010      | Dependency Validation          |
+| BR-120         | BO-029             | SH-010      | Audit & Compliance             |
+
+---
+
+# 9.5.3.4.7 Summary
+
+Exchange Rate Provider memastikan setiap nilai tukar yang digunakan oleh ERP memiliki sumber yang jelas, dapat dipercaya, dan dapat diaudit. Dengan memisahkan penyedia kurs dari data nilai tukar, organisasi dapat menerapkan kebijakan berbeda untuk tiap Financial Organization, Ledger, maupun Financial Book, sekaligus mendukung integrasi dengan berbagai penyedia data pasar dan institusi keuangan.
+
+Seluruh requirement pada bagian ini menjadi dasar bagi sub-domain **Exchange Rate Type**, **Exchange Rate**, **Currency Conversion Policy**, serta seluruh proses otomatisasi pengambilan kurs dan konversi mata uang.

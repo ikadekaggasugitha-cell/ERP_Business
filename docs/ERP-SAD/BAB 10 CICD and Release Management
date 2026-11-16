@@ -1,0 +1,140 @@
+# BAB 10. CI/CD and Release Management
+
+## 10.1 Overview
+
+Bab ini mendefinisikan arsitektur *Continuous Integration/Continuous Delivery* (CI/CD) dan strategi manajemen rilis yang memungkinkan **independent deployment** per layanan (NFR-013), rilis dengan gangguan minimal (NFR-006), serta evolusi API/skema tanpa *breaking change* (NFR-014). Pendekatan mengikuti prinsip **GitOps** dan menyatu dengan keamanan (BAB 7.10) dan observability (BAB 9).
+
+Setiap layanan (SVC-xxx) memiliki pipeline independen sehingga dapat dibangun, diuji, dan dirilis tanpa menghentikan layanan lain (ADR-001).
+
+---
+
+## 10.2 Pipeline Stages
+
+```text
+[Commit/PR] → Build & Unit Test → Static Analysis & Security Scan →
+              Containerize & Sign → Publish Artifact →
+              Deploy (GitOps) → DB Migration Job → Post-Deploy Verification →
+              (gagal) Automated Rollback
+```
+
+| Tahap                     | Aktivitas                                                                  | Gerbang Kualitas (*gate*)          |
+| ------------------------- | -------------------------------------------------------------------------- | ---------------------------------- |
+| Build & Unit Test         | Kompilasi Go / build web-spa; uji unit; *coverage*.                         | *Coverage* minimum terpenuhi.      |
+| Static Analysis & Security| *Linting*, **SAST**, **SCA** (CVE), *secret scan*.                         | Tidak ada temuan kritikal.         |
+| Contract/Schema Check     | Validasi **OpenAPI** & kompatibilitas skema **Apicurio** (§10.6).          | Kompatibel (backward/forward).     |
+| Containerize & Sign       | Build image Docker; *image scan*; *image signing*.                         | Image bersih & tertandatangani.    |
+| Publish Artifact          | Push image ke registry internal.                                           | Artefak ter-versi.                 |
+| Deploy (GitOps)           | Argo CD men-*sync* manifest ke Kubernetes.                                 | *Sync* sukses.                     |
+| DB Migration Job          | Migrasi *expand–contract* (§10.4) sebagai *job* pra/pasca-deploy.          | Migrasi idempoten sukses.          |
+| Post-Deploy Verification  | *Smoke test*, *health check* (BAB 9.8).                                    | Sehat → selesai; gagal → rollback. |
+
+---
+
+## 10.3 GitOps and Per-Service Pipelines
+
+| Prinsip                  | Realisasi                                                              | Referensi        |
+| ------------------------ | --------------------------------------------------------------------- | ---------------- |
+| GitOps                   | Git sebagai *single source of truth* untuk manifest; **Argo CD** men-*reconcile* state klaster. | ADR-004          |
+| Pipeline per layanan     | Setiap SVC memiliki pipeline & siklus rilis independen.               | NFR-013, ADR-001 |
+| Environment promotion    | Promosi artefak dev → staging → prod melalui perubahan manifest ter-*review*. | §10.9            |
+| Declarative & auditable  | Perubahan deployment tercatat di Git (auditable, dapat di-*rollback*). | NFR-018          |
+
+---
+
+## 10.4 Database Migration (Expand–Contract)
+
+Migrasi skema PostgreSQL dikelola sebagai **migrasi berversi** (mis. `golang-migrate`) dengan strategi **expand–contract** untuk *zero-downtime* pada *rolling deployment* (NFR-014):
+
+```text
+1. EXPAND   : tambah kolom/tabel baru (kompatibel mundur) — aplikasi lama & baru tetap jalan.
+2. MIGRATE  : backfill data; aplikasi baru mulai menulis ke struktur baru.
+3. CONTRACT : setelah semua instans memakai struktur baru, hapus struktur lama.
+```
+
+* Migrasi dijalankan sebagai *job* terpisah pada pipeline, bukan saat *startup* layanan.
+* Setiap migrasi **idempoten** dan memiliki *rollback script*.
+* Kepemilikan migrasi per layanan (database-per-service, ADR-001).
+
+---
+
+## 10.5 Release Strategies
+
+| Strategi        | Penggunaan                                                        | Referensi        |
+| --------------- | ----------------------------------------------------------------- | ---------------- |
+| Rolling update  | Default untuk sebagian besar layanan; penggantian bertahap replika.| NFR-013          |
+| Blue-Green      | Modul kritikal; peralihan trafik instan dengan *rollback* cepat.  | NFR-006          |
+| Canary          | Rilis berisiko; ekspos ke subset trafik + evaluasi metrik (BAB 9).| NFR-006, NFR-013 |
+| Feature flag    | Pemisahan *deploy* dari *release*; aktivasi bertahap (BAB 11.10). | —                |
+
+*Planned maintenance window* (NFR-006) dimanfaatkan hanya bila strategi di atas tidak memadai; jendela maksimum 4 jam/bulan dengan notifikasi H-3.
+
+---
+
+## 10.6 Schema and Contract Governance in CI
+
+| Gerbang                  | Mekanisme                                                              | Referensi        |
+| ------------------------ | --------------------------------------------------------------------- | ---------------- |
+| Event schema             | Validasi terhadap **Apicurio Registry** (kompatibilitas `BACKWARD`).   | ADR-003, NFR-014 |
+| REST contract            | *Lint* & *breaking-change detection* pada OpenAPI.                     | INT-014          |
+| gRPC contract            | *Lint* Protobuf & aturan kompatibilitas.                              | ADR-007          |
+| Versioning enforcement   | Perubahan *breaking* memaksa kenaikan versi mayor (topic `.v2`/API `/v2`).| NFR-014          |
+
+Gerbang ini mencegah *breaking change* tak sengaja sebelum mencapai konsumen (mitigasi RISK-013 pada evolusi skema).
+
+---
+
+## 10.7 Security in the Pipeline
+
+Konsolidasi kontrol keamanan pipeline (rincian BAB 7.10):
+
+* **SAST** & *secret scanning* pada setiap commit.
+* **SCA** (dependency/CVE scan) — menautkan patch kerentanan sesuai SLA NFR-016.
+* **Image scanning** & *signing* sebelum publish.
+* **DAST** & *penetration testing* berkala pada environment staging/prod (NFR-017).
+
+Temuan kritikal memblokir promosi ke produksi (*fail the build*).
+
+---
+
+## 10.8 Rollback and Recovery
+
+| Skenario                 | Tindakan                                                              | Target           |
+| ------------------------ | --------------------------------------------------------------------- | ---------------- |
+| Deploy gagal *health check* | *Automated rollback* ke versi stabil sebelumnya (GitOps revert).   | NFR-013 (< 15 mnt)|
+| Regresi pasca-rilis      | *Rollback* manual via revert manifest Git.                            | Auditable        |
+| Migrasi bermasalah       | *Contract* ditunda; jalankan *rollback script*; struktur lama dipertahankan hingga stabil. | Zero data loss   |
+| Insiden luas             | Aktivasi runbook (BAB 9.9) & eskalasi.                               | NFR-018          |
+
+Waktu *rollback* modul individual ditargetkan < 15 menit (NFR-013).
+
+---
+
+## 10.9 Artifact and Environment Promotion
+
+```text
+dev  ──(image + manifest ter-review)──►  staging (UAT)  ──(approval)──►  prod
+```
+
+* Artefak yang sama dipromosikan lintas lingkungan (*build once, deploy many*) untuk konsistensi.
+* Promosi ke prod memerlukan persetujuan (kontrol perubahan) dan *quality gate* hijau.
+* Konfigurasi per lingkungan dipisahkan dari image (BAB 11.2).
+
+---
+
+## 10.10 CI/CD Traceability
+
+| Kebutuhan (BRD)          | Realisasi (SAD)                                | Bagian     |
+| ------------------------ | ---------------------------------------------- | ---------- |
+| NFR-013 (independent deploy/rollback) | Pipeline per layanan + rolling/rollback | §10.3, §10.8 |
+| NFR-014 (versioning)     | Expand–contract + schema/contract gate         | §10.4, §10.6 |
+| NFR-006 (maintenance window) | Blue-green/canary + feature flag           | §10.5      |
+| NFR-016/017 (security)   | SAST/DAST/SCA/secret scan di pipeline           | §10.7      |
+| ADR-004 (self-managed)   | GitOps (Argo CD) di klaster sendiri             | §10.3      |
+
+---
+
+## 10.11 Summary
+
+Bab ini menetapkan arsitektur CI/CD berbasis **GitOps** dengan pipeline independen per layanan (NFR-013), tahapan kualitas & keamanan terintegrasi (SAST/DAST/SCA), gerbang tata kelola kontrak/skema (Apicurio & OpenAPI, NFR-014), migrasi basis data *expand–contract* zero-downtime, serta strategi rilis (rolling/blue-green/canary) dan *rollback* otomatis. Pendekatan ini memungkinkan evolusi sistem yang cepat namun terkendali, aman, dan dapat diaudit, selaras dengan prinsip Cloud Ready dan Modular & Extensible.
+
+---

@@ -1,0 +1,181 @@
+# BAB 6. Data Architecture
+
+## 6.1 Overview
+
+Bab ini mendefinisikan arsitektur data pada **tingkat arsitektur** (logis dan strategis): kepemilikan data, strategi multi-tenancy, model konsistensi, partisi, siklus hidup, serta ketersediaan dan pemulihan data. Bab ini merealisasikan ADR-001 (database-per-service), ADR-002 (Hybrid Multi-Tenancy), dan CONS-014 (PostgreSQL sebagai *system of record*).
+
+**Batas cakupan:** desain fisik terperinci — **ERD lengkap, Data Dictionary kolom demi kolom, definisi indeks, dan skrip partisi fisik per layanan** — didokumentasikan pada artefak **Database Design** (identifier `DB-xxx`). Bab ini menetapkan prinsip dan strategi yang menjadi acuan artefak tersebut (§6.11).
+
+---
+
+## 6.2 Data Ownership and Database-per-Service
+
+Sesuai ADR-001, setiap layanan (SVC-xxx, BAB 4.5) memiliki basis data/skema PostgreSQL sendiri. Prinsip kepemilikan:
+
+* **Eksklusif:** hanya layanan pemilik yang boleh mengakses basis datanya secara langsung (baca/tulis).
+* **Tanpa akses lintas-basis-data:** pertukaran data lintas layanan **hanya** melalui API sinkron (gRPC/REST) atau *event* Kafka — dilarang *join* lintas basis data.
+* **Kontrak, bukan tabel:** integrasi antar-layanan mengandalkan kontrak (API/event schema), bukan struktur tabel internal.
+
+| Prinsip                 | Tujuan                                              | Referensi        |
+| ----------------------- | --------------------------------------------------- | ---------------- |
+| Database-per-service    | Isolasi domain, independent deployment              | ADR-001, NFR-013 |
+| No shared database      | Menghindari kopling erat & *hidden dependency*      | ADR-001          |
+| System of record tunggal| PostgreSQL sebagai sumber kebenaran; Kafka bukan SoT| CONS-014         |
+
+---
+
+## 6.3 Multi-Tenancy Data Strategy
+
+Menerapkan **Hybrid Multi-Tenancy** (ADR-002). Pemilihan mode per tenant merupakan keputusan konfigurasi, bukan perubahan *source code*.
+
+| Mode Tenancy               | Kriteria Penerapan                                                          | Isolasi | Efisiensi |
+| -------------------------- | --------------------------------------------------------------------------- | ------- | --------- |
+| **Schema-per-tenant**      | Tenant/Holding berisolasi kuat atau tunduk regulasi (mis. OJK, NFR-020); membutuhkan *backup/restore* per tenant. | Tinggi  | Sedang    |
+| **Shared-schema + `organization_id` + RLS** | Mayoritas tenant/unit organisasi standar. | Sedang (logis) | Tinggi |
+
+**Aturan keputusan (decision rule):**
+
+```text
+JIKA tenant memerlukan segregasi data regulatorik ATAU SLA/backup terisolasi
+     → gunakan Schema-per-tenant
+SEBALIKNYA
+     → gunakan Shared-schema + organization_id + Row-Level Security
+```
+
+Perpindahan tenant antar-mode dilakukan melalui prosedur migrasi terkelola tanpa memengaruhi tenant lain (mendukung NFR-011: penambahan/perubahan organisasi tanpa *downtime*).
+
+---
+
+## 6.4 Row-Level Security and Scope-Based Data Access
+
+Pada mode *shared-schema*, **Scope-Based Access Control** ditegakkan berlapis sebagai *defense-in-depth*:
+
+| Lapis            | Mekanisme                                                             | Cakupan   |
+| ---------------- | --------------------------------------------------------------------- | --------- |
+| Gateway (Kong)   | Validasi token & scope kasar (coarse-grained)                         | Request   |
+| Service (Go)     | Middleware memvalidasi `organization_id` & hak akses (fine-grained)   | Use case  |
+| Database (RLS)   | Kebijakan **Row-Level Security** PostgreSQL memfilter baris per scope  | Data      |
+
+* Konteks organisasi (`organization_id`, path scope) disuntikkan ke sesi basis data (mis. melalui parameter sesi) agar kebijakan RLS mengevaluasi hak akses secara konsisten.
+* RLS menjadi *safety net* terakhir: meskipun terjadi kesalahan pada lapis aplikasi, data di luar scope tetap tidak terbaca.
+
+Referensi: BRD BR-031 (Scope-Based Access), NFR-012, ARC-004, ARC-008.
+
+---
+
+## 6.5 Data Partitioning, Pruning, and High-Throughput Scaling (ADR-015)
+
+Strategi partisi menjaga kinerja seiring pertumbuhan data jutaan transaksi real-time (NFR-001, NFR-002, NFR-011, ARC-002):
+
+| Strategi                 | Penerapan                                                       | Tabel Contoh                              |
+| ------------------------ | --------------------------------------------------------------- | ----------------------------------------- |
+| **Composite Range + Hash**| RANGE bulanan by date + HASH sub-partitioning by `organization_id` | `gl.journal_line`, `inv.stock_movement`  |
+| **Range partitioning**   | Berdasarkan periode fiskal/tanggal posting                      | Jurnal GL, outbox, audit log              |
+| **Mandatory Pruning**    | Seluruh query wajib menyertakan tanggal dan `organization_id`   | Mengisolasi scan ke 1 partisi fisik aktif |
+| **Otomasi Pemeliharaan** | `ensure_future_partitions()` pre-create 3 bulan ke depan        | Seluruh 29 basis data berpartisi          |
+| **Pengarsipan Transparan**| `detach_old_partitions()` mengarsipkan data > 2 tahun          | Tanpa mengunci tabel aktif (zero locking) |
+| **Read Replicas**        | Streaming replication ke node read replica (`erp_app_ro`)       | Isolasi beban pelaporan dari beban tulis  |
+| **Connection pooling**   | **PgBouncer (Transaction Pooling)** untuk 10.000 klien          | Seluruh layanan (NFR-001/002)             |
+
+Detail definisi partisi & indeks fisik → **Database Design (DB-xxx)**.
+
+---
+
+## 6.6 Data Consistency Model
+
+Model konsistensi mengikuti batas transaksi dan ADR-005/008:
+
+| Lingkup                        | Model Konsistensi        | Mekanisme                                   |
+| ------------------------------ | ------------------------ | -------------------------------------------- |
+| Intra-layanan                  | **Strong (ACID)**        | Transaksi PostgreSQL (NFR-008)               |
+| Lintas-layanan (finansial inti)| **Exactly-Once end-to-end** | Saga + Outbox + Kafka transactions (ADR-005/008) |
+| Lintas-layanan (operasional)   | **Eventual**             | Event At-Least-Once + idempotensi            |
+| Read model (reporting)         | **Eventual**             | CQRS dari event (ADR-009)                    |
+
+**Batas konsistensi (consistency boundary):** setiap *aggregate* dijaga konsisten kuat di dalam satu layanan; konsistensi lintas *aggregate*/layanan bersifat *eventual* dengan jaminan konvergensi melalui *reconciliation job* berkala (mitigasi RISK-014).
+
+---
+
+## 6.7 Master Data, Reference Data, and Tri-Currency Accounting
+
+### 6.7.1 Master & Reference Data
+* `masterdata-service` (SVC-005) menjadi pemilik data master bersama (Customer, Vendor, Item, Employee) dan menerbitkannya sebagai **Published Language** melalui *event* `erp.masterdata.*.upserted` (BO-010, mengurangi duplikasi).
+* Konsumen menyimpan **salinan lokal** data master yang relevan (data replication via event) untuk menjaga *autonomy* dan menghindari panggilan sinkron berlebih.
+* **Reference data** (Chart of Accounts, mata uang, kalender fiskal) dikelola oleh layanan domain terkait (`coa-service`, `currency-service`) dan disebarkan via event.
+* Mode *shared* vs *isolated* master data per organisasi mengikuti konfigurasi (BRD 9.18, BO-019).
+
+### 6.7.2 Tri-Currency & Multi-Country Accounting Engine (ADR-014)
+* **Tri-Currency di Setiap Baris Finansial**: Setiap baris jurnal, invoice, dan transaksi kas mencatat 3 pasang nilai pada saat penulisan (*write-time*): `Transaction Currency` (nilai asli), `Functional Currency` (nilai buku statutori cabang), dan `Presentation Currency` (nilai konsolidasi holding grup), mengeliminasi konversi kurs runtime saat query laporan.
+* **Triangulasi Kurs Berbasis Cache**: Cache kurs harian di memori/Redis dengan auto-triangulation via anchor currency (USD) untuk pasangan mata uang tidak likuid; presisi kurs `numeric(18,8)` dan moneter `numeric(20,4)`.
+* **Automated Month-End FX Revaluation (PSAK 10 / IAS 21)**: Perhitungan dan penerbitan jurnal penyesuaian selisih kurs belum terealisasi (*unrealized FX gain/loss*) secara otomatis dengan status *auto-reversing* di awal periode berikutnya.
+* **Dual-Period Fiscal Calendar Tagging**: Setiap transaksi ditandai dengan `local_fiscal_period_id` (kalender statutori lokal) dan `group_fiscal_period_id` (kalender konsolidasi holding), memungkinkan penyelarasan cabang dengan tahun fiskal berbeda (mis. April–Maret untuk Jepang/India) secara mulus.
+
+---
+
+## 6.8 Data Lifecycle, Retention, and Archiving
+
+| Aspek                | Kebijakan                                                                  | Referensi        |
+| -------------------- | -------------------------------------------------------------------------- | ---------------- |
+| Data transaksional   | Disimpan di PostgreSQL sebagai *system of record*; arsip periode lama via partisi terpisah/cold storage. | CONS-014         |
+| Event (Kafka)        | Retensi 7–30 hari (transaksional); *compaction* untuk data referensi; bukan sumber kebenaran. | CONS-014         |
+| Audit trail          | Retensi panjang (immutable) sesuai kebutuhan kepatuhan.                     | NFR-018, 9.20    |
+| Data pribadi (PII)   | Pengelolaan sesuai **UU PDP**: hak akses, koreksi, penghapusan (*right to erasure*), pembatasan tujuan. | NFR-019          |
+| Backup               | Full harian + incremental tiap 4 jam; *restore test* triwulanan.           | NFR-029          |
+
+Implementasi hak subjek data (UU PDP) memerlukan mekanisme *data anonymization/deletion* lintas layanan yang dikoordinasikan melalui *event* (dielaborasi bersama BAB 7).
+
+---
+
+## 6.9 High Availability and Disaster Recovery (Data)
+
+Merealisasikan NFR-004/005 (HA) dan NFR-028/029/030 (DR) untuk lapis data:
+
+| Kapabilitas          | Realisasi (self-managed, ADR-004)                                          | Target NFR       |
+| -------------------- | -------------------------------------------------------------------------- | ---------------- |
+| High Availability    | PostgreSQL *primary–standby* streaming replication via *operator* (mis. CloudNativePG/Patroni); *automatic failover* < 60 detik. | NFR-004, NFR-005 |
+| Read scaling         | *Read replica* untuk beban baca/pelaporan.                                 | NFR-003, NFR-010 |
+| Backup & PITR        | *WAL archiving* + *Point-in-Time Recovery*; base backup harian, incremental 4 jam. | NFR-029          |
+| Disaster Recovery    | Replikasi ke *DR site* geo-redundant; Kafka **MirrorMaker** antar-region.  | NFR-028, NFR-030 |
+| RTO / RPO            | RTO ≤ 4 jam; RPO ≤ 15 menit (kehilangan data maksimum 15 menit).           | NFR-028          |
+
+Topologi infrastruktur DR dijabarkan pada **BAB 8.8**.
+
+---
+
+## 6.10 Data Migration & Enterprise Analytics Coexistence (Cortex V7, ADR-013)
+
+Migrasi dari sistem legacy (INT-008, mitigasi RISK-006) dan koeksistensi analitik dengan **SAP (ECC 6.0 & S/4HANA)** menerapkan standar **Cortex Framework V7**:
+
+```text
+SAP DDIC / Legacy ──Replikasi──► Raw Foundation (Lakehouse) ──Dataform (.js)──► Star Schema (Data Products)
+                                        ▲                                               ▲
+ERP Baru (Kafka)  ──CDC/Event───────────┘                                               │
+                                                                       BI Dashboard / Holding Consolidation
+```
+
+* **Data Cleansing & Mapping**: Normalisasi kamus data DDIC SAP (`BKPF`, `BSEG`, `ACDOCA`, `MARC`) ke skema bintang analitik.
+* **Namespace Isolation**: Seluruh model data transformasi kustom ditempatkan dalam namespace `custom` atau `sinergi` guna melindungi dari *overwrite* pembaruan Cortex.
+* **Isolasi Analitik Beban Berat**: Analisis historis multi-tahun dan konsolidasi holding dilayani langsung oleh Cortex Data Products di BigQuery, mengisolasi pod PostgreSQL transaksional dari query analitik berat.
+* **Reconciliation**: Validasi saldo otomatis antara sistem sumber (SAP/Legacy) dan basis data ERP target pasca-migrasi.
+* **Coexistence**: Selama masa transisi bertahun-tahun (CONS-006), integrasi legacy via ACL dan pipeline CDC menjaga sinkronisasi data master dan transaksi (BAB 5.8).
+
+---
+
+## 6.11 Data Traceability and Link to Database Design
+
+| Elemen SAD (BAB 6)              | Diturunkan ke Database Design (DB-xxx)                    |
+| ------------------------------- | --------------------------------------------------------- |
+| Data ownership per SVC          | Skema fisik & kepemilikan tabel per layanan               |
+| Hybrid tenancy & RLS            | Definisi kebijakan RLS, struktur schema-per-tenant        |
+| Partitioning strategy           | DDL partisi, kunci partisi, kebijakan pemeliharaan        |
+| Consistency model               | Definisi transaksi, tabel outbox, tabel `processed_events`|
+| Retention/lifecycle             | Kebijakan arsip, TTL, prosedur penghapusan PII            |
+| HA/DR                           | Konfigurasi replikasi, backup, PITR                       |
+
+---
+
+## 6.12 Summary
+
+Bab ini menetapkan arsitektur data tingkat strategis: **database-per-service** dengan PostgreSQL sebagai *system of record*, **Hybrid Multi-Tenancy** dengan aturan keputusan eksplisit dan **Row-Level Security** berlapis, strategi **partisi** untuk skala, **model konsistensi** yang membedakan konsistensi kuat (intra-layanan & finansial inti) dari *eventual* (operasional & reporting), serta kebijakan siklus hidup, HA, dan DR yang memenuhi NFR terkait. Seluruh strategi ini menjadi acuan bagi artefak **Database Design** yang akan memuat desain fisik terperinci.
+
+---

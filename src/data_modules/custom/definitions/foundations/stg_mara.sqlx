@@ -1,0 +1,22 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc", "s4"],
+  description: "SAP General Material Data staging view with CDC deduplication"
+}
+
+SELECT
+  MANDT AS mandt,
+  MATNR AS material_number,
+  MTART AS material_type,
+  MATKL AS material_group,
+  MEINS AS base_unit_of_measure,
+  BRGEW AS gross_weight,
+  NTGEW AS net_weight,
+  GEWEI AS weight_unit,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "mara")}
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY MANDT, MATNR
+  ORDER BY recordstamp DESC
+) = 1

@@ -1,0 +1,571 @@
+# BAB 9. Extended Domain Schema (Financial & Operational Extensions)
+
+## 9.1 Overview
+
+Bab ini melengkapi DBDD dengan desain fisik domain yang pada rilis 0.1 (BAB 8.9) masih ditangguhkan. Domain-domain ini melanjutkan pola **database-per-service** (ADR-001) dan seluruh standar **BAB 2 (DBS-001…016)** — Common Columns, UUID PK, soft delete, optimistic locking, RLS berbasis `organization_id`, outbox/processed_event, indeks & enum via `CHECK`/tabel referensi. Aturan level field mengacu **BRD BAB 9** (BR-xxx) dan tidak diciptakan ulang.
+
+| BAB | Domain                          | Basis Data (schema)          | Layanan     | BRD           |
+| --- | ------------------------------- | ---------------------------- | ----------- | ------------- |
+| 9.2 | Fixed Asset                     | `fixedasset_db` (`fa`)       | SVC-020     | 9.5.7 (BR-586..595) |
+| 9.3 | Cost & Profit Center            | `dimension_db` (`cc`,`pc`)   | SVC-021     | 9.5.10/9.5.11 (BR-616..635) |
+| 9.4 | Budget Management               | `budget_db` (`bud`)          | SVC-022     | 9.5.12 (BR-636..645) |
+| 9.5 | Financial Close                 | `financialclose_db` (`fcl`)  | SVC-023     | 9.5.14 (BR-656..665) |
+| 9.6 | Financial Consolidation         | `consolidation_db` (`cons`)  | SVC-024     | 9.5.15 (BR-666..675) |
+| 9.7 | Project Management              | `project_db` (`prj`)         | SVC-025     | 9.10 (BR-726..735) |
+| 9.8 | Asset Management (operational)  | `asset_db` (`ast`)           | SVC-026     | 9.11 (BR-736..745) |
+| 9.9 | Maintenance Management          | `maintenance_db` (`mnt`)     | SVC-027     | 9.16 (BR-786..795) |
+| 9.10| Customer Relationship Mgmt      | `crm_db` (`crm`)             | SVC-028     | 9.15 (BR-776..785) |
+| 9.11| Localization & Multi-Language   | `localization_db` (`loc`)    | SVC-029     | 9.19 (BR-816..825) |
+
+> Referensi lintas layanan (mis. `financial_organization_id`, `account_id`, `fiscal_period_id`, `customer_id`, `item_id`, `warehouse_id`, `user_id`) bersifat **referensi logis** tanpa FK fisik. FK fisik hanya intra-basis-data.
+
+---
+
+## 9.2 Fixed Asset (`fixedasset_db`)
+
+Merealisasikan BRD 9.5.7 (BR-586..595): master aset tetap, kapitalisasi, penyusutan, revaluasi, transfer antar Financial Organization, disposal, impairment, komponen (parent–child).
+
+```mermaid
+erDiagram
+  ASSET_CATEGORY ||--o{ FIXED_ASSET : classifies
+  FIXED_ASSET ||--o{ FIXED_ASSET : "parent-component"
+  FIXED_ASSET ||--o{ DEPRECIATION_ENTRY : depreciated_by
+  FIXED_ASSET ||--o{ ASSET_TRANSACTION : has
+```
+
+### `fa.asset_category`
+
+| Column                        | Type        | Null | Key | Description                                   |
+| ----------------------------- | ----------- | ---- | --- | --------------------------------------------- |
+| `code`                        | VARCHAR(50) | No   | U   | Kode kategori aset.                           |
+| `name`                        | VARCHAR(150)| No   |     | Nama kategori.                                |
+| `default_depreciation_method` | VARCHAR(30) | No   |     | StraightLine/DecliningBalance/UnitsOfProduction (BR-588). |
+| `default_useful_life_months`  | INTEGER     | Yes  |     | Umur manfaat default (bulan).                 |
+| `is_active`                   | BOOLEAN     | No   |     | Status aktif.                                 |
+
+### `fa.fixed_asset` (BR-586, BRule-FA-001..006)
+
+| Column                             | Type          | Null | Key | Description                                            |
+| ---------------------------------- | ------------- | ---- | --- | ------------------------------------------------------ |
+| `asset_no`                         | VARCHAR(50)   | No   | U   | Nomor aset unik ber-scope.                             |
+| `name`                             | VARCHAR(200)  | No   |     | Deskripsi aset.                                        |
+| `asset_category_id`                | UUID          | No   | FK  | Kategori aset.                                         |
+| `financial_organization_ref`       | UUID          | No   | IDX | Financial Organization pemilik (ref logis `coa_db`).   |
+| `acquisition_date`                 | DATE          | No   |     | Tanggal perolehan.                                     |
+| `acquisition_cost`                 | NUMERIC(20,4) | No   |     | Nilai perolehan.                                       |
+| `salvage_value`                    | NUMERIC(20,4) | No   |     | Nilai residu (BRule-FA-002).                           |
+| `useful_life_months`               | INTEGER       | No   |     | Umur manfaat (bulan).                                  |
+| `depreciation_method`              | VARCHAR(30)   | No   |     | Metode penyusutan aktual.                              |
+| `depreciation_start_date`          | DATE          | Yes  |     | Tanggal mulai penyusutan (BR-587).                     |
+| `asset_account_id`                 | UUID          | No   |     | Akun aset (ref logis `coa_db`).                        |
+| `accum_depreciation_account_id`    | UUID          | No   |     | Akun akumulasi penyusutan.                             |
+| `depreciation_expense_account_id`  | UUID          | No   |     | Akun beban penyusutan.                                 |
+| `cost_center_ref`                  | UUID          | Yes  |     | Cost center kepemilikan (ref logis `dimension_db`).    |
+| `net_book_value`                   | NUMERIC(20,4) | No   |     | Nilai buku berjalan.                                   |
+| `parent_asset_id`                  | UUID          | Yes  | FK  | Aset induk (component accounting, BR-593).             |
+| `status`                           | VARCHAR(20)   | No   | IDX | Draft/Active/UnderRevaluation/Disposed (BR-592).       |
+
+### `fa.depreciation_entry` (BR-589)
+
+| Column                     | Type          | Null | Key | Description                                    |
+| -------------------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `fixed_asset_id`           | UUID          | No   | FK  | Aset.                                          |
+| `fiscal_period_ref`        | UUID          | No   | IDX | Periode fiskal (ref logis `coa_db`).           |
+| `depreciation_amount`      | NUMERIC(20,4) | No   |     | Beban penyusutan periode.                      |
+| `accumulated_depreciation` | NUMERIC(20,4) | No   |     | Akumulasi s.d. periode.                        |
+| `net_book_value`           | NUMERIC(20,4) | No   |     | Nilai buku setelah penyusutan.                 |
+| `is_posted`                | BOOLEAN       | No   |     | Sudah diposting ke GL (BRule-FA-005).          |
+| `gl_journal_ref`           | VARCHAR(50)   | Yes  |     | Referensi jurnal GL.                           |
+| `run_date`                 | DATE          | No   |     | Tanggal depreciation run.                      |
+
+### `fa.asset_transaction` (kapitalisasi/revaluasi/transfer/disposal/impairment — history log)
+
+| Column                          | Type          | Null | Key | Description                                            |
+| ------------------------------- | ------------- | ---- | --- | ------------------------------------------------------ |
+| `fixed_asset_id`                | UUID          | No   | FK  | Aset.                                                  |
+| `transaction_type`              | VARCHAR(30)   | No   | IDX | Capitalization/Revaluation/Transfer/Disposal/Impairment. |
+| `transaction_date`              | DATE          | No   |     | Tanggal transaksi.                                     |
+| `amount`                        | NUMERIC(20,4) | No   |     | Nilai transaksi.                                       |
+| `gain_loss_amount`              | NUMERIC(20,4) | Yes  |     | Gain/loss disposal (BR-592).                           |
+| `from_financial_organization_ref`| UUID        | Yes  |     | FinOrg asal (transfer, BR-591).                        |
+| `to_financial_organization_ref` | UUID          | Yes  |     | FinOrg tujuan (transfer).                              |
+| `gl_journal_ref`                | VARCHAR(50)   | Yes  |     | Referensi jurnal GL.                                   |
+| `notes`                         | TEXT          | Yes  |     | Keterangan.                                            |
+
+---
+
+## 9.3 Cost & Profit Center (`dimension_db`)
+
+Merealisasikan BRD 9.5.10 & 9.5.11: dimensi pelaporan hierarkis (parent-child tanpa batas level), mapping ke scope organisasi, alokasi, dan status lifecycle. Dua schema: `cc` (Cost Center) dan `pc` (Profit Center).
+
+```mermaid
+erDiagram
+  COST_CENTER ||--o{ COST_CENTER : "parent-child"
+  COST_CENTER ||--o{ COST_CENTER_ASSIGNMENT : scoped_to
+  COST_CENTER ||--o{ COST_ALLOCATION_RULE : source_of
+  PROFIT_CENTER ||--o{ PROFIT_CENTER : "parent-child"
+  PROFIT_CENTER ||--o{ PROFIT_CENTER_ASSIGNMENT : scoped_to
+```
+
+### `cc.cost_center` (BR-616, BR-617, BR-621, BR-622)
+
+| Column           | Type         | Null | Key | Description                                    |
+| ---------------- | ------------ | ---- | --- | ---------------------------------------------- |
+| `code`           | VARCHAR(50)  | No   | U   | Kode unik (BRule-CC-004).                      |
+| `name`           | VARCHAR(150) | No   |     | Nama.                                          |
+| `description`    | TEXT         | Yes  |     | Deskripsi.                                     |
+| `parent_id`      | UUID         | Yes  | FK  | Induk (hierarki tanpa batas, BR-617).          |
+| `owner_ref`      | UUID         | Yes  |     | Penanggung jawab (ref logis user, BR-622).     |
+| `status`         | VARCHAR(20)  | No   | IDX | Draft/Active/Inactive/Closed (BR-621).         |
+| `effective_from` | DATE         | No   |     | Awal berlaku (DBS-016).                        |
+| `effective_to`   | DATE         | Yes  |     | Akhir berlaku.                                 |
+
+### `cc.cost_center_assignment` (BR-619 — mapping ke scope organisasi)
+
+| Column             | Type | Null | Key | Description                              |
+| ------------------ | ---- | ---- | --- | ---------------------------------------- |
+| `cost_center_id`   | UUID | No   | FK  | Cost center.                             |
+| `organization_ref` | UUID | No   | IDX | Unit organisasi (ref logis `org_db`).    |
+
+### `cc.cost_allocation_rule` (BR-624)
+
+| Column             | Type    | Null | Key | Description                                          |
+| ------------------ | ------- | ---- | --- | ---------------------------------------------------- |
+| `source_cost_center_id`| UUID| No   | FK  | Cost center sumber.                                  |
+| `name`             | VARCHAR(150)| No |    | Nama aturan alokasi.                                 |
+| `allocation_basis` | VARCHAR(50) | No |    | Basis alokasi (headcount/area/driver/…).             |
+| `targets`          | JSONB   | No   |     | `[{cost_center_id, percentage}]` (total 100%).       |
+| `is_active`        | BOOLEAN | No   |     | Aktif.                                               |
+
+### `pc.profit_center` (BR-626, BR-627, BR-635)
+
+| Column           | Type         | Null | Key | Description                                    |
+| ---------------- | ------------ | ---- | --- | ---------------------------------------------- |
+| `code`           | VARCHAR(50)  | No   | U   | Kode unik (BRule-PC-001).                      |
+| `name`           | VARCHAR(150) | No   |     | Nama.                                          |
+| `parent_id`      | UUID         | Yes  | FK  | Induk (hierarki, BR-627).                      |
+| `status`         | VARCHAR(20)  | No   | IDX | Draft/Active/Inactive/Closed (BR-635).         |
+| `effective_from` | DATE         | No   |     | Awal berlaku.                                  |
+| `effective_to`   | DATE         | Yes  |     | Akhir berlaku.                                 |
+
+### `pc.profit_center_assignment` (BR-628)
+
+| Column             | Type | Null | Key | Description                              |
+| ------------------ | ---- | ---- | --- | ---------------------------------------- |
+| `profit_center_id` | UUID | No   | FK  | Profit center.                           |
+| `organization_ref` | UUID | No   | IDX | Unit organisasi (ref logis `org_db`).    |
+
+---
+
+## 9.4 Budget Management (`budget_db`)
+
+Merealisasikan BRD 9.5.12 (BR-636..645): penyusunan budget tahunan, line item, revisi (versi), alokasi ke cost center/project, budgetary control, dan commitment/encumbrance.
+
+```mermaid
+erDiagram
+  BUDGET ||--|{ BUDGET_LINE : contains
+  BUDGET ||--o{ BUDGET_COMMITMENT : encumbered_by
+```
+
+### `bud.budget` (BR-636, BR-638, BR-639)
+
+| Column                       | Type        | Null | Key | Description                                    |
+| ---------------------------- | ----------- | ---- | --- | ---------------------------------------------- |
+| `code`                       | VARCHAR(50) | No   | U   | Kode budget.                                   |
+| `name`                       | VARCHAR(150)| No   |     | Nama.                                          |
+| `financial_organization_ref` | UUID        | No   | IDX | Financial Organization (ref logis).            |
+| `fiscal_year_ref`            | UUID        | No   | IDX | Tahun fiskal (ref logis, BRule-BUD-001).       |
+| `version`                    | INTEGER     | No   |     | Versi budget (revisi, BR-639).                 |
+| `status`                     | VARCHAR(20) | No   | IDX | Draft/Submitted/Approved/Revised/Closed.       |
+| `is_active`                  | BOOLEAN     | No   |     | Versi aktif untuk kontrol (BRule-BUD-002).     |
+
+### `bud.budget_line` (BR-637, BR-640)
+
+| Column            | Type          | Null | Key | Description                                    |
+| ----------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `budget_id`       | UUID          | No   | FK  | Induk budget (`ON DELETE CASCADE`).            |
+| `account_ref`     | UUID          | No   | IDX | Akun anggaran (ref logis `coa_db`).            |
+| `cost_center_ref` | UUID          | Yes  | IDX | Cost center (ref logis `dimension_db`).        |
+| `project_ref`     | UUID          | Yes  |     | Project (ref logis `project_db`).              |
+| `period_no`       | INTEGER       | No   |     | Periode (1–12/kuartal).                        |
+| `budget_amount`   | NUMERIC(20,4) | No   |     | Nilai anggaran.                                |
+
+### `bud.budget_control_policy` (BR-642)
+
+| Column             | Type        | Null | Key | Description                                          |
+| ------------------ | ----------- | ---- | --- | ---------------------------------------------------- |
+| `account_ref`      | UUID        | Yes  |     | Akun/kategori (NULL = semua).                        |
+| `transaction_type` | VARCHAR(50) | Yes  |     | Jenis transaksi (NULL = semua).                      |
+| `control_type`     | VARCHAR(20) | No   |     | HardStop/SoftWarning/ApprovalOverride (BRule-BUD-005). |
+
+### `bud.budget_commitment` (BR-644 — encumbrance)
+
+| Column                | Type          | Null | Key | Description                                    |
+| --------------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `budget_id`           | UUID          | No   | IDX | Budget terkait (ref).                          |
+| `source_document_ref` | VARCHAR(100)  | No   | IDX | Dokumen komitmen (PR/PO terbuka).              |
+| `committed_amount`    | NUMERIC(20,4) | No   |     | Nilai komitmen.                                |
+| `status`              | VARCHAR(20)   | No   |     | Open/Released/Consumed (BRule-BUD-004).        |
+
+---
+
+## 9.5 Financial Close (`financialclose_db`)
+
+Merealisasikan BRD 9.5.14 (BR-656..665): checklist penutupan configurable, rekonsiliasi sub-ledger↔GL, jurnal penyesuaian closing, period lock berjenjang, year-end rollover, reopening terkontrol.
+
+```mermaid
+erDiagram
+  CLOSING_CHECKLIST_TEMPLATE ||--|{ CLOSING_TASK_TEMPLATE : defines
+  CLOSING_RUN ||--|{ CLOSING_TASK : tracks
+  CLOSING_RUN ||--o{ PERIOD_REOPENING : reopened_by
+```
+
+### `fcl.closing_checklist_template` / `fcl.closing_task_template` (BR-656)
+
+| Table                          | Kolom kunci                                                        | Deskripsi                     |
+| ------------------------------ | ------------------------------------------------------------------ | ----------------------------- |
+| `fcl.closing_checklist_template` | `code`(U), `name`, `financial_organization_ref`                  | Template checklist per FinOrg.|
+| `fcl.closing_task_template`    | `template_id`(FK), `task_order`, `task_name`, `is_mandatory`       | Definisi task wajib/opsional. |
+
+### `fcl.closing_run` (BR-659, BR-663)
+
+| Column                       | Type        | Null | Key | Description                                    |
+| ---------------------------- | ----------- | ---- | --- | ---------------------------------------------- |
+| `financial_organization_ref` | UUID        | No   | IDX | Financial Organization.                        |
+| `fiscal_period_ref`          | UUID        | No   | IDX | Periode fiskal.                                |
+| `run_type`                   | VARCHAR(20) | No   |     | PeriodEnd/YearEnd (BR-663).                     |
+| `status`                     | VARCHAR(20) | No   | IDX | Open/PendingClose/Closed/Locked (BRule-FCL-005). |
+| `closed_at`                  | TIMESTAMPTZ | Yes  |     | Waktu penutupan.                               |
+| `closed_by`                  | UUID        | Yes  |     | Pelaku penutupan.                              |
+
+### `fcl.closing_task` (BR-661)
+
+| Column           | Type        | Null | Key | Description                                    |
+| ---------------- | ----------- | ---- | --- | ---------------------------------------------- |
+| `closing_run_id` | UUID        | No   | FK  | Run penutupan (`ON DELETE CASCADE`).           |
+| `task_name`      | VARCHAR(150)| No   |     | Nama task.                                     |
+| `is_mandatory`   | BOOLEAN     | No   |     | Wajib (BRule-FCL-001).                         |
+| `status`         | VARCHAR(20) | No   |     | Pending/InProgress/Completed.                  |
+| `assignee_ref`   | UUID        | Yes  |     | Task owner (ref logis user).                   |
+| `completed_at`   | TIMESTAMPTZ | Yes  |     | Waktu selesai.                                 |
+
+### `fcl.period_status` (BR-659 — period lock per scope/modul)
+
+| Column                       | Type        | Null | Key | Description                                    |
+| ---------------------------- | ----------- | ---- | --- | ---------------------------------------------- |
+| `financial_organization_ref` | UUID        | No   | IDX | Financial Organization.                        |
+| `fiscal_period_ref`          | UUID        | No   | IDX | Periode.                                       |
+| `module`                     | VARCHAR(30) | No   |     | Modul (GL/AP/AR/FA/…).                          |
+| `status`                     | VARCHAR(20) | No   |     | Open/PendingClose/Closed/Locked.               |
+
+**Unique:** `uq_period_status (organization_id, financial_organization_ref, fiscal_period_ref, module)`.
+
+### `fcl.period_reopening` (BR-664 — exception log)
+
+| Column                       | Type        | Null | Key | Description                                    |
+| ---------------------------- | ----------- | ---- | --- | ---------------------------------------------- |
+| `financial_organization_ref` | UUID        | No   | IDX | Financial Organization.                        |
+| `fiscal_period_ref`          | UUID        | No   |     | Periode dibuka kembali.                        |
+| `requested_by`               | UUID        | No   |     | Pemohon.                                       |
+| `approved_by`                | UUID        | Yes  |     | Approver.                                      |
+| `reason`                     | TEXT        | No   |     | Justifikasi (BRule-FCL-006).                   |
+| `reopened_at`                | TIMESTAMPTZ | Yes  |     | Waktu reopening.                               |
+
+---
+
+## 9.6 Financial Consolidation (`consolidation_db`)
+
+Merealisasikan BRD 9.5.15 (BR-666..675): consolidation group multi-tier, metode konsolidasi, identifikasi & eliminasi intercompany, translasi mata uang (CTA), NCI, top-side adjustment.
+
+```mermaid
+erDiagram
+  CONSOLIDATION_GROUP ||--o{ CONSOLIDATION_GROUP : "parent-tier"
+  CONSOLIDATION_GROUP ||--|{ CONSOLIDATION_MEMBER : includes
+  CONSOLIDATION_GROUP ||--o{ ELIMINATION_RULE : governs
+  CONSOLIDATION_RUN ||--o{ ELIMINATION_ENTRY : produces
+  CONSOLIDATION_RUN ||--o{ CONSOLIDATION_ADJUSTMENT : produces
+```
+
+### `cons.consolidation_group` (BR-666, BR-675)
+
+| Column                     | Type        | Null | Key | Description                                    |
+| -------------------------- | ----------- | ---- | --- | ---------------------------------------------- |
+| `code`                     | VARCHAR(50) | No   | U   | Kode grup konsolidasi.                         |
+| `name`                     | VARCHAR(150)| No   |     | Nama.                                          |
+| `parent_group_id`          | UUID        | Yes  | FK  | Grup induk (multi-tier, BR-675).               |
+| `presentation_currency_code`| VARCHAR(3) | No   |     | Mata uang penyajian grup.                      |
+
+### `cons.consolidation_member` (BR-667, BR-671)
+
+| Column                  | Type          | Null | Key | Description                                    |
+| ----------------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `consolidation_group_id`| UUID          | No   | FK  | Grup konsolidasi.                              |
+| `company_ref`           | UUID          | No   | IDX | Company anggota (ref logis `org_db`).          |
+| `ownership_percentage`  | NUMERIC(9,4)  | No   |     | Persentase kepemilikan (NCI, BR-671).          |
+| `consolidation_method`  | VARCHAR(20)   | No   |     | Full/Proportional/Equity (BR-667).             |
+
+### `cons.elimination_rule` (BR-669)
+
+| Column                  | Type        | Null | Key | Description                                          |
+| ----------------------- | ----------- | ---- | --- | ---------------------------------------------------- |
+| `consolidation_group_id`| UUID        | No   | FK  | Grup.                                                |
+| `rule_type`             | VARCHAR(40) | No   |     | ICReceivablePayable/ICSalesPurchase/UnrealizedProfit/InvestmentEquity. |
+| `config`                | JSONB       | No   |     | Konfigurasi akun & pasangan.                         |
+| `is_active`             | BOOLEAN     | No   |     | Aktif.                                               |
+
+### `cons.consolidation_run` (BR-673, BR-674)
+
+| Column                  | Type        | Null | Key | Description                                    |
+| ----------------------- | ----------- | ---- | --- | ---------------------------------------------- |
+| `consolidation_group_id`| UUID        | No   | FK  | Grup.                                          |
+| `fiscal_period_ref`     | UUID        | No   | IDX | Periode konsolidasi.                           |
+| `status`                | VARCHAR(20) | No   | IDX | Draft/Eliminated/Adjusted/Finalized.           |
+| `version`               | INTEGER     | No   |     | Versi laporan konsolidasi (BR-674).            |
+
+### `cons.elimination_entry` (BR-669) / `cons.consolidation_adjustment` (BR-672)
+
+| Table                          | Kolom kunci                                                                 | Deskripsi                       |
+| ------------------------------ | --------------------------------------------------------------------------- | ------------------------------- |
+| `cons.elimination_entry`       | `consolidation_run_id`(FK), `account_ref`, `debit_amount`, `credit_amount`, `elimination_rule_id`(FK), `description` | Jurnal eliminasi otomatis.      |
+| `cons.consolidation_adjustment`| `consolidation_run_id`(FK), `account_ref`, `debit_amount`, `credit_amount`, `adjustment_type`(TopSide/Reclass/Policy), `notes` | Top-side adjustment (tidak memengaruhi ledger entitas legal). |
+
+---
+
+## 9.7 Project Management (`project_db`)
+
+Merealisasikan BRD 9.10 (BR-726..735): project master, WBS berjenjang, project budget (baseline), cost capture, progress monitoring, project billing, change order.
+
+```mermaid
+erDiagram
+  PROJECT ||--|{ WBS_ELEMENT : decomposed_into
+  WBS_ELEMENT ||--o{ WBS_ELEMENT : "parent-child"
+  PROJECT ||--o{ PROJECT_BUDGET : budgeted_by
+  WBS_ELEMENT ||--o{ PROJECT_COST : incurs
+  WBS_ELEMENT ||--o{ PROJECT_PROGRESS : measured_by
+  PROJECT ||--o{ PROJECT_BILLING : billed_by
+  PROJECT ||--o{ CHANGE_ORDER : changed_by
+```
+
+### `prj.project` (BR-726, BRule-PRJ-001/002)
+
+| Column             | Type        | Null | Key | Description                                    |
+| ------------------ | ----------- | ---- | --- | ---------------------------------------------- |
+| `code`             | VARCHAR(50) | No   | U   | Kode proyek.                                   |
+| `name`             | VARCHAR(200)| No   |     | Nama proyek.                                   |
+| `project_type`     | VARCHAR(50) | No   |     | Jenis proyek (konfigurabel).                   |
+| `organization_ref` | UUID        | No   | IDX | Node organisasi pemilik (ref logis `org_db`).  |
+| `currency_code`    | VARCHAR(3)  | No   |     | Mata uang proyek.                              |
+| `start_date`       | DATE        | Yes  |     | Mulai pelaksanaan.                             |
+| `end_date`         | DATE        | Yes  |     | Selesai pelaksanaan.                           |
+| `status`           | VARCHAR(20) | No   | IDX | Draft/Active/OnHold/Closed.                    |
+
+### `prj.wbs_element` (BR-727, BRule-PRJ-003)
+
+| Column       | Type        | Null | Key | Description                                    |
+| ------------ | ----------- | ---- | --- | ---------------------------------------------- |
+| `project_id` | UUID        | No   | FK  | Proyek induk (`ON DELETE CASCADE`).            |
+| `parent_id`  | UUID        | Yes  | FK  | Elemen WBS induk (hierarki tanpa batas).       |
+| `code`       | VARCHAR(50) | No   |     | Kode WBS (unik per proyek).                    |
+| `name`       | VARCHAR(200)| No   |     | Nama elemen.                                   |
+| `level_no`   | INTEGER     | No   |     | Level hierarki.                                |
+
+### `prj.project_budget` (BR-728) / `prj.project_cost` (BR-729) / `prj.project_progress` (BR-730)
+
+| Table                 | Kolom kunci                                                                            | Deskripsi                     |
+| --------------------- | -------------------------------------------------------------------------------------- | ----------------------------- |
+| `prj.project_budget`  | `project_id`(FK), `wbs_element_id`(FK), `version`, `budget_amount`, `status`, `is_baseline` | Anggaran per WBS (baseline).  |
+| `prj.project_cost`    | `project_id`(FK), `wbs_element_id`(FK), `cost_type`(Labor/Material/Subcontractor/Overhead), `amount`, `source_document_ref`, `posting_date` | Biaya aktual per WBS.         |
+| `prj.project_progress`| `wbs_element_id`(FK), `period_date`, `physical_progress_pct`, `recorded_at`            | Progres fisik (EVM, BR-732).  |
+
+### `prj.project_billing` (BR-731) / `prj.change_order` (BR-733)
+
+| Table               | Kolom kunci                                                                       | Deskripsi                     |
+| ------------------- | --------------------------------------------------------------------------------- | ----------------------------- |
+| `prj.project_billing`| `project_id`(FK), `billing_type`(Milestone/Progress/TimeMaterial), `amount`, `ar_invoice_ref`, `status` | Penagihan proyek → AR.        |
+| `prj.change_order`  | `project_id`(FK), `description`, `budget_impact_amount`, `schedule_impact_days`, `status`(Draft/Approved/Rejected) | Perubahan lingkup/anggaran.   |
+
+---
+
+## 9.8 Asset Management (`asset_db`)
+
+Merealisasikan BRD 9.11 (BR-736..745): registrasi aset operasional, lokasi, tagging, perpindahan (approval), kondisi/status, verifikasi fisik. Sinkron dengan `fixedasset_db` sebagai sisi akuntansi (BRule-AST-006).
+
+```mermaid
+erDiagram
+  ASSET ||--o{ ASSET_LOCATION_HISTORY : located_at
+  ASSET ||--o{ ASSET_MOVEMENT : moved_by
+  ASSET ||--o{ ASSET_VERIFICATION : verified_by
+```
+
+### `ast.asset` (BR-736, BR-742, BRule-AST-001/002)
+
+| Column             | Type        | Null | Key | Description                                    |
+| ------------------ | ----------- | ---- | --- | ---------------------------------------------- |
+| `asset_code`       | VARCHAR(50) | No   | U   | Kode aset unik.                                |
+| `name`             | VARCHAR(200)| No   |     | Nama aset.                                     |
+| `category`         | VARCHAR(50) | No   |     | Kategori operasional.                          |
+| `specification`    | JSONB       | Yes  |     | Spesifikasi fleksibel.                         |
+| `acquisition_date` | DATE        | Yes  |     | Tanggal perolehan.                             |
+| `organization_ref` | UUID        | No   | IDX | Scope lokasi/kepemilikan (ref logis `org_db`). |
+| `fixed_asset_ref`  | UUID        | Yes  | IDX | Aset akuntansi (ref logis `fixedasset_db`).    |
+| `barcode`          | VARCHAR(100)| Yes  |     | Barcode/QR (BR-738).                           |
+| `status`           | VARCHAR(20) | No   | IDX | Active/UnderMaintenance/Idle/Damaged/Disposed. |
+
+### `ast.asset_location_history` (BR-737) / `ast.asset_movement` (BR-741) / `ast.asset_verification` (BR-745)
+
+| Table                       | Kolom kunci                                                                           | Deskripsi                     |
+| --------------------------- | ------------------------------------------------------------------------------------- | ----------------------------- |
+| `ast.asset_location_history`| `asset_id`(FK), `organization_ref`, `warehouse_ref`, `location_note`, `effective_from`| Riwayat lokasi aset.          |
+| `ast.asset_movement`        | `asset_id`(FK), `from_organization_ref`, `to_organization_ref`, `status`(Draft/Approved/Completed), `approved_by`, `moved_at` | Perpindahan antar unit (approval). |
+| `ast.asset_verification`    | `asset_id`(FK), `verification_date`, `system_status`, `physical_status`, `discrepancy_note` | Stock opname aset.            |
+
+---
+
+## 9.9 Maintenance Management (`maintenance_db`)
+
+Merealisasikan BRD 9.16 (BR-786..795): jadwal preventif, work order, corrective request, pemakaian spare part (→ Inventory), checklist SOP, biaya & downtime, KPI (MTTR/MTBF).
+
+```mermaid
+erDiagram
+  MAINTENANCE_SCHEDULE ||--o{ WORK_ORDER : triggers
+  WORK_ORDER ||--o{ WORK_ORDER_PART : consumes
+  WORK_ORDER ||--o{ WORK_ORDER_CHECKLIST : verified_by
+  WORK_ORDER ||--o{ MAINTENANCE_COST : accrues
+```
+
+### `mnt.maintenance_schedule` (BR-786)
+
+| Column          | Type        | Null | Key | Description                                    |
+| --------------- | ----------- | ---- | --- | ---------------------------------------------- |
+| `asset_ref`     | UUID        | No   | IDX | Aset (ref logis `asset_db`).                   |
+| `schedule_type` | VARCHAR(20) | No   |     | TimeBased/UsageBased.                          |
+| `interval_value`| INTEGER     | No   |     | Nilai interval.                                |
+| `interval_unit` | VARCHAR(20) | No   |     | Day/Month/Hour/Cycle.                          |
+| `next_due_date` | DATE        | Yes  | IDX | Jatuh tempo berikutnya.                        |
+| `is_active`     | BOOLEAN     | No   |     | Aktif.                                         |
+
+### `mnt.work_order` (BR-787, BR-788, BR-791)
+
+| Column           | Type        | Null | Key | Description                                    |
+| ---------------- | ----------- | ---- | --- | ---------------------------------------------- |
+| `wo_no`          | VARCHAR(50) | No   | U   | Nomor work order.                              |
+| `asset_ref`      | UUID        | No   | IDX | Aset dipelihara.                               |
+| `maintenance_type`| VARCHAR(20)| No   |     | Preventive/Corrective.                         |
+| `status`         | VARCHAR(20) | No   | IDX | Open/Assigned/InProgress/Completed/Closed.     |
+| `assignee_ref`   | UUID        | Yes  |     | Teknisi internal (ref logis user).             |
+| `vendor_ref`     | UUID        | Yes  |     | Vendor eksternal (ref logis `masterdata_db`).  |
+| `scheduled_date` | DATE        | Yes  |     | Jadwal.                                        |
+| `downtime_start` | TIMESTAMPTZ | Yes  |     | Mulai downtime (BR-791).                       |
+| `downtime_end`   | TIMESTAMPTZ | Yes  |     | Selesai downtime.                              |
+
+### `mnt.work_order_part` (BR-789) / `mnt.work_order_checklist` (BR-793) / `mnt.maintenance_cost` (BR-790)
+
+| Table                     | Kolom kunci                                                          | Deskripsi                     |
+| ------------------------- | ------------------------------------------------------------------- | ----------------------------- |
+| `mnt.work_order_part`     | `work_order_id`(FK), `item_ref`, `quantity`, `unit_cost`            | Pemakaian spare part (→ Inventory, BRule-MNT-002). |
+| `mnt.work_order_checklist`| `work_order_id`(FK), `step_no`, `description`, `is_done`           | Checklist SOP (BRule-MNT-001).|
+| `mnt.maintenance_cost`    | `work_order_id`(FK), `cost_type`(Labor/Part/Vendor), `amount`      | Akumulasi biaya per WO/aset.  |
+
+---
+
+## 9.10 Customer Relationship Management (`crm_db`)
+
+Merealisasikan BRD 9.15 (BR-776..785): Customer 360, lead & opportunity, segmentasi, interaksi, case, pipeline, follow-up task. Perluasan Customer Master (`masterdata_db`) — `customer_ref` adalah referensi logis.
+
+```mermaid
+erDiagram
+  LEAD ||--o{ OPPORTUNITY : converts_to
+  CRM_CASE ||--o{ INTERACTION : logged_in
+  OPPORTUNITY ||--o{ INTERACTION : logged_in
+```
+
+### `crm.lead` (BR-777, BRule-CRM-001)
+
+| Column           | Type          | Null | Key | Description                                    |
+| ---------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `code`           | VARCHAR(50)   | No   | U   | Kode lead.                                     |
+| `name`           | VARCHAR(200)  | No   |     | Nama lead/kontak.                              |
+| `source`         | VARCHAR(50)   | Yes  |     | Sumber lead.                                   |
+| `status`         | VARCHAR(20)   | No   | IDX | New/Qualified/Converted/Lost.                  |
+| `estimated_value`| NUMERIC(20,4) | Yes  |     | Estimasi nilai.                                |
+| `customer_ref`   | UUID          | Yes  | IDX | Customer hasil konversi (ref logis).           |
+
+### `crm.opportunity` (BR-781, BRule-CRM-002)
+
+| Column               | Type          | Null | Key | Description                                    |
+| -------------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `code`               | VARCHAR(50)   | No   | U   | Kode opportunity.                              |
+| `lead_id`            | UUID          | Yes  | FK  | Lead sumber.                                   |
+| `customer_ref`       | UUID          | Yes  | IDX | Customer (ref logis `masterdata_db`).          |
+| `stage`              | VARCHAR(50)   | No   |     | Tahap pipeline.                                |
+| `probability_pct`    | NUMERIC(5,2)  | Yes  |     | Probabilitas konversi.                         |
+| `estimated_value`    | NUMERIC(20,4) | Yes  |     | Estimasi nilai.                                |
+| `expected_close_date`| DATE          | Yes  |     | Perkiraan closing.                             |
+| `status`             | VARCHAR(20)   | No   | IDX | Open/Won/Lost.                                 |
+
+### `crm.customer_segment` (BR-778) / `crm.interaction` (BR-779) / `crm.case` (BR-780) / `crm.activity_task` (BR-782)
+
+| Table                | Kolom kunci                                                                        | Deskripsi                     |
+| -------------------- | ---------------------------------------------------------------------------------- | ----------------------------- |
+| `crm.customer_segment`| `code`(U), `name`, `criteria`(JSONB)                                              | Segmentasi pelanggan.         |
+| `crm.interaction`    | `customer_ref`, `lead_id`(FK), `interaction_type`(Call/Meeting/Email/Note), `occurred_at`, `notes` | Riwayat interaksi.            |
+| `crm.case`           | `case_no`(U), `customer_ref`, `subject`, `status`(Open/Escalated/Resolved/Closed), `resolution`, `opened_at`, `resolved_at` | Keluhan/case (BRule-CRM-003). |
+| `crm.activity_task`  | `assignee_ref`, `related_type`, `related_ref`, `due_date`, `status`(Pending/Done) | Follow-up reminder & task.    |
+
+---
+
+## 9.11 Localization & Multi-Language (`localization_db`)
+
+Merealisasikan BRD 9.19 (BR-816..825): bahasa, terjemahan terpusat, preferensi bahasa pengguna, bahasa default organisasi, format locale, fallback. Perubahan bahasa tidak mengubah nilai data (BRule-LOC-001).
+
+```mermaid
+erDiagram
+  LANGUAGE ||--o{ TRANSLATION : provides
+  LANGUAGE ||--o{ USER_LANGUAGE_PREFERENCE : preferred_by
+  LANGUAGE ||--o{ ORGANIZATION_LANGUAGE : default_for
+```
+
+### `loc.language` (BR-816, BR-823)
+
+| Column       | Type        | Null | Key | Description                                    |
+| ------------ | ----------- | ---- | --- | ---------------------------------------------- |
+| `code`       | VARCHAR(10) | No   | U   | Kode bahasa (mis. `en`, `id`).                 |
+| `name`       | VARCHAR(100)| No   |     | Nama bahasa.                                   |
+| `is_active`  | BOOLEAN     | No   |     | Aktif (BR-824).                                |
+| `is_fallback`| BOOLEAN     | No   |     | Bahasa cadangan (BRule-LOC-002).               |
+
+### `loc.translation` (BR-817)
+
+| Column           | Type        | Null | Key | Description                                    |
+| ---------------- | ----------- | ---- | --- | ---------------------------------------------- |
+| `language_code`  | VARCHAR(10) | No   | IDX | Bahasa (ref `loc.language.code`).              |
+| `resource_key`   | VARCHAR(200)| No   |     | Kunci label/pesan.                             |
+| `resource_value` | TEXT        | No   |     | Nilai terjemahan.                              |
+| `module`         | VARCHAR(50) | Yes  |     | Modul terkait.                                 |
+
+**Unique:** `uq_translation (organization_id, language_code, resource_key)`.
+
+### `loc.locale_format` (BR-820) / `loc.user_language_preference` (BR-818) / `loc.organization_language` (BR-819)
+
+| Table                        | Kolom kunci                                                       | Deskripsi                     |
+| ---------------------------- | ----------------------------------------------------------------- | ----------------------------- |
+| `loc.locale_format`          | `locale_code`(U), `date_format`, `number_format`, `currency_format` | Format tanggal/angka/mata uang per locale. |
+| `loc.user_language_preference`| `user_ref`(U), `language_code`                                  | Preferensi bahasa pengguna (BRule-LOC-003). |
+| `loc.organization_language`  | `organization_ref`(U), `default_language_code`                   | Bahasa default per organisasi.|
+
+---
+
+## 9.12 Cross-Cutting Notes
+
+* **RLS & Common Columns:** seluruh tabel domain pada BAB ini menegakkan Common Columns (BAB 2.4) dan RLS `organization_id` (BAB 2.8), kecuali tabel teknis `outbox`/`processed_event` (infra).
+* **Outbox/Idempotency:** setiap basis data memiliki `outbox` (produsen event) & `processed_event` (konsumen), sesuai perannya dalam Saga lintas domain (mis. `fixedasset.depreciation.posted`, `project.cost.captured`, `asset.moved`, `payroll`-style posting ke GL).
+* **Partisi:** tabel pada BAB ini belum bervolume "hot" seperti GL/stock/audit sehingga belum dipartisi pada rilis ini; `fa.depreciation_entry`, `prj.project_cost`, dan `mnt.maintenance_cost` menjadi kandidat partisi RANGE per periode pada optimasi berikutnya (DBS-013).
+* **Referensi logis lintas layanan:** Fixed Asset ↔ Financial Organization/CoA/Fiscal Period; Asset ↔ Fixed Asset; Budget ↔ CoA/Cost Center/Project; Consolidation ↔ Organization/Currency/GL; CRM ↔ Customer Master/AR; Maintenance ↔ Asset/Inventory.
+
+---
+
+## 9.13 Summary
+
+BAB ini menuntaskan desain fisik untuk **10 basis data domain lanjutan** (SVC-020…029): Fixed Asset, Cost & Profit Center, Budget, Financial Close, Consolidation, Project, Asset (operasional), Maintenance, CRM, dan Localization. Seluruhnya mengikuti standar BAB 2 dan pola database-per-service, dengan referensi lintas layanan bersifat logis dan integritas dijaga via Saga/event. Dengan tambahan ini, DBDD mencakup **30 basis data** yang menutup seluruh domain yang sebelumnya ditangguhkan pada BAB 8.9.
+
+---

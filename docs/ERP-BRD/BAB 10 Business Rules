@@ -1,0 +1,158 @@
+# BAB 10. Business Rules
+
+## 10.1 Overview
+
+Business Rules merupakan kumpulan aturan bisnis (*business logic constraints*) yang mengikat perilaku sistem **Enterprise Resource Planning (ERP)** di seluruh modul, sebagaimana telah dirinci per modul pada **BAB 9. Business Requirement**. Setiap Business Rule diberi kode unik dengan format `BRule-[PREFIX]-[NNN]`, di mana prefix merepresentasikan modul atau domain asal (contoh: `BRule-ORG-001` untuk Organization Management, `BRule-GL-001` untuk General Ledger).
+
+Bab ini **bukan** merupakan pengulangan seluruh Business Rule yang telah didefinisikan pada BAB 9. Tujuan utama BAB 10 adalah:
+
+* Menyajikan **konsolidasi dan indeks lintas modul** atas Business Rule yang paling material terhadap integritas data, kepatuhan (*compliance*), dan konsistensi proses bisnis di seluruh ERP.
+* Mengelompokkan Business Rule ke dalam kategori fungsional (Organization, Financial, Procurement, Inventory, HR, Approval/Workflow, Security) sehingga dapat dibaca sebagai satu kesatuan tanpa harus membuka 41 dokumen modul secara terpisah.
+* Menetapkan **General Business Rules** baru (`BRule-GEN-001` s/d `BRule-GEN-010`) yang bersifat *enterprise-wide* dan lintas modul — kebijakan yang berlaku pada seluruh domain namun belum tercakup secara eksplisit pada BAB 9, seperti konvensi penamaan, retensi data, zona waktu transaksi, pembulatan nilai, dan bahasa dokumen resmi.
+* Menjadi rujukan tunggal (*single reference point*) bagi tim solution design, developer, dan auditor ketika memvalidasi bahwa konfigurasi sistem konsisten dengan kebijakan bisnis yang telah disepakati.
+
+Business Rule ID yang dicantumkan pada bab ini bersifat **pointer/referensi**; deskripsi lengkap, kondisi, pengecualian, serta kaitan dengan Business Requirement (BR-xxx) tetap menjadi rujukan resmi pada dokumen modul terkait di BAB 9. Apabila terjadi perbedaan detail antara rangkuman pada bab ini dengan dokumen modul asal, maka dokumen modul asal pada BAB 9 yang berlaku sebagai sumber kebenaran (*source of truth*).
+
+Seluruh Business Rule pada bab ini tunduk pada prinsip arsitektur ERP: **Configuration over Customization**, **Organization Tree First**, **Scope-Based Everything**, **Modular & Extensible**, dan **Multi-Tenant Ready**.
+
+---
+
+## 10.2 General Business Rules
+
+General Business Rules adalah kebijakan enterprise-wide yang berlaku lintas seluruh modul dan tidak dimiliki secara eksklusif oleh satu domain fungsional tertentu.
+
+| Business Rule ID | Description |
+| --- | --- |
+| BRule-GEN-001 | Setiap kode master data (Organization Code, Item Code, Account Code, Vendor Code, Customer Code, Employee Code, dsb.) wajib mengikuti konvensi penamaan (*naming convention*) yang dikonfigurasi per entitas dan bersifat unik dalam ruang lingkup (*scope*) yang ditetapkan; perubahan konvensi tidak boleh mengubah kode yang telah digunakan pada transaksi historis. |
+| BRule-GEN-002 | Data transaksi dan master data yang telah digunakan sebagai referensi transaksi tidak dapat dihapus secara permanen (*hard delete*); penghapusan hanya dapat dilakukan melalui mekanisme nonaktivasi/arsip (*soft delete*) sesuai kebijakan retensi yang berlaku. |
+| BRule-GEN-003 | Kebijakan retensi data (*data retention policy*) ditetapkan per kategori data (transaksional, master, log/audit) dan per organisasi/yurisdiksi; data yang telah melewati masa retensi hanya dapat dihapus melalui proses resmi dengan otorisasi khusus dan tercatat pada Audit Trail. |
+| BRule-GEN-004 | Setiap transaksi dicatat dengan waktu sistem dalam format Coordinated Universal Time (UTC) pada level penyimpanan, dan ditampilkan kepada pengguna sesuai zona waktu (*time zone*) organisasi/lokasi transaksi yang dikonfigurasi, tanpa mengubah nilai waktu tersimpan. |
+| BRule-GEN-005 | Pembulatan nilai (*rounding*) numerik dan moneter mengikuti kebijakan pembulatan yang dikonfigurasi secara terpusat per konteks (mata uang, satuan ukur, persentase) dan diterapkan secara konsisten di seluruh modul yang melakukan perhitungan atas nilai yang sama. |
+| BRule-GEN-006 | Dokumen resmi ERP (Business Requirement Document, Standard Operating Procedure, kontrak sistem, laporan resmi kepada regulator) menggunakan Bahasa Indonesia sebagai bahasa utama, dengan Bahasa Inggris sebagai bahasa pendamping apabila diperlukan untuk kebutuhan internasional/audit grup. |
+| BRule-GEN-007 | Seluruh entitas data wajib memiliki keterkaitan dengan Organization Scope pada Organization Tree; data tanpa scope organisasi yang valid tidak dapat digunakan dalam transaksi maupun ditampilkan pada laporan. |
+| BRule-GEN-008 | Perubahan konfigurasi bisnis (Workflow, Posting Rule, Chart of Accounts, Tax Code, Currency Rounding Rule, dan konfigurasi sejenis) tunduk pada *effective dating*; perubahan hanya berlaku mulai tanggal efektif berikutnya dan tidak boleh mengubah transaksi historis yang telah diproses dengan konfigurasi sebelumnya. |
+| BRule-GEN-009 | Setiap aksi yang bersifat kritikal (pembuatan, perubahan, penghapusan/nonaktivasi, persetujuan) atas master data maupun transaksi wajib tercatat pada Audit Trail dengan identitas pengguna, waktu, organisasi, dan jenis aksi, tanpa terkecuali. |
+| BRule-GEN-010 | Duplikasi data master antar modul (contoh: Customer di Sales dan CRM, Vendor di Procurement dan Accounts Payable) tidak diperkenankan; setiap entitas master wajib merujuk pada satu sumber data tunggal (*single source of truth*) yang dikelola melalui Master Data Management dengan sharing scope yang jelas. |
+
+---
+
+## 10.3 Organization Rules
+
+Kategori ini merangkum Business Rule inti yang menjaga integritas struktur organisasi sebagai fondasi seluruh proses bisnis (*Organization Tree First*), termasuk kaitannya dengan pengelolaan pengguna dan hak akses berbasis organisasi.
+
+| Business Rule ID | Description | Source Module |
+| --- | --- | --- |
+| BRule-ORG-001 | Struktur organisasi tidak memiliki batas jumlah level (Holding/Sub Holding/Company/Business Unit/Branch/Department/Warehouse/Project Site, dst.), seluruhnya dikonfigurasi tanpa batas level tetap. | Organization Management |
+| BRule-ORG-002 | Setiap organisasi memiliki satu Parent, kecuali Root Organization pada puncak hierarki. | Organization Management |
+| BRule-ORG-003 | Organization Code harus unik di seluruh ERP dan tidak dapat diduplikasi antar node organisasi. | Organization Management |
+| BRule-ORG-004 | Organization Scope wajib melekat pada seluruh transaksi sebagai dasar penerapan Scope-Based Everything. | Organization Management |
+| BRule-ORG-005 | Perubahan struktur organisasi (reorganisasi, merger, pemecahan unit) tidak boleh menghilangkan histori data transaksi yang telah tercatat pada struktur sebelumnya. | Organization Management |
+| BRule-USR-001 | Setiap pengguna memiliki Global User ID yang unik di seluruh ERP, terlepas dari jumlah organisasi yang diaksesnya. | User Management |
+| BRule-USR-002 | Satu pengguna dapat memiliki lebih dari satu penugasan organisasi (*multi-organization assignment*) sekaligus. | User Management |
+| BRule-USR-003 | Setiap pengguna memiliki satu Primary Organization yang menjadi konteks default saat login. | User Management |
+
+---
+
+## 10.4 Financial Rules
+
+Kategori ini merangkum Business Rule paling representatif dari seluruh domain Financial Management (Financial Organization, Fiscal Calendar, Currency Management, General Ledger, Accounts Payable, Accounts Receivable, Fixed Asset, Treasury, Cash & Bank, Cost Center, Profit Center, Budget Management, Tax Management, Financial Close, Financial Consolidation, Financial Reporting, Financial Analytics) beserta Chart of Accounts.
+
+| Business Rule ID | Description | Source Module |
+| --- | --- | --- |
+| BRule-FORG-002 | Setiap Financial Organization wajib memiliki Base Currency sebagai acuan pencatatan akuntansi. | Financial Organization |
+| BRule-FCAL-003 | Periode fiskal dengan status Hard Close atau Locked tidak dapat menerima transaksi baru. | Fiscal Calendar |
+| BRule-CM-002 | Currency Code tidak boleh diubah setelah digunakan dalam transaksi keuangan. | Currency Management Master – Currency Master |
+| BRule-ER-003 | Exchange Rate yang telah digunakan pada transaksi yang diposting tidak boleh diubah langsung; perubahan dilakukan melalui versi baru. | Currency Management Master – Exchange Rate |
+| BRule-GL-001 | Setiap jurnal wajib balance (total debit sama dengan total kredit) sebelum dapat diposting ke General Ledger. | General Ledger |
+| BRule-AP-001 | Vendor invoice dengan referensi Purchase Order wajib melalui three-way matching sebelum disetujui untuk pembayaran. | Accounts Payable |
+| BRule-AR-002 | Invoice pelanggan yang telah diposting ke General Ledger tidak dapat dihapus, hanya dapat dikoreksi melalui credit note/debit note. | Accounts Receivable |
+| BRule-FA-002 | Nilai penyusutan tidak boleh menyebabkan nilai buku aset (*net book value*) menjadi negatif. | Fixed Asset |
+| BRule-CC-002 | Setiap transaksi keuangan yang bersifat cost-relevant wajib memiliki Cost Center yang valid dan berstatus Active. | Cost Center |
+| BRule-BUD-002 | Budget hanya dapat digunakan untuk pengendalian transaksi setelah berstatus final/aktif melalui alur persetujuan. | Budget Management |
+| BRule-TAX-002 | Tarif pajak yang berlaku pada suatu transaksi adalah tarif yang aktif berdasarkan Effective Date transaksi, bukan tarif saat pelaporan. | Tax Management |
+| BRule-FCL-001 | Periode tidak dapat ditutup (Closed) apabila terdapat task wajib pada checklist penutupan yang belum berstatus selesai. | Financial Close |
+| BRule-FCON-004 | Proses eliminasi intercompany harus dijalankan sebelum laporan keuangan konsolidasian difinalisasi pada setiap periode. | Financial Consolidation |
+| BRule-FREP-002 | Setiap angka pada laporan keuangan harus dapat ditelusuri (*drill-down*) hingga ke jurnal dan dokumen transaksi sumber. | Financial Reporting |
+| BRule-GL-002 | Setiap baris jurnal wajib direferensikan ke Chart of Accounts yang valid, aktif, dan sesuai scope Financial Organization terkait. | Chart of Accounts – Account Structure/Account Combination |
+| BRule-ASEC-002 | Hak akses posting ke akun sensitif hanya dapat diberikan kepada Role yang terdaftar eksplisit dalam Account Security Policy sesuai Organization Scope. | Chart of Accounts – Account Security |
+
+---
+
+## 10.5 Procurement Rules
+
+| Business Rule ID | Description | Source Module |
+| --- | --- | --- |
+| BRule-PROC-001 | Purchase Requisition wajib melalui alur persetujuan yang berlaku sebelum dikonversi menjadi RFQ atau Purchase Order. | Procurement |
+| BRule-PROC-002 | Alur persetujuan berjenjang ditentukan berdasarkan kombinasi nilai transaksi dan level/scope organisasi yang mengajukan. | Procurement |
+| BRule-PROC-003 | RFQ untuk pembelian di atas ambang nilai tertentu wajib dikirim ke jumlah vendor minimum yang dikonfigurasi, kecuali vendor bersifat sole source. | Procurement |
+| BRule-PROC-004 | Purchase Order hanya dapat diterbitkan kepada vendor yang berstatus aktif dan tervalidasi pada Vendor Master. | Procurement |
+| BRule-PROC-005 | Setiap Goods Receipt wajib direferensikan ke Purchase Order yang valid dan tidak boleh melebihi kuantitas/nilai outstanding. | Procurement |
+
+---
+
+## 10.6 Inventory Rules
+
+| Business Rule ID | Description | Source Module |
+| --- | --- | --- |
+| BRule-INV-001 | Setiap Item Master wajib memiliki kode (SKU) yang unik dalam scope organisasi yang ditentukan. | Inventory |
+| BRule-INV-002 | Setiap transaksi stock movement wajib direferensikan ke minimal satu Warehouse dan satu unit organisasi. | Inventory |
+| BRule-INV-003 | Metode valuasi persediaan ditentukan per kombinasi Item dan Organization, serta tidak dapat diubah retroaktif tanpa proses closing/revaluasi. | Inventory |
+| BRule-INV-004 | Stock adjustment di atas ambang batas nilai tertentu wajib melalui alur persetujuan (*approval workflow*). | Inventory |
+| BRule-INV-005 | Transfer stok lintas organisasi wajib tercatat sebagai transaksi intercompany yang dapat ditelusuri. | Inventory |
+| BRule-INV-006 | Saldo stok tidak boleh bernilai negatif kecuali item dikonfigurasi secara eksplisit untuk mengizinkan backorder. | Inventory |
+
+---
+
+## 10.7 HR Rules
+
+| Business Rule ID | Description | Source Module |
+| --- | --- | --- |
+| BRule-HR-001 | Setiap karyawan memiliki satu Employee ID unik yang berlaku di seluruh entitas organisasi dalam group. | HR |
+| BRule-HR-002 | Setiap perubahan jabatan, penempatan, atau status kepegawaian wajib dicatat sebagai riwayat karir dengan tanggal efektif. | HR |
+| BRule-HR-003 | Pengajuan cuti tidak dapat melebihi saldo cuti yang tersedia sesuai kebijakan organisasi terkait. | HR |
+| BRule-HR-006 | Data karyawan berstatus non-aktif (resign/terminasi) tidak dapat dihapus permanen, hanya diarsipkan untuk kebutuhan audit. | HR |
+| BRule-PAY-001 | Perhitungan gaji hanya dapat dilakukan setelah periode kehadiran dan cuti pada periode tersebut ditutup. | Payroll |
+| BRule-PAY-002 | Payroll yang telah disetujui dan dibayarkan tidak dapat diubah; koreksi dilakukan pada periode berikutnya. | Payroll |
+| BRule-PAY-005 | Setiap payroll run wajib menghasilkan jurnal yang seimbang (*balanced*) sebelum diposting ke General Ledger. | Payroll |
+
+---
+
+## 10.8 Approval Rules
+
+| Business Rule ID | Description | Source Module |
+| --- | --- | --- |
+| BRule-WF-001 | Workflow harus dikonfigurasi tanpa perubahan source code, sejalan dengan prinsip Configuration over Customization. | Workflow Management |
+| BRule-WF-002 | Workflow aktif tidak dapat diubah secara langsung; perubahan dilakukan melalui penerbitan versi baru. | Workflow Management |
+| BRule-WF-003 | Setiap workflow memiliki minimal satu langkah awal dan satu langkah akhir yang jelas. | Workflow Management |
+| BRule-WF-004 | Jalur workflow (*routing*) dapat ditentukan berdasarkan kondisi bisnis yang dikonfigurasi (nilai transaksi, jenis dokumen, organisasi). | Workflow Management |
+| BRule-WF-005 | Approver ditentukan berdasarkan organisasi, jabatan, role, atau aturan bisnis yang dikonfigurasi, bukan hard-coded pada sistem. | Workflow Management |
+| BRule-WF-006 | Seluruh aktivitas workflow (submit, approve, reject, delegate, escalate) wajib tercatat pada Audit Trail. | Workflow Management |
+
+---
+
+## 10.9 Security Rules
+
+| Business Rule ID | Description | Source Module |
+| --- | --- | --- |
+| BRule-SEC-001 | Hak akses pengguna ditentukan oleh kombinasi Role, Permission, dan Organization Scope; scope yang lebih rendah tidak dapat melebihi hak akses scope induknya. | Security Management |
+| BRule-SEC-002 | Setiap permintaan akses ke data/fungsi harus melewati validasi otorisasi berbasis scope sebelum diproses oleh sistem. | Security Management |
+| BRule-SEC-003 | Kata sandi harus memenuhi kebijakan kompleksitas minimum dan tidak dapat menggunakan kembali kata sandi dalam riwayat yang ditentukan. | Security Management |
+| BRule-SEC-004 | Sesi pengguna yang tidak aktif melebihi batas waktu tertentu harus diakhiri secara otomatis oleh sistem. | Security Management |
+| BRule-AUD-001 | Catatan Audit Trail bersifat immutable dan tidak dapat diubah atau dihapus setelah tersimpan. | Audit Trail |
+| BRule-AUD-002 | Setiap catatan audit wajib memuat pengguna, organisasi, waktu, jenis aksi, dan modul asal. | Audit Trail |
+| BRule-AUD-004 | Log audit hanya dapat dihapus melalui kebijakan retensi resmi setelah periode retensi terlampaui. | Audit Trail |
+| BRule-AUD-006 | Kegagalan pencatatan Audit Trail pada suatu transaksi harus terdeteksi dan dieskalasi, bukan diabaikan. | Audit Trail |
+
+---
+
+## 10.10 Summary
+
+Business Rules yang dikonsolidasikan pada bab ini menegaskan bahwa seluruh perilaku sistem ERP — mulai dari struktur organisasi, keamanan akses, alur persetujuan, hingga proses keuangan, procurement, inventory, dan HR — tunduk pada aturan yang **dapat dikonfigurasi**, **berbasis scope organisasi**, dan **dapat ditelusuri (auditable)**, sesuai prinsip Configuration over Customization, Organization Tree First, Scope-Based Everything, Modular & Extensible, dan Multi-Tenant Ready.
+
+Poin penting yang perlu digarisbawahi:
+
+* **Konsistensi lintas modul.** Business Rule dari 41 dokumen modul pada BAB 9 saling terhubung melalui dependensi yang sama: Organization Scope, Effective Dating, dan Audit Trail berlaku sebagai fondasi bersama di seluruh domain.
+* **General Business Rules sebagai pelengkap.** Sepuluh General Business Rule (`BRule-GEN-001` s/d `BRule-GEN-010`) menutup celah kebijakan enterprise-wide yang sebelumnya tidak eksplisit dimiliki modul manapun, seperti konvensi penamaan, retensi data, zona waktu, pembulatan nilai, dan bahasa dokumen resmi.
+* **Bab ini adalah indeks, bukan pengganti.** Rincian lengkap setiap Business Rule — termasuk kondisi, pengecualian, dan keterkaitannya dengan Business Requirement (BR-xxx) — tetap mengacu pada dokumen modul masing-masing di BAB 9.
+* **Perubahan governance.** Penambahan atau perubahan Business Rule baru pada modul manapun wajib disinkronkan dengan kategori konsolidasi pada bab ini agar indeks tetap relevan dan tidak menyimpang dari kondisi aktual sistem.
+* **Dasar validasi implementasi.** Bab ini menjadi acuan tim solution design, developer, quality assurance, dan auditor internal/eksternal dalam memastikan bahwa konfigurasi sistem ERP telah sesuai dengan kebijakan bisnis yang disepakati pada seluruh tingkatan organisasi.

@@ -1,0 +1,114 @@
+# BAB 11. Traceability, Open Items, and Appendix
+
+## 11.1 SDD Decision Register (SDD-xxx)
+
+| ID      | Keputusan Implementasi                                             | BAB  | Terkait                     |
+| ------- | ------------------------------------------------------------------ | ---- | --------------------------- |
+| SDD-001 | Reference-first: `gl-service` = source of truth pola; `platform` disalin verbatim. | 2.1 | ADR-001                     |
+| SDD-002 | Migrasi (DBDD) = source of truth skema; `schema.sql` polos hanya untuk sqlc.       | 2.2 | DBDD                        |
+| SDD-003 | DSN layanan = role app non-owner; migrasi sebagai owner terpisah.  | 2.5  | REVIEW O1                   |
+| SDD-004 | Layout paket standar (`cmd`,`internal/{platform,<db>,repository,httpapi}`). | 3.2 | ADR-001                     |
+| SDD-005 | Config 12-factor via env; secret via manager; default aman dev.    | 3.4  | SAD 11.2                    |
+| SDD-006 | Money boundary (`pgtype.Numeric`→decimal→string), UTC, uuid override. | 3.6 | API 2.7                     |
+| SDD-010 | Handler tipis (adaptor HTTP↔domain), tanpa SQL/aturan inti.        | 4.1  | —                           |
+| SDD-011 | Base path/versi ditangani Kong, bukan kode.                        | 4.2  | ADR-003, INT-014            |
+| SDD-012 | DTO camelCase terpisah dari model DB; `organization_id` bukan dari body. | 4.3 | API 2.5/2.7                 |
+| SDD-013 | Whitelist filter/sort; query rentang wajib predikat tanggal (partition pruning). | 4.5 | DBDD                       |
+| SDD-014 | Out-of-scope → 404; pelanggaran BR → 422; stale row_version → 409.  | 4.6  | API 2.13, DBS-010           |
+| SDD-015 | `correlation_id` menembus log/trace/outbox/error.                  | 4.8  | SAD 11.6                    |
+| SDD-016 | Kontrak OpenAPI sebagai gerbang CI; breaking → bump versi Kong.    | 4.9  | INT-013/014, NFR-014        |
+| SDD-020 | Satu aggregate = satu transaksi `WithOrgScope`.                    | 5.1  | —                           |
+| SDD-021 | Katalog sqlc polos; penegakan (RLS/trigger/partisi) di DB.         | 5.2  | DBDD                        |
+| SDD-022 | Emit baris outbox di transaksi domain (tanpa dual-write).          | 5.3  | ADR-008                     |
+| SDD-023 | Jangan duplikasi aturan yang sudah dijamin DB (hindari double-guard). | 5.5 | —                           |
+| SDD-024 | Keunikan nomor dokumen ditegakkan trigger registry DB (app menyuplai nilai). | 5.6 | REVIEW M2              |
+| SDD-030 | Idempotency (`processed_event`) wajib di semua konsumen, termasuk EOS. | 6.3 | ADR-005                     |
+| SDD-031 | Envelope event lengkap = standar SDD (perluasan dari SAD).         | 6.4  | SAD 5.4/11.3                |
+| SDD-032 | `event_type` (logis) ↔ topik berversi dipetakan di relay.          | 6.6  | SAD 5.3.2                   |
+| SDD-040 | Deny-by-default: scope kosong ⇒ RLS tolak semua; tak ada jalur tanpa scope. | 7.4 | DBDD 2.8                   |
+| SDD-041 | Pool app = non-owner tanpa BYPASSRLS (RLS benar-benar aktif).      | 7.5  | REVIEW O1                   |
+| SDD-050 | Readiness (cek dependensi) ≠ Liveness (proses hidup).              | 8.2  | SAD 9.8                     |
+| SDD-051 | Metrik domain wajib: outbox lag / consumer lag / DLQ depth.        | 8.3  | ADR-010                     |
+| SDD-052 | Layanan stateless; state di operator (PG/Kafka).                   | 8.5  | SAD 8.3                     |
+| SDD-060 | Migrasi bukan tanggung jawab runtime; dijalankan sebagai owner di pipeline. | 9.2 | SAD 10.4                    |
+| SDD-061 | Generated code di-commit + `sqlc diff` gate; jangan edit manual.   | 9.3  | —                           |
+| SDD-062 | CI per layanan di-scope via `paths` (database-per-service).        | 9.5  | ADR-001                     |
+| SDD-070 | Konsumen (audit/reporting) dibangun setelah broker + produsen siap. | 10.1 | —                           |
+| SDD-071 | Reporting hanya read model CQRS; tak pernah system of record.      | 10.6 | ADR-009, CONS-014           |
+
+## 11.2 Traceability Matrix (SDD ↔ SVC ↔ API ↔ DB ↔ BR)
+
+| Layanan (SVC)               | Basis Data (DBDD)  | API Spec | Event kunci (SAD 5.4.1)                 | Aturan/Referensi kunci       |
+| --------------------------- | ------------------ | -------- | --------------------------------------- | ---------------------------- |
+| SVC-001 org                 | `org_db`           | 3.2      | `org.unit.upserted`                     | Organization Tree (scope)    |
+| SVC-002 user                | `user_db`          | 3.3      | `user.account.upserted`                 | INT-012 (IdP)                |
+| SVC-003 security            | `security_db`      | 3.4      | `security.access.denied`                | BR-031 (RBAC)                |
+| SVC-004 workflow            | `workflow_db`      | 3.5      | `workflow.approval.*`                   | SoD (maker≠approver)         |
+| SVC-005 masterdata          | `masterdata_db`    | 3.6      | `masterdata.*.upserted`                 | INT-008 (legacy ACL)         |
+| SVC-006 coa                 | `coa_db`           | 4.2      | `coa.account/posting_rule.upserted`     | SAD 11.2 (config)            |
+| SVC-007 gl *(ref)*          | `gl_db`            | 4.4      | `gl.journal.posted` (EOS)               | BR-556, DBS-010              |
+| SVC-008 ap                  | `ap_db`            | 4.5      | `ap.invoice.recorded` (EOS)             | INT-002, REVIEW M2           |
+| SVC-009 ar                  | `ar_db`            | 4.6      | `ar.invoice.issued` (EOS)               | INT-001                      |
+| SVC-010 tax                 | `tax_db`           | 4.7      | `tax.invoice.issued`                    | INT-006 (e-Faktur)           |
+| SVC-011 treasury            | `treasury_db`      | 4.8      | `treasury.payment.settled` (EOS)        | INT-005 (bank), ADR-005      |
+| SVC-012 procurement         | `procurement_db`   | 5.2      | `procurement.po.approved`, `goods.received` | INT-002 (Saga)          |
+| SVC-013 inventory           | `inventory_db`     | 5.3      | `inventory.stock.reserved`/`goods.issued` (EOS) | INT-001, ADR-005     |
+| SVC-014 manufacturing       | `manufacturing_db` | 5.5      | `manufacturing.workorder.completed`     | —                            |
+| SVC-015 sales               | `sales_db`         | 5.4      | `sales.order.confirmed`                 | INT-001 (Saga)               |
+| SVC-016 hr                  | `hr_db`            | 6.2      | `hr.employee.updated`                   | UU PDP (PII/NIK), INT-007    |
+| SVC-017 payroll             | `payroll_db`       | 6.3      | `payroll.run.completed` (EOS)           | INT-003, PII gaji            |
+| SVC-018 audit               | `audit_db`         | 3.7      | konsumen `audit.event.recorded`         | SAD 7.7 (immutable)          |
+| SVC-019 reporting           | `reporting_db`     | (read)   | konsumen lintas domain                  | ADR-009 (CQRS), NFR-003      |
+
+## 11.3 Open Items and Operational Follow-ups
+
+Item berikut bersifat **operasional/runbook** (bukan penghambat kode layanan), diselaraskan dengan open-items DBDD/REVIEW:
+
+* **O-1 Idempotency store API.** Standarkan tabel/format penyimpanan hasil `Idempotency-Key` per-DB (BAB 4.7) — sketsa ada, DDL final menyusul di DBDD bila diperlukan lintas layanan.
+* **O-2 Relay: CDC vs poller.** Pilih Debezium (CDC) sebagai default produksi vs poller per-layanan (BAB 6.3); pantau outbox lag (SDD-051).
+* **O-3 Login role per-environment.** Pembuatan role login anggota `erp_app_rw`/`erp_app_ro` + rotasi kredensial (BAB 7.5) — runbook secret manager.
+* **O-4 pg_partman/cron.** Penjadwalan `ensure_future_partitions`/`detach_old_partitions` (DBDD Step-3, `db/ops/partition_maintenance.md`).
+* **O-5 OpenAPI & Apicurio gate.** Menyalakan gerbang lint/breaking OpenAPI (BAB 4.9) dan validasi skema Avro/Protobuf (BAB 6.4) di CI tiap layanan.
+* **O-6 gRPC internal.** Definisi Protobuf untuk panggilan sinkron antar-layanan (ADR-007) bila REST-antar-layanan tak memadai.
+
+## 11.4 Appendix A — Service Scaffolding Checklist
+
+Langkah membuat layanan baru `<name>-service` untuk `<db>` (mengikuti blueprint BAB 2):
+
+1. **Skema siap di DBDD** — pastikan `db/migrations/<db>` sudah ada & terverifikasi (up/down + functional).
+2. **Buat modul** `services/<name>-service/` (module path `.../services/<name>-service`); salin `internal/platform/postgres.go` **verbatim** (SDD-001).
+3. **`sqlc`** — tulis `db/schema/schema.sql` (DDL polos) + `db/queries/*.sql` (anotasi `-- name:`); set `sqlc.yaml` (ganti `out`/`package`, override `uuid`→`google/uuid`); `sqlc generate`.
+4. **Repository** — implementasi `internal/repository` (satu aggregate = satu `WithOrgScope`, SDD-020; emit outbox di transaksi domain bila produsen, SDD-022).
+5. **API** — `internal/httpapi`: routing resource kebab-case, DTO camelCase, envelope/error/pagination bersama, middleware correlation+scope, `Idempotency-Key`/`If-Match` (BAB 4).
+6. **Wiring** — `cmd/server/main.go`: pool sebagai `erp_app_rw`, `/healthz`, `/metrics`, shutdown anggun (BAB 8).
+7. **Event** — bila produsen: relay outbox → Kafka (topik `erp.<domain>.<entity>.<event>.v1`, SDD-032); bila konsumen: dedup `processed_event` (SDD-030).
+8. **Ops** — `Makefile` (ganti `MIGRATIONS`/DSN), `.github/workflows/<name>.yml` (ganti `paths`/DB), seed & grants (BAB 9).
+9. **Security** — verifikasi RLS aktif (role non-owner), permission map di security-service, field-level encryption bila PII (BAB 7).
+10. **Verifikasi** — `migrate up → sqlc diff → build/test → migrate down` hijau; uji RLS + optimistic-lock + idempotency (pola `db/tests/`).
+
+## 11.5 Appendix B — Glossary and Legend
+
+| Istilah                | Makna                                                                 |
+| ---------------------- | --------------------------------------------------------------------- |
+| `WithOrgScope`         | Fungsi `platform` yang menyuntik `app.org_scope` (RLS) per transaksi.  |
+| `app.org_scope`        | GUC PostgreSQL berisi scope organisasi aktif (transaction-local).      |
+| `current_org_scope()`  | Fungsi DB yang dibaca policy RLS; NULL ⇒ deny-all.                     |
+| Outbox                 | Tabel teknis penampung event yang ditulis atomik dengan perubahan domain. |
+| Relay/Publisher        | Proses yang memindahkan baris outbox ke Kafka (CDC/poller).            |
+| `processed_event`      | Tabel dedup konsumen (PK `event_id`) untuk idempotency.               |
+| EOS                    | Exactly-Once Semantics (Kafka transactions) — hanya jalur finansial.  |
+| ALO                    | At-Least-Once + idempotency — jalur selain finansial.                 |
+| Expand–Contract        | Strategi migrasi zero-downtime (tambah dulu, bersihkan kemudian).      |
+| Role app / owner       | `erp_app_rw`/`erp_app_ro` (RLS aktif) vs `erp_migrator` (pemilik objek). |
+
+## 11.6 Revision History
+
+| Versi | Tanggal    | Perubahan                                                             | Penulis      |
+| ----- | ---------- | --------------------------------------------------------------------- | ------------ |
+| 0.1   | 2026-08-06 | Terbitan awal SDD Backend: BAB 1–11, blueprint dari `gl-service`, matriks SVC-001…019. | Tim Backend |
+
+## 11.7 Summary
+
+SDD ini menutup jarak antara SAD/DBDD/API Spec dan kode: satu blueprint (`gl-service`), standar lintas layanan per-layer (BAB 2–9), delta per layanan (BAB 10), serta register keputusan (SDD-xxx), matriks keterlacakan, open items operasional, dan checklist scaffolding (BAB 11). Fase berikutnya adalah **scaffolding kode baseline SVC-001…019** mengikuti checklist 11.4 — replikasi pola, isi delta domain, verifikasi RLS/outbox/CI.
+
+---

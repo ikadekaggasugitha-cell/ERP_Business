@@ -1,0 +1,128 @@
+config {
+  type: "incremental",
+  schema: dataform.projectConfig.vars.target_dataset,
+  uniqueKey: ["gl_journal_id", "line_number"],
+  tags: ["fact", "cortex_v7", "gl", "tri_currency"],
+  partitionBy: "DATE_TRUNC(posting_date, MONTH)",
+  clusterBy: ["org_id", "account_code"],
+  description: "Incremental general ledger fact table with tri-currency valuation and deduplicated dimensions"
+}
+
+WITH base_gl AS (
+  SELECT *
+  FROM ${ref("ann_gl_document")} g
+  ${when(incremental(), `WHERE g.posting_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 MONTH)`)}
+),
+
+dedup_org AS (
+  SELECT *
+  FROM ${ref("dim_organization")}
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY COALESCE(sap_company_code, org_id)
+    ORDER BY is_active DESC
+  ) = 1
+),
+
+dedup_coa AS (
+  SELECT *
+  FROM ${ref("dim_chart_of_accounts")}
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY account_code
+    ORDER BY is_active DESC
+  ) = 1
+),
+
+dedup_period AS (
+  SELECT *
+  FROM ${ref("dim_fiscal_period")}
+  WHERE is_closing_period = FALSE
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY country_code, period_start_date, period_end_date
+    ORDER BY period_number ASC
+  ) = 1
+),
+
+dedup_fx AS (
+  SELECT
+    rate_date,
+    from_currency,
+    to_currency,
+    mid_rate
+  FROM ${ref("dim_currency")}
+  WHERE rate_type IN ('M', 'SPOT', 'DEFAULT')
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY rate_date, from_currency, to_currency
+    ORDER BY mid_rate DESC
+  ) = 1
+)
+
+SELECT
+  g.gl_journal_id,
+  g.line_number,
+  g.source_system,
+  COALESCE(org.org_id, CONCAT('UNKNOWN_', g.company_code)) AS org_id,
+  coa.account_key,
+  COALESCE(coa.account_code, LTRIM(g.account_code, '0')) AS account_code,
+  fp.fiscal_period_id,
+  g.posting_date,
+  g.document_date,
+  g.entry_timestamp,
+  g.document_type,
+  g.document_status,
+  g.reference_document_number,
+  g.cost_center,
+  g.profit_center,
+  g.plant_code,
+  g.debit_credit_indicator,
+  
+  -- Transaction Currency
+  g.amount_tc,
+  g.currency_tc,
+  
+  -- Functional Currency Triplet
+  COALESCE(
+    g.amount_fc,
+    CASE
+      WHEN g.currency_tc = COALESCE(g.currency_fc, org.functional_currency) THEN g.amount_tc
+      ELSE g.amount_tc * fx_fc.mid_rate
+    END
+  ) AS amount_fc,
+  COALESCE(g.currency_fc, org.functional_currency) AS currency_fc,
+  COALESCE(
+    fx_fc.mid_rate,
+    CASE WHEN g.currency_tc = COALESCE(g.currency_fc, org.functional_currency) THEN NUMERIC '1' ELSE CAST(NULL AS NUMERIC) END
+  ) AS exchange_rate_fc,
+  
+  -- Presentation Currency Triplet (Group Presentation Currency: USD)
+  COALESCE(
+    g.amount_pc,
+    CASE
+      WHEN g.currency_tc = 'USD' THEN g.amount_tc
+      ELSE g.amount_tc * fx_pc.mid_rate
+    END
+  ) AS amount_pc,
+  COALESCE(g.currency_pc, 'USD') AS currency_pc,
+  COALESCE(
+    fx_pc.mid_rate,
+    CASE WHEN g.currency_tc = 'USD' THEN NUMERIC '1' ELSE CAST(NULL AS NUMERIC) END
+  ) AS exchange_rate_pc,
+  
+  g.source_last_updated_at
+FROM base_gl g
+LEFT JOIN dedup_org org
+  ON (g.source_system IN ('SAP_ECC', 'SAP_S4HANA') AND org.sap_company_code = g.company_code)
+  OR (g.source_system = 'NEW_ERP' AND org.org_id = g.company_code)
+LEFT JOIN dedup_coa coa
+  ON coa.raw_account_code = g.account_code
+  OR coa.account_code = LTRIM(g.account_code, '0')
+LEFT JOIN dedup_period fp
+  ON fp.country_code = COALESCE(org.country_code, 'GLOBAL')
+  AND g.posting_date BETWEEN fp.period_start_date AND fp.period_end_date
+LEFT JOIN dedup_fx fx_fc
+  ON fx_fc.rate_date = g.posting_date
+  AND fx_fc.from_currency = g.currency_tc
+  AND fx_fc.to_currency = COALESCE(g.currency_fc, org.functional_currency)
+LEFT JOIN dedup_fx fx_pc
+  ON fx_pc.rate_date = g.posting_date
+  AND fx_pc.from_currency = g.currency_tc
+  AND fx_pc.to_currency = COALESCE(g.currency_pc, 'USD')

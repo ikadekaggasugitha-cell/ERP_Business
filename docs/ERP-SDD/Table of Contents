@@ -1,0 +1,219 @@
+# Software Detailed Design (Backend) — Table of Contents
+
+Dokumen ini merupakan **Software Detailed Design (SDD) — Backend Implementation** untuk platform Enterprise Resource Planning (ERP) multi-organisasi. SDD merupakan artefak turunan teknis dari **Software Architecture Document (SAD)**, **Database Design Document (DBDD)**, dan **API Specification**. Jika SAD menjawab *"arsitektur apa"*, DBDD *"skema fisik seperti apa"*, dan API Spec *"kontrak antarmuka apa"*, maka SDD menjawab **"bagaimana setiap layanan (service) di-implementasikan dalam kode Go"** — dari layout modul, layer HTTP, repository, hingga outbox relay dan penegakan RLS.
+
+> **Konsistensi:** SDD mengikuti keputusan arsitektur ADR-001 (**microservices + database-per-service**), ADR-002 (**Hybrid Multi-Tenancy + RLS**), ADR-003 (**Kong + Apicurio**), ADR-005 (**Selective Exactly-Once via Transactional Outbox**), ADR-007 (**REST + gRPC**), dan ADR-009 (**CQRS untuk reporting**). Stack implementasi (**Go 1.23 + pgx v5 + sqlc + golang-migrate**) dan pola referensi diambil langsung dari layanan acuan `gl-service` (SVC-007). Setiap keputusan implementasi diberi identifier **SDD-xxx** dan dilacak balik ke SVC-xxx (SAD BAB 4.5), API-xxx (API Spec), tabel DBDD, dan BR-xxx (BRD BAB 9/10).
+>
+> **Cakupan:** blueprint implementasi backend untuk **Service Catalog baseline SVC-001 s.d. SVC-019** (SAD BAB 4.5). Domain lanjutan (SVC-020…029) mengikuti pola yang sama dan diimplementasikan pada fase berikut. SDD **tidak** mendefinisikan skema baru (lihat DBDD) maupun kontrak baru (lihat API Spec); ia menstandarkan *cara membangun*.
+
+---
+
+## Front Matter
+
+## Cover
+
+## Revision History
+
+## Table of Contents
+
+## Conventions and Legend
+
+---
+
+# BAB 1. Introduction
+
+### 1.1 Purpose
+
+### 1.2 Scope
+
+### 1.3 Relationship to SAD, DBDD, API Spec, and BRD
+
+### 1.4 Service Topology and Build Order
+
+### 1.5 Identifier and Notation Conventions
+
+### 1.6 How to Read This Document
+
+---
+
+# BAB 2. Reference Service Blueprint (`gl-service`)
+
+### 2.1 Overview
+
+### 2.2 Anatomy of a Service
+
+### 2.3 The Layered Architecture (Handler → Repository → sqlc → Postgres)
+
+### 2.4 The RLS Boundary (`WithOrgScope`)
+
+### 2.5 What Is Shared vs What Is Per-Service
+
+### 2.6 Summary
+
+---
+
+# BAB 3. Project Layout, Tech Stack, and Coding Conventions
+
+### 3.1 Overview
+
+### 3.2 Repository and Module Layout
+
+### 3.3 Technology Stack and Rationale
+
+### 3.4 Configuration and Environment
+
+### 3.5 Error Handling and Logging Conventions
+
+### 3.6 Money, Time, and UUID Conventions
+
+### 3.7 Summary
+
+---
+
+# BAB 4. API Layer (REST via Kong)
+
+### 4.1 Overview
+
+### 4.2 Handler Structure and Routing
+
+### 4.3 Request/Response Envelope and Serialization
+
+### 4.4 Standard Resource Operations (CRUD + Domain Actions)
+
+### 4.5 Pagination, Filtering, and Sorting
+
+### 4.6 Error Model Mapping
+
+### 4.7 Idempotency and Optimistic Locking
+
+### 4.8 Standard Headers and Correlation
+
+### 4.9 OpenAPI Generation and Contract Governance
+
+### 4.10 Summary
+
+---
+
+# BAB 5. Domain and Repository Layer
+
+### 5.1 Overview
+
+### 5.2 The Repository Pattern with sqlc
+
+### 5.3 Transactions and Atomic Aggregates
+
+### 5.4 Optimistic Locking and Soft Delete
+
+### 5.5 Business Rules Placement (BR-xxx)
+
+### 5.6 Document Number Registration and Uniqueness
+
+### 5.7 Summary
+
+---
+
+# BAB 6. Event and Outbox Layer (Kafka via Apicurio)
+
+### 6.1 Overview
+
+### 6.2 The Transactional Outbox Write Path
+
+### 6.3 The Relay/Publisher (Selective Exactly-Once)
+
+### 6.4 Event Envelope and Schema Governance
+
+### 6.5 Consumer Idempotency (`processed_event`)
+
+### 6.6 Topic Naming and Event Catalog Mapping
+
+### 6.7 Summary
+
+---
+
+# BAB 7. Security: Authentication, Authorization, and RLS Enforcement
+
+### 7.1 Overview
+
+### 7.2 Authentication (OAuth2/OIDC at Kong)
+
+### 7.3 Authorization (RBAC + Scope)
+
+### 7.4 Organization Scope Propagation (Token → `app.org_scope`)
+
+### 7.5 Database Role Model and Least Privilege
+
+### 7.6 PII Handling and Service-to-Service Auth
+
+### 7.7 Summary
+
+---
+
+# BAB 8. Observability, Configuration, and Runtime
+
+### 8.1 Overview
+
+### 8.2 Health Checks and Readiness
+
+### 8.3 Structured Logging, Tracing, and Metrics
+
+### 8.4 Graceful Startup and Shutdown
+
+### 8.5 Deployment and Runtime Topology
+
+### 8.6 Summary
+
+---
+
+# BAB 9. Build, Migration, and CI/CD Pipeline
+
+### 9.1 Overview
+
+### 9.2 The Migration Pipeline (golang-migrate, Expand–Contract)
+
+### 9.3 Code Generation Gate (sqlc diff)
+
+### 9.4 Makefile Targets and Local Workflow
+
+### 9.5 Per-Service CI Workflow
+
+### 9.6 Bootstrap Order for a Fresh Environment
+
+### 9.7 Summary
+
+---
+
+# BAB 10. Per-Service Implementation Matrix (SVC-001 … SVC-019)
+
+### 10.1 Overview and Sequencing
+
+### 10.2 Platform and Core Services (SVC-001…005, 018)
+
+### 10.3 Financial Services (SVC-006…011)
+
+### 10.4 Operational Services (SVC-012…015)
+
+### 10.5 Human Resource and Payroll Services (SVC-016…017)
+
+### 10.6 Reporting Service (SVC-019, CQRS Consumer)
+
+### 10.7 Summary
+
+---
+
+# BAB 11. Traceability, Open Items, and Appendix
+
+### 11.1 SDD Decision Register (SDD-xxx)
+
+### 11.2 Traceability Matrix (SDD ↔ SVC ↔ API ↔ DB ↔ BR)
+
+### 11.3 Open Items and Operational Follow-ups
+
+### 11.4 Appendix A — Service Scaffolding Checklist
+
+### 11.5 Appendix B — Glossary and Legend
+
+### 11.6 Revision History
+
+### 11.7 Summary
+
+---

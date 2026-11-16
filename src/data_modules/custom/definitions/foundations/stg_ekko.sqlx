@@ -1,0 +1,23 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc", "s4"],
+  description: "SAP Purchasing Document Header staging view with CDC deduplication"
+}
+
+SELECT
+  MANDT AS mandt,
+  EBELN AS po_number,
+  BUKRS AS company_code,
+  BSART AS po_type,
+  LIFNR AS vendor_number,
+  EKORG AS purchasing_org,
+  EKGRP AS purchasing_group,
+  WAERS AS currency_key,
+  BEDAT AS doc_date,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "ekko")}
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY MANDT, EBELN
+  ORDER BY recordstamp DESC
+) = 1

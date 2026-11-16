@@ -1,0 +1,175 @@
+# 9.5.11 Profit Center Requirements
+
+---
+
+# 9.5.11.1 Overview
+
+Profit Center merupakan unit pengukuran kinerja keuangan yang digunakan untuk memantau pendapatan, biaya, dan margin laba secara independen dari struktur legal entity maupun struktur organisasi operasional. Profit Center memungkinkan manajemen melakukan evaluasi profitabilitas per segmen usaha, cabang, lini produk, atau area layanan tanpa harus mengikuti batasan struktur Company, Business Unit, atau Branch.
+
+Berbeda dengan Cost Center yang berfokus pada pengendalian biaya, Profit Center berfokus pada pengukuran laba rugi (revenue dikurangi cost) pada suatu unit tanggung jawab tertentu. Satu Profit Center dapat menampung transaksi dari lebih dari satu Company atau Business Unit, dan sebaliknya satu Company dapat memiliki lebih dari satu Profit Center, sesuai dengan kebutuhan pelaporan manajemen (management reporting) grup perusahaan.
+
+Profit Center dikelola sebagai master data yang dapat dikonfigurasi secara mandiri oleh setiap organisasi, mendukung hierarki bertingkat, penetapan ke struktur organisasi berbasis scope, penandaan (tagging) pada transaksi, alokasi multi-profit-center, serta pelaporan profitabilitas yang terintegrasi dengan General Ledger dan modul keuangan lainnya.
+
+---
+
+# 9.5.11.2 Business Requirement Catalogue
+
+## BR-626 – Profit Center Master
+
+| Attribute           | Description                                                                                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-626                                                                                                                                                                              |
+| Requirement Name    | Profit Center Master                                                                                                                                                               |
+| Category            | Profit Center Master Data                                                                                                                                                          |
+| Priority            | Critical                                                                                                                                                                            |
+| Business Objective  | BO-008, BO-020                                                                                                                                                                      |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer), SH-004 (Chief Operating Officer)                                                                                                                 |
+| Description         | Sistem harus menyediakan master data Profit Center yang mencakup kode, nama, deskripsi, status, tanggal efektif, dan atribut klasifikasi lainnya, terpisah dari struktur legal entity. |
+| Business Rationale  | Manajemen memerlukan unit pengukuran profitabilitas yang fleksibel dan tidak terikat pada batasan struktur legal entity agar dapat mencerminkan cara bisnis benar-benar dikelola.   |
+| Business Value      | Memungkinkan pengukuran kinerja pendapatan dan biaya per unit bisnis secara akurat dan konsisten di seluruh organisasi.                                                            |
+| Acceptance Criteria | Administrator dapat membuat, mengubah, mengaktifkan, dan menonaktifkan Profit Center tanpa memengaruhi struktur Company, Business Unit, atau Branch yang sudah berjalan.           |
+
+---
+
+## BR-627 – Profit Center Hierarchy & Grouping
+
+| Attribute      | Description                                                                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID | BR-627                                                                                                                                                                          |
+| Requirement Name | Profit Center Hierarchy & Grouping                                                                                                                                           |
+| Priority       | Critical                                                                                                                                                                        |
+| Description    | Sistem harus mendukung hierarki Profit Center bertingkat (parent-child) tanpa batas level, sehingga Profit Center dapat dikelompokkan menjadi Profit Center Group untuk kebutuhan roll-up reporting. |
+| Acceptance Criteria | Pengguna dapat menyusun, mengubah, dan menampilkan hierarki Profit Center dalam bentuk pohon (tree), dan laporan dapat digulung (roll-up) sesuai level hierarki yang dipilih. |
+
+---
+
+## BR-628 – Profit Center Assignment to Organization Structure
+
+| Attribute      | Description                                                                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID | BR-628                                                                                                                                                                           |
+| Requirement Name | Profit Center Assignment to Organization Structure                                                                                                                           |
+| Priority       | High                                                                                                                                                                            |
+| Description    | Sistem harus memungkinkan penetapan (assignment) Profit Center ke satu atau lebih node organisasi berbasis scope, termasuk Company, Business Unit, Branch, atau Project Site, secara fleksibel melalui konfigurasi. |
+| Business Value | Memberikan keleluasaan bagi organisasi untuk memetakan Profit Center sesuai kebutuhan manajemen tanpa mengubah struktur legal entity yang berlaku.                             |
+
+---
+
+## BR-629 – Profit Center Tagging on Transactions
+
+| Attribute      | Description                                                                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID | BR-629                                                                                                                                                                           |
+| Requirement Name | Profit Center Tagging on Transactions                                                                                                                                        |
+| Priority       | Critical                                                                                                                                                                        |
+| Description    | Sistem harus mewajibkan penandaan (tagging) Profit Center pada setiap transaksi yang memengaruhi pendapatan atau biaya, baik pada modul General Ledger, Accounts Receivable, Accounts Payable, Sales, maupun Purchasing. |
+| Acceptance Criteria | Transaksi yang memengaruhi pendapatan atau biaya tidak dapat diposting tanpa Profit Center yang valid dan berstatus aktif.                                                |
+
+---
+
+## BR-630 – Multi Profit Center Allocation
+
+| Attribute      | Description                                                                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID | BR-630                                                                                                                                                                           |
+| Requirement Name | Multi Profit Center Allocation                                                                                                                                               |
+| Priority       | Medium                                                                                                                                                                          |
+| Description    | Sistem harus mendukung alokasi satu transaksi ke lebih dari satu Profit Center berdasarkan rule alokasi (persentase, driver, atau formula) yang dapat dikonfigurasi.           |
+| Business Value | Memastikan biaya dan pendapatan bersama (shared cost/revenue) dapat didistribusikan secara proporsional ke unit bisnis yang relevan.                                            |
+
+---
+
+## BR-631 – Profit Center Independent from Legal Entity Structure
+
+| Attribute      | Description                                                                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID | BR-631                                                                                                                                                                           |
+| Requirement Name | Profit Center Independent from Legal Entity Structure                                                                                                                        |
+| Priority       | High                                                                                                                                                                            |
+| Description    | Sistem harus memungkinkan satu Profit Center mencakup transaksi dari lebih dari satu Company atau legal entity, sehingga pelaporan profitabilitas dapat dilakukan lintas entitas legal. |
+| Acceptance Criteria | Profit Center yang sama dapat menerima posting transaksi dari beberapa Company berbeda dan tetap menghasilkan laporan profitabilitas yang terkonsolidasi dengan benar.     |
+
+---
+
+## BR-632 – Profit Center Profitability Statement
+
+| Attribute      | Description                                                                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID | BR-632                                                                                                                                                                           |
+| Requirement Name | Profit Center Profitability Statement                                                                                                                                        |
+| Priority       | Critical                                                                                                                                                                        |
+| Description    | Sistem harus menyediakan laporan laba rugi (Profit & Loss) per Profit Center secara real-time, termasuk perbandingan antar periode dan antar Profit Center.                    |
+| Business Value | Memberikan visibilitas kinerja profitabilitas per segmen usaha secara cepat dan akurat sebagai dasar pengambilan keputusan manajemen.                                           |
+
+---
+
+## BR-633 – Profit Center Budget Integration & Variance Analysis
+
+| Attribute      | Description                                                                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID | BR-633                                                                                                                                                                           |
+| Requirement Name | Profit Center Budget Integration & Variance Analysis                                                                                                                         |
+| Priority       | Medium                                                                                                                                                                          |
+| Description    | Sistem harus memungkinkan penetapan target/budget pendapatan dan biaya per Profit Center serta menyajikan analisis varians antara realisasi dan target secara periodik.        |
+| Acceptance Criteria | Pengguna dapat melihat perbandingan actual vs budget per Profit Center beserta persentase varians pada dashboard maupun laporan cetak.                                     |
+
+---
+
+## BR-634 – Profit Center Change History & Audit Trail
+
+| Attribute      | Description                                                                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID | BR-634                                                                                                                                                                           |
+| Requirement Name | Profit Center Change History & Audit Trail                                                                                                                                   |
+| Priority       | High                                                                                                                                                                            |
+| Description    | Sistem harus mencatat seluruh perubahan atribut, hierarki, dan status Profit Center dalam audit trail yang mencakup waktu, pengguna, nilai sebelum dan sesudah perubahan.       |
+| Business Value | Menjamin transparansi dan akuntabilitas pengelolaan Profit Center serta mendukung kebutuhan audit internal maupun eksternal.                                                    |
+
+---
+
+## BR-635 – Profit Center Status Lifecycle
+
+| Attribute      | Description                                                                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID | BR-635                                                                                                                                                                           |
+| Requirement Name | Profit Center Status Lifecycle                                                                                                                                               |
+| Priority       | Medium                                                                                                                                                                          |
+| Description    | Sistem harus mendukung siklus status Profit Center (Draft, Active, Inactive, Closed) beserta tanggal efektif, dengan pembatasan penggunaan pada transaksi sesuai status yang berlaku. |
+| Acceptance Criteria | Profit Center berstatus Inactive atau Closed tidak dapat dipilih pada transaksi baru namun tetap dapat ditelusuri pada laporan historis.                                    |
+
+---
+
+# 9.5.11.3 Profit Center Business Rules
+
+| Business Rule ID | Description                                                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-PC-001      | Setiap Profit Center wajib memiliki kode unik dalam lingkup organisasi dan tidak dapat diduplikasi dalam satu Financial Organization.    |
+| BRule-PC-002      | Profit Center bersifat independen dari struktur legal entity dan dapat mencakup lebih dari satu Company atau Business Unit.             |
+| BRule-PC-003      | Setiap transaksi keuangan yang memengaruhi pendapatan atau biaya wajib memiliki tag Profit Center yang valid dan berstatus aktif.        |
+| BRule-PC-004      | Alokasi transaksi ke lebih dari satu Profit Center hanya diperbolehkan melalui rule alokasi yang telah dikonfigurasi dan totalnya harus mencapai 100%. |
+| BRule-PC-005      | Profit Center berstatus Inactive atau Closed tidak dapat digunakan untuk transaksi baru namun tetap tersimpan untuk kebutuhan pelaporan historis. |
+| BRule-PC-006      | Perubahan hierarki atau parent Profit Center tidak boleh menimbulkan circular reference dan hanya berlaku efektif sejak tanggal efektif yang ditentukan. |
+| BRule-PC-007      | Setiap perubahan atribut, hierarki, atau status Profit Center wajib dicatat dalam audit trail secara lengkap.                            |
+
+---
+
+# 9.5.11.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder     | Future Process                                  |
+| -------------- | ------------------- | --------------- | ------------------------------------------------ |
+| BR-626         | BO-008, BO-020      | SH-003, SH-004  | Profit Center Administration                     |
+| BR-627         | BO-008, BO-020      | SH-003          | Profit Center Hierarchy Management                |
+| BR-628         | BO-008              | SH-004          | Organization-Profit Center Mapping                |
+| BR-629         | BO-008              | SH-003, SH-004  | Transaction Profit Center Tagging                 |
+| BR-630         | BO-008              | SH-003          | Profit Center Allocation Engine                   |
+| BR-631         | BO-020              | SH-003, SH-004  | Cross-Entity Profit Center Consolidation          |
+| BR-632         | BO-008, BO-020      | SH-003          | Profit Center Profitability Reporting             |
+| BR-633         | BO-008              | SH-003, SH-004  | Profit Center Budgeting & Variance Analysis        |
+| BR-634         | BO-008              | SH-003          | Profit Center Audit & Change Management            |
+| BR-635         | BO-008              | SH-004          | Profit Center Lifecycle Management                 |
+
+---
+
+# 9.5.11.5 Summary
+
+Profit Center Requirements menjadi fondasi bagi pengukuran kinerja profitabilitas yang independen dari struktur legal entity maupun struktur organisasi operasional. Melalui master data, hierarki, penetapan berbasis scope, penandaan transaksi, alokasi multi-profit-center, hingga pelaporan profitabilitas dan integrasi anggaran, sistem memberikan visibilitas kinerja per segmen usaha, cabang, atau lini produk secara real-time dan akurat. Seluruh requirement pada bagian ini akan menjadi dasar bagi desain lanjutan pada dokumen berikutnya, termasuk integrasi dengan General Ledger, Cost Center, Budget Management, dan Financial Consolidation.

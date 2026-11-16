@@ -1,0 +1,32 @@
+config {
+  type: "assertion",
+  tags: ["assert", "tri_currency", "cortex_v7"],
+  description: "Asserts completeness of tri-currency triplet fields across fact tables"
+}
+
+SELECT
+  'fact_gl_transaction' AS fact_table,
+  gl_journal_id AS record_id
+FROM ${ref("fact_gl_transaction")}
+WHERE amount_tc IS NULL OR currency_tc IS NULL
+   OR amount_fc IS NULL OR currency_fc IS NULL
+   OR amount_pc IS NULL OR currency_pc IS NULL
+
+UNION ALL
+
+SELECT
+  'fact_sales_order' AS fact_table,
+  order_id AS record_id
+FROM ${ref("fact_sales_order")}
+WHERE net_amount_tc IS NULL OR currency_tc IS NULL
+   OR net_amount_fc IS NULL OR currency_fc IS NULL
+   OR net_amount_pc IS NULL OR currency_pc IS NULL
+
+UNION ALL
+
+SELECT
+  'fact_inventory_snapshot' AS fact_table,
+  CONCAT(material_id, '|', warehouse_id) AS record_id
+FROM ${ref("fact_inventory_snapshot")}
+WHERE total_value_fc IS NULL OR currency_fc IS NULL
+   OR total_value_pc IS NULL OR currency_pc IS NULL

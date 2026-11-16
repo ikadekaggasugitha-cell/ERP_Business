@@ -1,0 +1,43 @@
+displayName: Holding Financial & Operational Consolidation
+description: Custom Cortex Framework V7 Data Products for holding-level tri-currency reporting and dual SAP (ECC 6.0 / S/4HANA) + Go Microservices CDC coexistence.
+namespace: custom
+category: consumption_product
+type: holding_consolidation
+dependencies:
+  sapModule:
+    modulePath: custom.erp.foundations.sap
+    supportedVersions:
+      - ecc
+      - s4
+    tables:
+      common:
+        - BKPF
+        - DD02L
+        - DD03L
+        - DD08L
+        - EKKO
+        - EKPO
+        - MAKT
+        - MARA
+        - MARC
+        - MARD
+        - MATDOC
+        - MBEW
+        - SKA1
+        - SKAT
+        - T001
+        - T009B
+        - TCURR
+        - TCURX
+        - TVKO
+        - VBAK
+        - VBAP
+      ecc:
+        - BSEG
+      s4:
+        - ACDOCA
+builder: dataform_sqlx
+references:
+  - ADR-013 (Cortex Data Products & SAP DDIC Coexistence)
+  - ADR-014 (Tri-Currency & Multi-Country Accounting Engine)
+  - ADR-015 (Composite Partitioning & High-Throughput Scaling)

@@ -1,0 +1,186 @@
+# BAB 12. Quality Attribute Scenarios
+
+## 12.1 Overview
+
+Bab ini menerjemahkan Non-Functional Requirements (NFR) menjadi **Quality Attribute Scenario (QAS)** yang konkret dan terukur, sehingga arsitektur dapat diuji dan divalidasi secara objektif (menjadi dasar *Test Architecture* dan *architecture evaluation* seperti ATAM). Setiap skenario menggunakan format baku:
+
+| Elemen              | Makna                                                        |
+| ------------------- | ------------------------------------------------------------ |
+| Source              | Pemicu (pengguna, sistem, kejadian).                         |
+| Stimulus            | Kondisi/aksi yang datang.                                    |
+| Environment         | Keadaan sistem saat stimulus terjadi.                        |
+| Artifact            | Komponen yang terdampak.                                     |
+| Response            | Perilaku sistem yang diharapkan.                             |
+| Response Measure    | Ukuran keberhasilan (terkuantifikasi).                       |
+
+Skenario diberi identifier **QAS-xxx** dan ditautkan ke NFR serta keputusan arsitektur (ADR/ARC) pada §12.9.
+
+---
+
+## 12.2 Performance
+
+**QAS-001 — API Response Time saat beban normal**
+- Source/Stimulus: pengguna mengirim *query* transaksional.
+- Environment: beban operasional normal, data historis besar (lintas organisasi).
+- Artifact: layanan Go + PostgreSQL + Kong.
+- Response: sistem memproses & merespons.
+- Measure: **P95 < 2 detik; P99 < 5 detik** (NFR-001).
+
+**QAS-002 — Throughput transaksi tulis puncak**
+- Stimulus: lonjakan transaksi tulis paralel dari beberapa organisasi.
+- Environment: *peak load* pada skala referensi.
+- Response: sistem memproses tanpa degradasi signifikan (Kafka menyangga, Go menskala).
+- Measure: **≥ 500 transaksi tulis/detik; degradasi < 10%** (NFR-002).
+
+**QAS-003 — Dashboard rendering**
+- Stimulus: eksekutif membuka dashboard agregasi lintas organisasi.
+- Environment: read model CQRS aktif.
+- Response: React 19 SPA + read model CQRS menyajikan data.
+- Measure: **render awal < 3 detik; refresh < 1,5 detik (90% permintaan)** (NFR-003).
+
+---
+
+## 12.3 Availability
+
+**QAS-004 — Kegagalan satu instans layanan**
+- Stimulus: sebuah *pod* layanan gagal.
+- Environment: produksi, multi-replica.
+- Response: Kubernetes *self-healing* + trafik dialihkan ke replika sehat.
+- Measure: **tanpa gangguan layanan; failover otomatis < 60 detik** (NFR-004/005).
+
+**QAS-005 — Kegagalan node basis data primary**
+- Stimulus: PostgreSQL primary tidak responsif.
+- Environment: konfigurasi HA primary–standby.
+- Response: *automatic failover* ke standby.
+- Measure: **failover < 60 detik; tanpa kehilangan data ter-commit** (NFR-005).
+
+---
+
+## 12.4 Scalability
+
+**QAS-006 — Penambahan beban tanpa downtime**
+- Stimulus: kenaikan trafik 3×.
+- Environment: HPA aktif.
+- Response: penambahan instans Go otomatis; penambahan partisi Kafka bila perlu.
+- Measure: **throughput naik ~linear (efisiensi ≥ 80%); tanpa downtime** (NFR-010).
+
+**QAS-007 — Pertumbuhan organisasi & data historis**
+- Stimulus: jumlah unit organisasi & volume data tumbuh hingga 10× baseline.
+- Environment: partisi PostgreSQL & Kafka aktif.
+- Response: sistem mempertahankan target kinerja tanpa perubahan *source code*.
+- Measure: **degradasi response time < 15%; penambahan organisasi tanpa downtime** (NFR-011).
+
+**QAS-008 — Isolasi beban multi-tenant**
+- Stimulus: satu tenant menghasilkan beban ekstrem (*noisy neighbor*).
+- Environment: resource quota per tenant aktif.
+- Response: beban tenant terisolasi.
+- Measure: **deviasi response time tenant lain < 10%** (NFR-012).
+
+---
+
+## 12.5 Security
+
+**QAS-009 — Akses tanpa token valid**
+- Stimulus: permintaan API tanpa/invalid token.
+- Environment: Kong dengan OAuth2/OIDC.
+- Response: permintaan ditolak di gateway.
+- Measure: **100% request tanpa token valid ditolak** (INT-015, NFR-016).
+
+**QAS-010 — Akses lintas scope organisasi**
+- Stimulus: pengguna mencoba mengakses data di luar scope organisasinya.
+- Environment: RBAC + scope + RLS aktif.
+- Response: akses ditolak berlapis (service + RLS).
+- Measure: **0 kebocoran data lintas scope** (BR-031, NFR-016).
+
+**QAS-011 — Respons kerentanan kritikal**
+- Stimulus: kerentanan kritikal teridentifikasi.
+- Environment: proses SDLC & monitoring aktif.
+- Response: patch/mitigasi diterapkan.
+- Measure: **kritikal < 24 jam; tinggi < 7 hari** (NFR-016).
+
+---
+
+## 12.6 Reliability and Consistency
+
+**QAS-012 — Konsistensi transaksi finansial lintas modul**
+- Stimulus: Sales Order dikonfirmasi memicu alur Sales→Inventory→AR→GL (INT-001).
+- Environment: Saga + Outbox + EOS pada langkah finansial.
+- Response: seluruh langkah konsisten; kegagalan memicu *compensating action*.
+- Measure: **0 ketidaksesuaian saldo GL akibat kegagalan; 100% transaksi finansial inti memenuhi EOS** (NFR-008, ADR-005).
+
+**QAS-013 — Pemulihan dari kegagalan transien**
+- Stimulus: koneksi DB/eksternal terputus sementara.
+- Environment: retry + circuit breaker + DLQ aktif.
+- Response: retry otomatis; event gagal ke DLQ; tanpa kehilangan data.
+- Measure: **maksimum 3 retry; zero data loss pada kegagalan tertangani** (NFR-009).
+
+---
+
+## 12.7 Recoverability
+
+**QAS-014 — Pemulihan bencana pusat data**
+- Stimulus: pusat data utama tidak dapat diakses.
+- Environment: DR site geo-redundant + MirrorMaker.
+- Response: aktivasi DR site.
+- Measure: **RTO ≤ 4 jam; RPO ≤ 15 menit** (NFR-028).
+
+**QAS-015 — Pemulihan dari backup**
+- Stimulus: kebutuhan *restore* data.
+- Environment: WAL archiving + PITR.
+- Response: *restore* ke titik waktu tertentu.
+- Measure: **restore test triwulanan sukses 100%** (NFR-029).
+
+---
+
+## 12.8 Modifiability
+
+**QAS-016 — Deploy modul independen**
+- Stimulus: perubahan pada satu modul dirilis.
+- Environment: pipeline per layanan + database-per-service.
+- Response: modul di-*deploy*/*rollback* tanpa menghentikan modul lain.
+- Measure: **≥ 90% modul deploy independen; rollback < 15 menit** (NFR-013).
+
+**QAS-017 — Evolusi API/skema tanpa breaking change**
+- Stimulus: penambahan field pada API/event.
+- Environment: versioning Kong + kompatibilitas Apicurio.
+- Response: konsumen lama tetap berfungsi.
+- Measure: **0 breaking change pada konsumen aktif; versi mayor didukung ≥ 12 bulan** (NFR-014).
+
+**QAS-018 — Aktivasi bahasa baru**
+- Stimulus: penambahan bahasa UI baru.
+- Environment: React i18n + tabel terjemahan.
+- Response: aktivasi via konfigurasi.
+- Measure: **tanpa downtime; implementasi < 1 hari kerja setelah terjemahan tersedia** (NFR-024).
+
+---
+
+## 12.9 Traceability (QAS ↔ NFR ↔ ADR/ARC)
+
+| QAS ID  | Atribut          | NFR              | ADR / ARC              |
+| ------- | ---------------- | ---------------- | ----------------------- |
+| QAS-001 | Performance      | NFR-001          | ADR-006, ARC-007        |
+| QAS-002 | Performance      | NFR-002          | ADR-005, ARC-002        |
+| QAS-003 | Performance      | NFR-003          | ADR-009, ARC-007        |
+| QAS-004 | Availability     | NFR-004/005      | ADR-004, ARC-003        |
+| QAS-005 | Availability     | NFR-005          | ADR-004, ARC-003        |
+| QAS-006 | Scalability      | NFR-010          | ADR-001, ARC-002        |
+| QAS-007 | Scalability      | NFR-011          | ADR-001, ARC-002        |
+| QAS-008 | Scalability      | NFR-012          | ADR-002, ARC-004        |
+| QAS-009 | Security         | NFR-016, INT-015 | ADR-003, ARC-008        |
+| QAS-010 | Security         | NFR-016, BR-031  | ADR-002, ARC-008        |
+| QAS-011 | Security         | NFR-016          | ARC-008                 |
+| QAS-012 | Consistency      | NFR-008          | ADR-005, ADR-008, ARC-001 |
+| QAS-013 | Reliability      | NFR-009          | ADR-008, ARC-006        |
+| QAS-014 | Recoverability   | NFR-028/030      | ADR-004, ARC-011        |
+| QAS-015 | Recoverability   | NFR-029          | ARC-011                 |
+| QAS-016 | Modifiability    | NFR-013          | ADR-001, ARC-005        |
+| QAS-017 | Modifiability    | NFR-014          | ADR-003/007, ARC-009    |
+| QAS-018 | Modifiability    | NFR-024          | ARC-012                 |
+
+---
+
+## 12.10 Summary
+
+Bab ini menetapkan **18 Quality Attribute Scenario (QAS-001 s.d. QAS-018)** yang menerjemahkan NFR menjadi skenario terukur lintas atribut: Performance, Availability, Scalability, Security, Reliability/Consistency, Recoverability, dan Modifiability. Setiap skenario memiliki *response measure* kuantitatif dan tertaut ke NFR serta keputusan arsitektur (ADR/ARC), menyediakan dasar objektif untuk pengujian non-fungsional (*performance/load/security testing*, *DR drill*) dan evaluasi arsitektur sebelum *go-live*.
+
+---

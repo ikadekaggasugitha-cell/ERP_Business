@@ -1,0 +1,132 @@
+# BAB 2. Architectural Drivers
+
+## 2.1 Overview
+
+*Architectural drivers* adalah faktor-faktor yang paling menentukan bentuk arsitektur sistem. Bab ini mengonsolidasikan pendorong tersebut dari BRD ke dalam satu himpunan terstruktur yang menjadi dasar seluruh keputusan arsitektur (BAB 3) dan struktur sistem (BAB 4–5). Empat kategori pendorong dipertimbangkan:
+
+1. **Architecturally Significant Requirements (ASR)** — kebutuhan non-fungsional yang berdampak besar pada arsitektur (§2.2).
+2. **Business Drivers** — tujuan bisnis yang membentuk kapabilitas sistem (§2.3).
+3. **Constraints & Assumptions** — batasan dan asumsi yang membingkai ruang solusi (§2.4).
+4. **Architectural Principles** — prinsip panduan lintas sistem (§2.5).
+
+Setiap pendorong diprioritaskan (§2.6) dan ditautkan ke keputusan arsitektur (§2.7) untuk menjamin bahwa setiap keputusan memiliki justifikasi yang terlacak.
+
+---
+
+## 2.2 Architecturally Significant Requirements (ASR)
+
+ASR diturunkan dari NFR pada **BRD BAB 12** dengan menyeleksi kebutuhan yang: (a) berprioritas *Critical/High*, (b) sulit diubah setelah arsitektur ditetapkan, atau (c) memengaruhi banyak komponen. Setiap ASR diberi identifier **ARC-xxx**.
+
+| ARC ID  | Architectural Driver (ASR)                          | Sumber NFR         | Implikasi Arsitektur Utama                                                        |
+| ------- | ---------------------------------------------------- | ------------------ | --------------------------------------------------------------------------------- |
+| ARC-001 | Integritas & konsistensi data lintas modul           | NFR-007, NFR-008   | PostgreSQL ACID per layanan + Saga/Outbox + Selective Exactly-Once (ADR-005).     |
+| ARC-002 | Skalabilitas horizontal tanpa perubahan source code  | NFR-010, NFR-011   | Layanan Go *stateless* + Kubernetes HPA + partisi Kafka + partisi PostgreSQL.     |
+| ARC-003 | Ketersediaan tinggi (SLA ≥ 99,5%) & redundansi        | NFR-004, NFR-005   | Multi-replica K8s, PostgreSQL HA, Kafka RF≥3, tanpa *single point of failure*.    |
+| ARC-004 | Isolasi beban & data multi-tenant                    | NFR-012            | Hybrid Multi-Tenancy (ADR-002) + RLS + resource quota + Kafka client quota.       |
+| ARC-005 | *Independent deployment* per modul                   | NFR-013            | Microservices + database-per-service (ADR-001) + CI/CD per layanan.               |
+| ARC-006 | Ketahanan terhadap kegagalan sementara               | NFR-009            | Event-driven (Kafka) + retry/DLQ + circuit breaker + idempotensi.                 |
+| ARC-007 | Kinerja responsif (P95 < 2 dtk; dashboard < 3 dtk)   | NFR-001, NFR-003   | Go latensi rendah, caching, read replica, CQRS read model, React 19 SPA.          |
+| ARC-008 | Keamanan sistemik & kepatuhan                        | NFR-016–021        | OAuth2/OIDC di Kong, enkripsi in-transit/at-rest, audit stream, RLS.              |
+| ARC-009 | *API & schema versioning* tanpa *breaking change*    | NFR-014            | Versioning di Kong + Apicurio (kompatibilitas backward/forward).                  |
+| ARC-010 | Evolvability & maintainability jangka panjang        | NFR-013, NFR-015   | Clean/Hexagonal architecture, kontrak eksplisit, dokumentasi terkelola.           |
+| ARC-011 | Pemulihan bencana (RTO ≤ 4 jam, RPO ≤ 15 mnt)        | NFR-028–030        | PITR/WAL archiving geo-redundant, Kafka MirrorMaker, failover terorkestrasi.      |
+| ARC-012 | Lokalisasi & aksesibilitas                           | NFR-022–027        | React i18n, tabel locale PostgreSQL, komponen WCAG 2.1 AA.                         |
+
+---
+
+## 2.3 Business Drivers
+
+Pendorong bisnis utama yang membentuk arsitektur, diturunkan dari **BRD BAB 4 Business Objectives**:
+
+| Business Driver (BO)                                        | Konsekuensi Arsitektur                                                       |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| BO-001 Platform ERP terintegrasi seluruh entitas            | Satu platform, integrasi otomatis antar-modul via event & API.              |
+| BO-002 Struktur organisasi bertingkat tanpa batas           | Organization Tree sebagai fondasi horizontal, konfigurasi bukan kode.       |
+| BO-004 Single Source of Truth                               | PostgreSQL sebagai *system of record* (CONS-014); GL sebagai muara data.    |
+| BO-005 Ekspansi organisasi tanpa perubahan source code      | Konfigurasi *scope-based*; partisi & tenancy berbasis data.                 |
+| BO-006 Arsitektur modular Cloud Ready                       | Microservices + kontainerisasi + independent deployment.                    |
+| BO-024/025 Modular & API sebagai mekanisme integrasi utama  | API First; kontrak REST/gRPC eksplisit; event-driven.                       |
+| BO-028 Keamanan, audit trail, integritas data by design     | Keamanan sistemik; audit stream; RLS; enkripsi.                             |
+
+---
+
+## 2.4 Constraints and Assumptions
+
+Batasan dan asumsi berikut (dari **BRD BAB 17–18**) membingkai ruang solusi arsitektur dan bersifat mengikat:
+
+| Kategori    | Identifier | Ringkasan                                                                | Dampak pada Arsitektur                                    |
+| ----------- | ---------- | ------------------------------------------------------------------------ | --------------------------------------------------------- |
+| Constraint  | CONS-005   | Kapasitas infrastruktur mengikuti kontrak/lisensi                        | Kapasitas terukur; self-managed (ADR-004) untuk kendali.  |
+| Constraint  | CONS-006   | Koeksistensi dengan sistem legacy selama transisi                        | Integrasi legacy (INT-008), anti-corruption layer.        |
+| Constraint  | CONS-013   | Wajib tumpukan teknologi standar (Go, React 19, Kafka, PostgreSQL)      | Menetapkan ADR-006; substitusi inti butuh CR.             |
+| Constraint  | CONS-014   | PostgreSQL satu-satunya *system of record*; Kafka bukan sumber kebenaran | Data durabel di PostgreSQL; Kafka retensi terbatas.       |
+| Constraint  | CONS-010/011/012 | Kepatuhan PSAK/IFRS, perpajakan, UU PDP                            | Keamanan data, audit, integrasi e-Faktur (INT-006).       |
+| Assumption  | ASM-004    | Infrastruktur cloud/on-premise tersedia sesuai kebutuhan                 | Prasyarat topologi deployment.                            |
+| Assumption  | ASM-005    | API pihak ketiga stabil & terdokumentasi                                 | Pola integrasi eksternal dengan resiliency.               |
+| Assumption  | ASM-013    | Tim kompeten pada Go/React/Kafka/PostgreSQL                              | Mitigasi RISK-015; standar & reference architecture.      |
+| Assumption  | ASM-014    | Infrastruktur HA self-managed & Platform Team tersedia                   | Prasyarat ADR-004 (self-managed).                         |
+
+---
+
+## 2.5 Architectural Principles
+
+Prinsip berikut (ditetapkan pada **BRD BAB 3 Business Vision**) berlaku lintas seluruh keputusan dan komponen SAD:
+
+| Prinsip                          | Penerapan Arsitektural                                                                 |
+| -------------------------------- | -------------------------------------------------------------------------------------- |
+| Configuration over Customization | Perilaku sistem dikendalikan konfigurasi (di PostgreSQL), bukan perubahan kode.        |
+| Organization Tree First          | `organization_id` & *scope* dipropagasikan ke setiap request, event, dan query.        |
+| Scope-Based Everything           | Otorisasi berbasis scope pada gateway, service, dan RLS basis data.                    |
+| Cloud Ready                      | Kontainerisasi, *stateless service*, *horizontal scaling* (Kubernetes).                |
+| API First                        | Kapabilitas tersedia sebagai API/kontrak sebelum UI; event sebagai kontrak antar-modul.|
+| Multi-Tenant Ready               | Hybrid Multi-Tenancy dengan isolasi beban dan data (ADR-002).                          |
+| Loose Coupling / Event-Driven    | Komunikasi asinkron via Kafka; ketiadaan ketergantungan langsung antar basis data.     |
+
+---
+
+## 2.6 Quality Attribute Priorities (Utility Tree)
+
+Prioritas atribut kualitas menetapkan *trade-off* ketika terjadi konflik antar-driver. Skala prioritas mengikuti prioritas NFR pada BRD (Critical > High > Medium).
+
+| Atribut Kualitas   | Prioritas | Driver Utama            | Trade-off yang Diterima                                              |
+| ------------------ | --------- | ----------------------- | -------------------------------------------------------------------- |
+| Integrity/Consistency | Critical | ARC-001                | EOS pada proses finansial menerima *throughput* lebih rendah.        |
+| Availability       | Critical  | ARC-003                 | Redundansi menambah biaya infrastruktur & kompleksitas operasional.  |
+| Scalability        | Critical  | ARC-002, ARC-004        | Microservices menambah kompleksitas terdistribusi (RISK-013/014).    |
+| Security/Compliance | Critical | ARC-008                 | Kontrol berlapis menambah *latency* minor pada jalur permintaan.     |
+| Performance        | High      | ARC-007                 | *Eventual consistency* pada read model demi kecepatan dashboard.     |
+| Resilience         | High      | ARC-006                 | Idempotensi & retry menambah kompleksitas konsumen.                  |
+| Maintainability    | High      | ARC-005, ARC-010        | Batas layanan yang ketat menambah *boilerplate* kontrak.            |
+| Recoverability     | Critical  | ARC-011                 | DR geo-redundant menambah biaya penyimpanan & replikasi.            |
+| Usability/Accessibility | Medium | ARC-012                | Kepatuhan WCAG menambah *effort* pengembangan frontend.             |
+
+**Prinsip trade-off utama:** ketika **konsistensi finansial** berbenturan dengan **performa/throughput**, konsistensi menang pada domain finansial inti (ADR-005 — EOS untuk GL/Journal/Payment/Inventory Reservation); pada domain lain, *availability* dan *performance* diprioritaskan melalui *eventual consistency* dan idempotensi.
+
+---
+
+## 2.7 Driver-to-Decision Traceability
+
+Tabel berikut memastikan setiap keputusan arsitektur (BAB 3) menjawab pendorong yang teridentifikasi, dan sebaliknya setiap pendorong signifikan tertangani oleh minimal satu keputusan.
+
+| Driver (ARC / BO / CONS)             | Keputusan Arsitektur Terkait          |
+| ------------------------------------ | -------------------------------------- |
+| ARC-001 (integritas/konsistensi)     | ADR-001, ADR-005, ADR-008              |
+| ARC-002 (skalabilitas horizontal)    | ADR-001, ADR-006                       |
+| ARC-003 (ketersediaan/redundansi)    | ADR-004, ADR-006                       |
+| ARC-004 (isolasi multi-tenant)       | ADR-002                                |
+| ARC-005 (independent deployment)     | ADR-001, ADR-010                       |
+| ARC-006 (resiliency)                 | ADR-005, ADR-008                       |
+| ARC-007 (performa/dashboard)         | ADR-006, ADR-009                       |
+| ARC-008 (keamanan/kepatuhan)         | ADR-003, ADR-004                       |
+| ARC-009 (API/schema versioning)      | ADR-003, ADR-007                       |
+| ARC-010 (maintainability)            | ADR-001, ADR-007, ADR-010              |
+| BO-024/025 (modular/API First)       | ADR-001, ADR-006, ADR-007              |
+| CONS-013/014 (stack & system of record) | ADR-006, ADR-004                    |
+
+---
+
+## 2.8 Summary
+
+Bab ini menetapkan **12 Architecturally Significant Requirements (ARC-001 s.d. ARC-012)** yang diturunkan dari NFR BRD, dilengkapi pendorong bisnis, batasan, asumsi, dan prinsip arsitektur. Prioritas atribut kualitas menetapkan aturan *trade-off* yang jelas — mengutamakan konsistensi pada domain finansial inti dan availability/performance pada domain lain. Seluruh pendorong ditautkan ke keputusan arsitektur pada BAB 3, memastikan setiap keputusan memiliki justifikasi yang terlacak dari kebutuhan bisnis dan non-fungsional.
+
+---

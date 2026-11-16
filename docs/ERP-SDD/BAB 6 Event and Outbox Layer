@@ -1,0 +1,120 @@
+# BAB 6. Event and Outbox Layer (Kafka via Apicurio)
+
+## 6.1 Overview
+
+Komunikasi asinkron antar-layanan memakai **Apache Kafka** (ADR-004/006) dengan pola **Transactional Outbox** (ADR-008) dan pengiriman **Selective Exactly-Once** (ADR-005). Prinsipnya: perubahan domain dan niat mempublikasi event ditulis **atomik** ke PostgreSQL; sebuah **relay** memindahkan baris `outbox` ke Kafka; konsumen **idempotent** memproses event dengan dedup. PostgreSQL tetap *system of record* — Kafka **bukan** sumber kebenaran (CONS-014).
+
+Layanan berperan sebagai **produsen** (menulis outbox) dan/atau **konsumen** (memproses topik hulu). Kolom "Outbox ✔" pada BAB 1.4 menandai produsen event finansial EOS.
+
+## 6.2 The Transactional Outbox Write Path
+
+Baris `outbox` ditulis **dalam transaksi domain yang sama** (BAB 5.3, SDD-022). Skema tabel `outbox` (DBDD, `gl_db`) — kolom yang menjadi sumber envelope Kafka:
+
+| Kolom            | Tipe          | Peran envelope                                   |
+| ---------------- | ------------- | ------------------------------------------------ |
+| `id`             | `uuid`        | `event_id` (identitas event; kunci dedup hilir). |
+| `aggregate_type` | `varchar(100)`| tipe aggregate (mis. `JournalEntry`).            |
+| `aggregate_id`   | `uuid`        | id aggregate → **partition key** Kafka.          |
+| `event_type`     | `varchar(150)`| tipe event (mis. `gl.journal.posted`).           |
+| `payload`        | `jsonb`       | badan event domain (camelCase, sesuai skema Apicurio). |
+| `created_at`     | `timestamptz` | `occurred_at` (waktu terjadi, UTC).              |
+| `correlation_id` | `uuid`        | korelasi lintas layanan (BAB 4.8).               |
+| `published_at`   | `timestamptz` | NULL = belum dipublikasi (indeks parsial relay). |
+
+Tabel di-partisi RANGE per `created_at` (DBDD Step-3) dan **tidak ber-RLS** (tabel teknis; grant hanya di parent). Karena ditulis dalam transaksi domain, **tidak ada dual-write**: commit gagal ⇒ tak ada event; commit sukses ⇒ event pasti terekam.
+
+## 6.3 The Relay/Publisher (Selective Exactly-Once)
+
+Relay memindai baris belum-terpublikasi memakai indeks parsial `idx_outbox_unpublished (created_at) WHERE published_at IS NULL`, mempublikasi ke Kafka, lalu menandai terkirim. Karena outbox tak ber-RLS, relay berjalan **di luar** `WithOrgScope` sebagai *system relay* (BAB 2.4). Query dari `gl-service`:
+
+```sql
+-- name: DrainOutbox :many        -- poll relay (indeks parsial idx_outbox_unpublished)
+SELECT id, aggregate_type, aggregate_id, event_type, payload, created_at
+FROM gl.outbox WHERE published_at IS NULL ORDER BY created_at LIMIT $1;
+
+-- name: MarkOutboxPublished :exec
+UPDATE gl.outbox SET published_at = now() WHERE id = $1 AND created_at = $2;
+```
+
+```go
+// Relay: poll → publish → mark, tanpa org scope (tabel teknis).
+func (r *JournalRepository) DrainOutbox(ctx context.Context, limit int32) ([]gldb.DrainOutboxRow, error) {
+    return r.q.DrainOutbox(ctx, limit)
+}
+func (r *JournalRepository) MarkOutboxPublished(ctx context.Context, arg gldb.MarkOutboxPublishedParams) error {
+    return r.q.MarkOutboxPublished(ctx, arg)
+}
+```
+
+Dua strategi transport (ADR-008): **CDC** (mis. Debezium membaca WAL) sebagai preferensi produksi, atau **poller** (seperti di atas) sebagai *fallback* per-layanan bila CDC belum tersedia. Lag `outbox → Kafka` dipantau sebagai metrik (ADR-010, BAB 8.3).
+
+**Selective Exactly-Once (ADR-005)** — dua model berdampingan:
+
+| Model                       | Untuk                                                | Konfigurasi Kafka                                                        |
+| --------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
+| **Exactly-Once (EOS)**      | Finansial absolut: GL/Journal Posting, Payment, Inventory Reservation | producer `transactional.id` + `acks=all`; consumer `isolation.level=read_committed`; commit offset transaksional; gagal → rollback + retry terkontrol. |
+| **At-Least-Once + idempotency** | Reporting, Dashboard, Notification, Audit, mayoritas operasional | producer `enable.idempotence=true`, `acks=all`; consumer dedup by `event_id`; gagal → `.retry` → `.dlq`. |
+
+> **SDD-030 — Idempotency wajib di semua konsumen.** Bahkan pada jalur EOS, konsumen tetap merekam `event_id` ke `processed_event` sebagai jaring pengaman (BAB 6.5). Ini membuat *replay* aman dan menutup celah at-least-once pada batas sistem.
+
+## 6.4 Event Envelope and Schema Governance
+
+Setiap event punya skema **Avro/Protobuf** terdaftar di **Apicurio** dengan aturan kompatibilitas **`BACKWARD`** (ADR-003): konsumen lama tetap dapat memproses versi baru; perubahan *breaking* menaikkan versi mayor topik (`.v2`, NFR-014). CI memvalidasi skema terhadap registry sebelum deploy (BAB 9.5).
+
+SAD mewajibkan minimal field standar **`event_id`** dan **`correlation_id`** pada semua event, plus konteks org (`organization_id`, scope path) dan `trace_id` yang dibawa di **header Kafka** (SAD 4.7, 9.5, 11.3). SDD mengonkretkan envelope berikut sebagai standar implementasi (turunan dari kolom `outbox`):
+
+```json
+{
+  "eventId": "3f2a…",              // = outbox.id
+  "eventType": "gl.journal.posted",// = outbox.event_type
+  "aggregateType": "JournalEntry", // = outbox.aggregate_type
+  "aggregateId": "a1b2…",          // = outbox.aggregate_id  (partition key)
+  "occurredAt": "2026-08-05T10:00:00Z", // = outbox.created_at (UTC)
+  "correlationId": "b1f2…",        // = outbox.correlation_id
+  "schemaVersion": "v1",
+  "data": { /* = outbox.payload */ }
+}
+```
+
+Header Kafka membawa `organization_id`, `scope_path`, `correlation_id`/`trace_id` (untuk RLS hilir & tracing). `data` mengikuti skema domain yang terdaftar di Apicurio.
+
+> **SDD-031 — Envelope adalah perluasan SDD.** SAD hanya menamai `event_id` + `correlation_id` sebagai wajib; struktur envelope lengkap di atas adalah **standar implementasi yang ditetapkan SDD** agar seluruh layanan konsisten. Field bisnis tetap di `data` dan diatur skema Apicurio, bukan di sini.
+
+## 6.5 Consumer Idempotency (`processed_event`)
+
+Konsumen menolak pemrosesan ganda dengan tabel `processed_event` (DBDD; PK `event_id`). Pola: dalam **satu transaksi**, sisipkan `event_id` ke `processed_event` (gagal bila sudah ada ⇒ skip) lalu terapkan efek event; commit atomik.
+
+```sql
+-- Dedup konsumen: INSERT gagal (unique) => event sudah diproses => skip.
+INSERT INTO <schema>.processed_event (event_id, event_type, processed_at)
+VALUES ($1, $2, now()) ON CONFLICT (event_id) DO NOTHING;   -- 0 baris => skip
+```
+
+Untuk konsumen yang menulis ke tabel ber-RLS, transaksi dijalankan lewat `WithOrgScope` dengan scope diturunkan dari header `organization_id`/scope path event (BAB 7.4). `reporting-service` (CQRS, ADR-009) dan `audit-service` adalah konsumen murni (At-Least-Once + idempotency).
+
+## 6.6 Topic Naming and Event Catalog Mapping
+
+Konvensi topik (SAD 5.3.2): **`erp.<domain>.<entity>.<event>.v<versi>`**; DLQ/retry pakai sufiks `.dlq`/`.retry`; **partition key = `organization_id`/aggregate id** untuk menjaga urutan per-entitas. Katalog event baseline (SAD 5.4.1) yang dipetakan ke outbox layanan:
+
+| Topik                                  | Produsen | Pengiriman            |
+| -------------------------------------- | :------: | --------------------- |
+| `erp.gl.journal.posted.v1`             | SVC-007  | Exactly-Once          |
+| `erp.ap.invoice.recorded.v1`           | SVC-008  | Exactly-Once          |
+| `erp.ar.invoice.issued.v1`             | SVC-009  | Exactly-Once          |
+| `erp.inventory.stock.reserved.v1`      | SVC-013  | Exactly-Once          |
+| `erp.inventory.goods.issued.v1`        | SVC-013  | Exactly-Once          |
+| `erp.payroll.run.completed.v1`         | SVC-017  | Exactly-Once          |
+| `cashbank.payment.settled` (`erp.treasury.payment.settled.v1`) | SVC-011 | Exactly-Once |
+| `erp.sales.order.confirmed.v1`         | SVC-015  | At-Least-Once + idemp |
+| `erp.procurement.goods.received.v1`    | SVC-012  | At-Least-Once + idemp |
+| `erp.masterdata.*.upserted.v1`         | SVC-005  | At-Least-Once + idemp |
+| `erp.workflow.approval.completed.v1`   | SVC-004  | At-Least-Once + idemp |
+| `erp.audit.event.recorded.v1`          | semua    | At-Least-Once + idemp |
+
+> **SDD-032 — `event_type` (kode) ↔ topik (transport).** Kolom `outbox.event_type` menyimpan nama logis event (mis. `gl.journal.posted`); relay memetakannya ke nama topik penuh berversi (`erp.gl.journal.posted.v1`). Pemetaan ini adalah satu-satunya tempat versi topik ditentukan, memudahkan bump `.v2`.
+
+## 6.7 Summary
+
+Jalur event = outbox atomik (tanpa dual-write) → relay (CDC atau poller, di luar RLS) → Kafka (EOS untuk finansial, ALO+idempotency untuk selebihnya) → konsumen idempotent (`processed_event`). Envelope diturunkan dari kolom outbox dan divalidasi Apicurio (`BACKWARD`); topik `erp.<domain>.<entity>.<event>.v<versi>` dengan partition key organisasi/aggregate.
+
+---

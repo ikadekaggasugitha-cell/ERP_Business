@@ -1,0 +1,85 @@
+# BAB 8. Observability, Configuration, and Runtime
+
+## 8.1 Overview
+
+Setiap layanan wajib *observable* dan *operable* sejak hari pertama (ADR-010, SAD BAB 9). BAB ini menstandarkan health check, tiga pilar observability (log/metrik/trace terkorelasi `correlation_id`), *lifecycle* proses (startup/shutdown anggun), dan topologi runtime (Kubernetes, SAD BAB 8).
+
+## 8.2 Health Checks and Readiness
+
+Layanan mengekspos endpoint kesehatan (pola dari `gl-service/cmd/server/main.go`) yang dipetakan ke probe Kubernetes (SAD 9.8):
+
+```go
+mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+    c, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+    defer cancel()
+    if err := db.Pool.Ping(c); err != nil {           // cek dependensi PostgreSQL
+        http.Error(w, "db down", http.StatusServiceUnavailable) // 503
+        return
+    }
+    _, _ = w.Write([]byte("ok"))
+})
+```
+
+| Probe        | Endpoint/cek                                  | Aksi                                        |
+| ------------ | --------------------------------------------- | ------------------------------------------- |
+| Liveness     | `/healthz` (proses hidup)                     | restart pod bila macet (self-healing).      |
+| Readiness    | `/healthz` (Ping DB **dan** Kafka siap)       | tahan trafik sampai dependensi siap.        |
+| Startup      | `/healthz` awal (grace lebih longgar)         | tunggu inisialisasi (migrasi/pool).         |
+| Dependency   | konektivitas PostgreSQL/Kafka                 | 503 bila putus.                             |
+| Consumer lag | metrik lag konsumen Kafka (BAB 8.3)           | alarm bila lag melampaui ambang.            |
+
+> **SDD-050 — Readiness ≠ Liveness.** Liveness hanya memastikan proses hidup; Readiness ikut mengecek dependensi (DB via `Pool.Ping`, koneksi broker) agar trafik tidak masuk sebelum layanan benar-benar siap.
+
+## 8.3 Structured Logging, Tracing, and Metrics
+
+Tiga pilar (ADR-010) dikorelasikan oleh `correlation_id` yang menembus Kong → Go → Kafka → konsumen (BAB 4.8):
+
+* **Logging (SAD 9.4):** JSON terstruktur dengan field standar `correlation_id`, `organization_id`, `service`, `level`. Log dialirkan via Kafka ke storage terpusat (Loki/ELK). **PII tidak di-log** plaintext (BAB 7.6); log audit terpisah & immutable.
+* **Metrics (SAD 9.3):** endpoint **`GET /metrics`** di-scrape Prometheus; **RED** (Rate/Errors/Duration) per endpoint dan **USE** (Utilization/Saturation/Errors) untuk sumber daya. Metrik domain wajib: **Kafka consumer lag, kedalaman DLQ, outbox lag, TPS transaksi**.
+* **Tracing (SAD 9.5):** **OpenTelemetry** end-to-end; `correlation_id`/`trace_id` disuntik ke header HTTP/gRPC dan header event Kafka; backend Jaeger/Tempo; *adaptive sampling*.
+* **Pipeline (SAD 9.2):** OTel SDK → OTel Collector → Prometheus/Grafana (metrik), Kafka→Loki/ELK→Grafana (log), Jaeger/Tempo→Grafana (trace), Alertmanager → on-call/SIEM.
+
+Konfigurasi via env (BAB 3.4): `OTEL_EXPORTER_OTLP_ENDPOINT`, `LOG_LEVEL`.
+
+> **SDD-051 — Metrik domain, bukan hanya HTTP.** Selain RED per endpoint, layanan produsen event meng-expose **outbox lag** dan layanan konsumen meng-expose **consumer lag + DLQ depth**. Ini yang membuat masalah pipeline event terdeteksi sebelum berdampak (SLO BAB 8.5).
+
+## 8.4 Graceful Startup and Shutdown
+
+Proses menutup koneksi dengan rapi agar tidak ada request/konsumsi yang terpotong (pola `gl-service`):
+
+```go
+srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+go func() {
+    if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+        log.Fatalf("http: %v", err)
+    }
+}()
+stop := make(chan os.Signal, 1)
+signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM) // sinyal K8s SIGTERM
+<-stop
+shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
+_ = srv.Shutdown(shutdownCtx) // hentikan HTTP; lalu tutup consumer & pool
+```
+
+Urutan: berhenti menerima trafik (Readiness gagal) → `srv.Shutdown` (tuntaskan in-flight) → hentikan konsumen Kafka (commit offset) → `db.Close()`. `ReadHeaderTimeout` mencegah *slowloris*.
+
+## 8.5 Deployment and Runtime Topology
+
+Runtime = **Kubernetes self-managed** (ADR-004/006, SAD BAB 8):
+
+* **Layanan Go** = image Docker, **Deployment stateless + HPA** (skala pada CPU/RPS/lag). Minimal 2 replika untuk layanan kritis + anti-affinity + PodDisruptionBudget.
+* **Stateful (operator-managed):** Kafka via **Strimzi** (RF≥3, `min.insync.replicas=2`), PostgreSQL via **CloudNativePG/Zalando** (primary–standby, PITR, failover <60s), **Kong** HA, **Apicurio** HA.
+* **Environment/namespace:** `prod`, `staging` (mirror, data masked), `dev` (skala kecil, data sintetis); paritas dijaga GitOps.
+* **Networking:** NetworkPolicy default-deny + isolasi tier; mTLS internal; PostgreSQL/Kafka di zona data terbatas; service discovery via DNS K8s.
+* **Config:** teknis via `ConfigMap`/`Secret` per-environment; bisnis sebagai data per-org di PostgreSQL (SAD 11.2).
+
+**Target SLO (SAD 9.7)** yang mengikat desain: API latency **P95 < 2s, P99 < 5s** (NFR-001); availability **≥ 99.5%/bulan** (NFR-004); throughput **≥ 500 TPS puncak** (NFR-002); dashboard render awal < 3s (NFR-003). Rilis ditahan oleh error-budget.
+
+> **SDD-052 — Layanan stateless, state di operator.** Layanan Go **tidak** menyimpan state lokal (tidak ada sesi in-memory yang menempel); semua state di PostgreSQL/Kafka yang dikelola operator. Ini prasyarat HPA, rolling update, dan blue-green/canary (SAD 8.7).
+
+## 8.6 Summary
+
+Setiap layanan: `/healthz` (liveness/readiness), `/metrics` (Prometheus, RED/USE + lag domain), log JSON terstruktur & trace OTel terkorelasi `correlation_id`, shutdown anggun via SIGTERM, berjalan sebagai Deployment stateless + HPA di K8s dengan dependensi stateful dikelola operator, memenuhi SLO NFR-001..004.
+
+---

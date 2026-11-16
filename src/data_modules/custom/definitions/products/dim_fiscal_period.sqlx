@@ -1,0 +1,97 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["dimension", "cortex_v7", "multi_country"],
+  clusterBy: ["country_code", "fiscal_year"],
+  description: "Conformed fiscal period dimension handling year-independent variants and multi-country calendars"
+}
+
+WITH years AS (
+  SELECT year
+  FROM UNNEST(GENERATE_ARRAY(2020, 2030)) AS year
+),
+
+variant_country_map AS (
+  SELECT DISTINCT
+    fiscal_year_variant,
+    country_code
+  FROM ${ref("stg_t001")}
+  WHERE fiscal_year_variant IS NOT NULL
+),
+
+t009b_raw AS (
+  SELECT
+    mandt,
+    fiscal_year_variant,
+    fiscal_year,
+    posting_period,
+    SAFE_CAST(calendar_month AS INT64) AS calendar_month,
+    SAFE_CAST(calendar_day AS INT64) AS calendar_day
+  FROM ${ref("stg_t009b")}
+),
+
+-- Expand year-independent entries (BDATJ = '0000') across reporting years 2020..2030
+expanded_periods AS (
+  SELECT
+    p.fiscal_year_variant,
+    y.year AS fiscal_year,
+    SAFE_CAST(p.posting_period AS INT64) AS period_number,
+    p.calendar_month,
+    p.calendar_day
+  FROM t009b_raw p
+  CROSS JOIN years y
+  WHERE p.fiscal_year = '0000' OR p.fiscal_year IS NULL
+  
+  UNION ALL
+  
+  SELECT
+    p.fiscal_year_variant,
+    SAFE_CAST(p.fiscal_year AS INT64) AS fiscal_year,
+    SAFE_CAST(p.posting_period AS INT64) AS period_number,
+    p.calendar_month,
+    p.calendar_day
+  FROM t009b_raw p
+  WHERE p.fiscal_year != '0000' AND p.fiscal_year IS NOT NULL
+),
+
+mapped_periods AS (
+  SELECT
+    p.fiscal_year_variant,
+    COALESCE(m.country_code, 'GLOBAL') AS country_code,
+    p.fiscal_year,
+    p.period_number,
+    p.calendar_month,
+    p.calendar_day,
+    -- Construct period dates safely
+    CASE 
+      WHEN p.period_number <= 12 AND p.calendar_month BETWEEN 1 AND 12 THEN
+        DATE(p.fiscal_year, p.calendar_month, 1)
+      ELSE
+        DATE(p.fiscal_year, 12, 31)
+    END AS period_start_date,
+    CASE 
+      WHEN p.period_number <= 12 AND p.calendar_month BETWEEN 1 AND 12 THEN
+        LAST_DAY(DATE(p.fiscal_year, p.calendar_month, 1), MONTH)
+      ELSE
+        DATE(p.fiscal_year, 12, 31)
+    END AS period_end_date,
+    CASE WHEN p.period_number > 12 THEN TRUE ELSE FALSE END AS is_closing_period
+  FROM expanded_periods p
+  LEFT JOIN variant_country_map m
+    ON p.fiscal_year_variant = m.fiscal_year_variant
+)
+
+SELECT
+  TO_HEX(MD5(CONCAT(fiscal_year_variant, '|', country_code, '|', CAST(fiscal_year AS STRING), '|', CAST(period_number AS STRING)))) AS fiscal_period_id,
+  fiscal_year_variant,
+  country_code,
+  fiscal_year,
+  period_number,
+  period_start_date,
+  period_end_date,
+  is_closing_period
+FROM mapped_periods
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY fiscal_year_variant, country_code, fiscal_year, period_number
+  ORDER BY period_start_date ASC
+) = 1

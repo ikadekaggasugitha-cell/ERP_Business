@@ -1,0 +1,173 @@
+# 9.8 Inventory Management Requirements
+
+## 9.8.1 Overview
+
+Inventory Management merupakan modul inti dalam ERP yang mengelola seluruh siklus hidup persediaan barang, mulai dari pendefinisian data barang (Item Master), pengelolaan gudang (Warehouse), pencatatan pergerakan stok (Stock Movement), hingga penentuan metode valuasi persediaan.
+
+Sejalan dengan prinsip **Configuration over Customization** dan **Organization Tree First**, modul ini harus mampu beroperasi lintas struktur organisasi yang tidak terbatas jumlah levelnya — mulai dari Holding, Company, Business Unit, Branch, Department, hingga Warehouse dan Project Site — tanpa memerlukan perubahan source code untuk setiap penambahan entitas organisasi baru.
+
+Modul ini juga menjadi **single source of truth** atas data barang dan posisi stok, sehingga seluruh modul terkait (Procurement, Sales, Manufacturing, Financial Management) dapat mengandalkan data yang konsisten dan real-time. Sistem harus mendukung berbagai metode valuasi persediaan (FIFO, Average, Standard Cost) yang dapat dikonfigurasi per item maupun per organisasi, serta menyediakan visibilitas stok secara real-time lintas gudang dan lintas organisasi sesuai dengan hak akses berbasis scope (Scope-Based Access Control).
+
+Setiap kebutuhan bisnis pada bagian ini menggunakan **Requirement ID (BR-xxx)** agar dapat ditelusuri ke Business Objectives (BO-xxx), Stakeholder (SH-xxx), Functional Requirements (FR-xxx), dan Test Cases (TC-xxx).
+
+---
+
+# 9.8.2 Business Requirement Catalogue
+
+## BR-706 – Centralized Item Master
+
+| Attribute              | Description                                                                                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID         | BR-706                                                                                                                                                                |
+| Requirement Name       | Centralized Item Master                                                                                                                                              |
+| Category               | Inventory Management                                                                                                                                                  |
+| Priority               | Critical                                                                                                                                                              |
+| Business Objective     | BO-004, BO-014                                                                                                                                                        |
+| Stakeholder Owner      | SH-032 (Inventory Department)                                                                                                                                         |
+| Description            | Sistem harus menyediakan Item Master terpusat sebagai satu-satunya sumber data barang (kode/SKU, deskripsi, kategori, satuan ukur/UOM, spesifikasi) yang dapat dibagikan (shared) atau dibatasi (isolated) sesuai scope organisasi. |
+| Business Rationale     | Data barang yang tersebar dan tidak konsisten antar unit organisasi menyebabkan duplikasi, kesalahan pencatatan, dan sulitnya konsolidasi laporan persediaan.        |
+| Business Value         | Konsistensi data barang di seluruh modul dan organisasi, serta pengurangan duplikasi entri data.                                                                     |
+| Acceptance Criteria    | Administrator dapat membuat, mengubah, dan menonaktifkan Item Master dengan kode unik dalam scope organisasi yang ditentukan; seluruh modul yang mereferensikan Item Master menggunakan data yang sama secara real-time. |
+
+---
+
+## BR-707 – Multi-Warehouse Configuration
+
+| Attribute           | Description                                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-707                                                                                                                          |
+| Requirement Name    | Multi-Warehouse Configuration                                                                                                  |
+| Priority            | Critical                                                                                                                        |
+| Description         | Sistem harus mendukung konfigurasi jumlah Warehouse tanpa batas, yang masing-masing terhubung ke satu unit organisasi (Branch, Business Unit, Project Site, dsb.) tanpa perubahan source code. |
+| Acceptance Criteria | Administrator dapat menambah, menonaktifkan, dan mengelompokkan Warehouse baru serta menautkannya ke struktur organisasi melalui konfigurasi. |
+
+---
+
+## BR-708 – Goods Receipt (Stock In) Management
+
+| Attribute           | Description                                                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-708                                                                                                                  |
+| Requirement Name    | Goods Receipt (Stock In) Management                                                                                    |
+| Priority            | High                                                                                                                    |
+| Description         | Sistem harus mencatat penerimaan barang (dari pembelian, transfer masuk, retur, maupun produksi) dan memperbarui saldo stok on-hand secara real-time. |
+| Business Value      | Akurasi saldo stok dan ketertelusuran sumber penerimaan barang.                                                        |
+
+---
+
+## BR-709 – Goods Issue (Stock Out) Management
+
+| Attribute           | Description                                                                                                              |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-709                                                                                                                  |
+| Requirement Name    | Goods Issue (Stock Out) Management                                                                                     |
+| Priority            | High                                                                                                                    |
+| Description         | Sistem harus mencatat pengeluaran barang untuk kebutuhan penjualan, produksi, proyek, maupun transfer keluar, dengan validasi ketersediaan stok. |
+| Acceptance Criteria | Sistem menolak pengeluaran barang yang melebihi saldo stok tersedia, kecuali dikonfigurasi mengizinkan backorder.      |
+
+---
+
+## BR-710 – Inter-Warehouse & Inter-Organization Stock Transfer
+
+| Attribute           | Description                                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-710                                                                                                                            |
+| Requirement Name    | Inter-Warehouse & Inter-Organization Stock Transfer                                                                               |
+| Priority            | High                                                                                                                              |
+| Description         | Sistem harus mendukung transfer stok antar Warehouse, baik dalam satu organisasi maupun lintas organisasi, lengkap dengan status in-transit dan alur approval. |
+| Acceptance Criteria | Setiap transfer stok tercatat sebagai transaksi dua sisi (keluar dan masuk) dengan status yang dapat dipantau hingga transfer selesai. |
+
+---
+
+## BR-711 – Stock Adjustment & Stock Opname
+
+| Attribute           | Description                                                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-711                                                                                                                        |
+| Requirement Name    | Stock Adjustment & Stock Opname                                                                                              |
+| Priority            | High                                                                                                                          |
+| Description         | Sistem harus mendukung proses penyesuaian stok (adjustment) akibat selisih hasil stock opname, kerusakan, atau kehilangan barang, dengan pencatatan alasan dan jejak audit. |
+| Acceptance Criteria | Penyesuaian stok di atas ambang batas tertentu wajib melalui alur persetujuan sebelum saldo stok diperbarui.                 |
+
+---
+
+## BR-712 – Configurable Inventory Valuation Method
+
+| Attribute           | Description                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-712                                                                                                                                |
+| Requirement Name    | Configurable Inventory Valuation Method                                                                                              |
+| Priority            | Critical                                                                                                                              |
+| Description         | Sistem harus mendukung metode valuasi persediaan FIFO, Average, dan Standard Cost yang dapat dikonfigurasi per item dan/atau per organisasi. |
+| Business Value      | Akurasi nilai persediaan sesuai kebijakan akuntansi masing-masing organisasi.                                                        |
+
+---
+
+## BR-713 – Real-Time Stock Visibility Across Warehouse & Organization
+
+| Attribute           | Description                                                                                                                      |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-713                                                                                                                            |
+| Requirement Name    | Real-Time Stock Visibility Across Warehouse & Organization                                                                       |
+| Priority            | Critical                                                                                                                          |
+| Description         | Sistem harus menyediakan visibilitas saldo stok secara real-time lintas Warehouse dan lintas organisasi, sesuai hak akses berbasis scope pengguna. |
+| Acceptance Criteria | Pengguna hanya dapat melihat saldo stok pada scope organisasi/warehouse yang menjadi kewenangannya, dengan data yang selalu mutakhir. |
+
+---
+
+## BR-714 – Stock Reservation & Allocation
+
+| Attribute           | Description                                                                                                            |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-714                                                                                                                |
+| Requirement Name    | Stock Reservation & Allocation                                                                                        |
+| Priority            | Medium                                                                                                                |
+| Description         | Sistem harus mendukung reservasi/alokasi stok terhadap Sales Order, Production Order, atau Project Requirement untuk mencegah alokasi ganda (double allocation). |
+
+---
+
+## BR-715 – Inventory Aging & Reorder Point Monitoring
+
+| Attribute           | Description                                                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-715                                                                                                                  |
+| Requirement Name    | Inventory Aging & Reorder Point Monitoring                                                                              |
+| Priority            | Medium                                                                                                                  |
+| Description         | Sistem harus menyediakan pemantauan umur stok (inventory aging) serta titik pemesanan ulang (reorder point) dan safety stock untuk mendukung proses replenishment. |
+| Business Value      | Mengurangi risiko kelebihan maupun kekurangan stok melalui monitoring proaktif.                                        |
+
+---
+
+# 9.8.3 Inventory Business Rules Reference
+
+| Business Rule ID | Description                                                                                                          |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------- |
+| BRule-INV-001     | Setiap Item Master wajib memiliki kode (SKU) yang unik dalam scope organisasi yang ditentukan.                        |
+| BRule-INV-002     | Setiap transaksi stock movement wajib direferensikan ke minimal satu Warehouse dan satu unit organisasi.               |
+| BRule-INV-003     | Metode valuasi persediaan ditentukan per kombinasi Item dan Organization, serta tidak dapat diubah secara retroaktif tanpa proses closing/revaluasi. |
+| BRule-INV-004     | Stock adjustment di atas ambang batas nilai tertentu wajib melalui alur persetujuan (approval workflow).             |
+| BRule-INV-005     | Transfer stok lintas organisasi wajib tercatat sebagai transaksi intercompany yang dapat ditelusuri.                  |
+| BRule-INV-006     | Saldo stok tidak boleh bernilai negatif kecuali item dikonfigurasi secara eksplisit untuk mengizinkan backorder.       |
+
+---
+
+# 9.8.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder     | Future Process                     |
+| -------------- | ------------------- | ---------------- | ----------------------------------- |
+| BR-706         | BO-004, BO-014       | SH-032           | Item Master Management              |
+| BR-707         | BO-004               | SH-033           | Warehouse Configuration              |
+| BR-708         | BO-014               | SH-032, SH-033   | Goods Receipt Processing             |
+| BR-709         | BO-014               | SH-032, SH-033   | Goods Issue Processing               |
+| BR-710         | BO-004, BO-014       | SH-033           | Stock Transfer Management            |
+| BR-711         | BO-014               | SH-032           | Stock Adjustment & Opname            |
+| BR-712         | BO-004               | SH-032           | Inventory Valuation                  |
+| BR-713         | BO-004, BO-014       | SH-032, SH-033   | Stock Visibility & Reporting         |
+| BR-714         | BO-014               | SH-032           | Stock Reservation & Allocation       |
+| BR-715         | BO-014               | SH-032           | Inventory Monitoring & Replenishment |
+
+---
+
+# 9.8.5 Summary
+
+Modul **Inventory Management** menjadi tulang punggung pengelolaan persediaan barang lintas organisasi dalam ERP, mencakup Item Master terpusat, konfigurasi Warehouse tanpa batas, pencatatan seluruh Stock Movement (penerimaan, pengeluaran, transfer, penyesuaian), metode valuasi persediaan yang configurable, serta visibilitas stok real-time sesuai scope akses. Seluruh requirement pada bagian ini akan diturunkan lebih lanjut menjadi Functional Requirements, desain basis data, spesifikasi API, dan skenario pengujian pada dokumen lanjutan.

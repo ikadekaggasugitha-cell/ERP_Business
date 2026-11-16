@@ -1,0 +1,113 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["annotation", "sales", "cortex_v7"],
+  description: "Unified Sales Orders across SAP SD and NEW_ERP CDC"
+}
+
+WITH tcurx_shift AS (
+  ${currency.currencyDecimalShift(ref("stg_tcurx"))}
+),
+
+sap_sales AS (
+  SELECT
+    'SAP_SD' AS source_system,
+    h.mandt,
+    h.sales_order_number,
+    CAST(i.item_number AS STRING) AS line_number,
+    -- Map sales_org to company_code via TVKO to prevent sales_org = company_code fan-out
+    COALESCE(org_map.company_code, h.sales_org) AS company_code,
+    h.sales_org,
+    h.distribution_channel,
+    h.division,
+    h.customer_number AS customer_id,
+    i.material_number AS material_id,
+    i.plant AS plant_code,
+    i.storage_location,
+    ${sap_helpers.safeSapDate("h.order_date")} AS order_date,
+    h.order_type,
+    h.document_category,
+    
+    -- Quantity with return negation (VBTYP = 'H' denotes Returns/Credit Memos)
+    CASE
+      WHEN h.document_category = 'H' THEN -1 * ABS(CAST(i.order_quantity AS NUMERIC))
+      ELSE ABS(CAST(i.order_quantity AS NUMERIC))
+    END AS order_quantity,
+    i.sales_unit AS uom,
+    
+    -- Price and Value with decimal shift & sign negation
+    CAST(i.net_price AS NUMERIC) AS unit_price,
+    CASE
+      WHEN h.document_category = 'H' THEN -1 * ${currency.amountWithDecimalShift("i.net_value", "shift")}
+      ELSE ${currency.amountWithDecimalShift("i.net_value", "shift")}
+    END AS net_amount_tc,
+    TRIM(COALESCE(i.currency_key, h.currency_key)) AS currency_tc,
+    
+    ${sap_helpers.latestRecordstamp(["h.recordstamp", "i.recordstamp"])} AS source_last_updated_at
+  FROM ${ref("stg_vbak")} h
+  INNER JOIN ${ref("stg_vbap")} i
+    ON h.mandt = i.mandt
+    AND h.sales_order_number = i.sales_order_number
+  LEFT JOIN ${ref("stg_tvko")} org_map
+    ON h.mandt = org_map.mandt
+    AND h.sales_org = org_map.sales_org
+  LEFT JOIN tcurx_shift shift
+    ON TRIM(COALESCE(i.currency_key, h.currency_key)) = shift.currkey
+),
+
+new_erp_sales AS (
+  SELECT
+    'NEW_ERP' AS source_system,
+    '000' AS mandt,
+    CAST(order_id AS STRING) AS sales_order_number,
+    CAST(line_number AS STRING) AS line_number,
+    CAST(organization_id AS STRING) AS company_code,
+    CAST(sales_org AS STRING) AS sales_org,
+    CAST(distribution_channel AS STRING) AS distribution_channel,
+    CAST(division AS STRING) AS division,
+    CAST(customer_id AS STRING) AS customer_id,
+    CAST(item_id AS STRING) AS material_id,
+    CAST(plant_code AS STRING) AS plant_code,
+    CAST(storage_location AS STRING) AS storage_location,
+    DATE(order_date) AS order_date,
+    CAST(order_type AS STRING) AS order_type,
+    CAST(document_category AS STRING) AS document_category,
+    CAST(quantity AS NUMERIC) AS order_quantity,
+    CAST(uom AS STRING) AS uom,
+    CAST(unit_price AS NUMERIC) AS unit_price,
+    CAST(net_amount AS NUMERIC) AS net_amount_tc,
+    TRIM(currency) AS currency_tc,
+    CAST(updated_at AS TIMESTAMP) AS source_last_updated_at
+  FROM ${ref("erp_staging", "stg_sales_order_cdc")}
+),
+
+combined AS (
+  SELECT * FROM sap_sales
+  UNION ALL
+  SELECT * FROM new_erp_sales
+)
+
+SELECT
+  TO_HEX(MD5(CONCAT(source_system, '|', mandt, '|', sales_order_number))) AS order_id,
+  source_system,
+  mandt,
+  sales_order_number,
+  line_number,
+  company_code,
+  sales_org,
+  distribution_channel,
+  division,
+  customer_id,
+  material_id,
+  plant_code,
+  storage_location,
+  order_date,
+  order_type,
+  document_category,
+  order_quantity,
+  uom,
+  unit_price,
+  net_amount_tc,
+  currency_tc,
+  source_last_updated_at
+FROM combined

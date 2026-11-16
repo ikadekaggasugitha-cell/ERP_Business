@@ -1,0 +1,143 @@
+# BAB 8. Traceability and Appendix
+
+## 8.1 Overview
+
+Bab penutup ini mengonsolidasikan **katalog resource API (API-xxx)**, matriks **traceability** (API ↔ INT/BR ↔ tabel ↔ layanan), **katalog kode error**, catatan **gRPC internal**, serta lampiran contoh **OpenAPI**. Bab ini memastikan setiap kontrak API terlacak ke kebutuhan integrasi dan struktur data.
+
+---
+
+## 8.2 API Resource Catalog (API-xxx)
+
+| API ID  | Resource                    | Base Path                          | Layanan (SVC) | Bab  |
+| ------- | --------------------------- | ---------------------------------- | ------------- | ---- |
+| API-001 | Organization                | `/v1/organizations`                | SVC-001       | 3.2  |
+| API-002 | Organization Type           | `/v1/organization-types`           | SVC-001       | 3.2  |
+| API-003 | User                        | `/v1/users`                        | SVC-002       | 3.3  |
+| API-004 | Role/Permission             | `/v1/roles`, `/v1/permissions`     | SVC-003       | 3.4  |
+| API-005 | Workflow                    | `/v1/workflow-*`                   | SVC-004       | 3.5  |
+| API-006 | Party (Customer/Vendor)     | `/v1/parties`                      | SVC-005       | 3.6  |
+| API-007 | Item                        | `/v1/items`                        | SVC-005       | 3.6  |
+| API-008 | Audit                       | `/v1/audit-logs`                   | SVC-018       | 3.7  |
+| API-009 | Chart of Accounts           | `/v1/accounts`, `/v1/posting-rules`| SVC-006       | 4.2  |
+| API-010 | Currency                    | `/v1/currencies`, `/v1/exchange-rates` | currency-svc | 4.3 |
+| API-011 | General Ledger              | `/v1/journal-entries`              | SVC-007       | 4.4  |
+| API-012 | Accounts Payable            | `/v1/ap-invoices`                  | SVC-008       | 4.5  |
+| API-013 | Accounts Receivable         | `/v1/ar-invoices`                  | SVC-009       | 4.6  |
+| API-014 | Tax                         | `/v1/tax-*`                        | SVC-010       | 4.7  |
+| API-015 | Treasury / Cash & Bank      | `/v1/payments`, `/v1/bank-accounts`| SVC-011       | 4.8  |
+| API-016 | Procurement                 | `/v1/purchase-*`, `/v1/goods-receipts` | SVC-012   | 5.2  |
+| API-017 | Inventory                   | `/v1/stock-*`, `/v1/warehouses`    | SVC-013       | 5.3  |
+| API-018 | Sales                       | `/v1/sales-orders`, `/v1/deliveries`| SVC-015      | 5.4  |
+| API-019 | Manufacturing               | `/v1/work-orders`, `/v1/bills-of-material` | SVC-014| 5.5  |
+| API-020 | Human Resource              | `/v1/employees`, `/v1/positions`   | SVC-016       | 6.2  |
+| API-021 | Payroll                     | `/v1/payroll-runs`                 | SVC-017       | 6.3  |
+
+Domain lain (Fixed Asset, Budget, Project, Asset, Maintenance, CRM, dll.) mengikuti pola yang sama dan dilengkapi pada revisi berikutnya.
+
+---
+
+## 8.3 Traceability (API ↔ INT/BR ↔ Table ↔ Service)
+
+| API ID  | INT / BR (BRD)          | Event Terkait (BAB 7)                    | Tabel (DBDD)                    |
+| ------- | ----------------------- | ----------------------------------------- | ------------------------------- |
+| API-001 | BR-001–006, INT-004     | `erp.org.unit.upserted`                   | `org.organization`              |
+| API-005 | 9.3, INT-004            | `erp.workflow.approval.completed`         | `wf.*`                          |
+| API-006/007 | 9.18, BO-010        | `erp.masterdata.*.upserted`               | `md.party`, `md.item`           |
+| API-011 | BR-556–562              | `erp.gl.journal.posted`                   | `gl.journal_entry/line`         |
+| API-012 | 9.5.5, INT-002          | `erp.ap.invoice.recorded`                 | `ap.ap_invoice`                 |
+| API-013 | 9.5.6, INT-001          | `erp.ar.invoice.issued`                   | `ar.ar_invoice`                 |
+| API-015 | 9.5.8/9, INT-005        | `erp.cashbank.payment.settled`            | `trs.payment`                   |
+| API-016 | 9.7, INT-002            | `erp.procurement.po.approved/goods.received` | `po.*`, `gr.*`               |
+| API-017 | 9.8, INT-001            | `erp.inventory.stock.reserved/goods.issued`| `inv.stock_*`                  |
+| API-018 | 9.14, INT-001           | `erp.sales.order.confirmed`               | `so.sales_order`                |
+| API-021 | 9.17, INT-003/007       | `erp.payroll.run.completed`               | `pay.payroll_run`               |
+
+Rantai lengkap: **BO → BR/INT (BRD) → SVC/ADR (SAD) → Table (DBDD) → API/Event (dokumen ini)**.
+
+---
+
+## 8.4 Error Code Catalog
+
+Kode error stabil (`error.code`, BAB 2.9). Ekstrak lintas domain:
+
+| Code                       | HTTP | Deskripsi                                          |
+| -------------------------- | ---- | -------------------------------------------------- |
+| `VALIDATION_ERROR`         | 400  | Format request tidak valid.                        |
+| `UNAUTHORIZED`             | 401  | Token absen/invalid.                               |
+| `FORBIDDEN`                | 403  | Izin/scope kurang.                                 |
+| `RESOURCE_NOT_FOUND`       | 404  | Resource tidak ada / di luar scope.                |
+| `OPTIMISTIC_LOCK_CONFLICT` | 409  | `rowVersion` usang (If-Match).                     |
+| `ORG_CODE_DUPLICATE`       | 409  | Kode organisasi duplikat (BR-005).                 |
+| `GL_JOURNAL_UNBALANCED`    | 422  | Debit ≠ kredit (BR-556).                           |
+| `GL_PERIOD_LOCKED`         | 409  | Periode Closed/Locked (BR-562).                    |
+| `INV_INSUFFICIENT_STOCK`   | 422  | Stok tidak cukup untuk reservasi (INT-001).        |
+| `IDEMPOTENCY_KEY_REUSED`   | 409  | Idempotency-Key dipakai dengan payload berbeda.    |
+| `RATE_LIMIT_EXCEEDED`      | 429  | Batas rate terlampaui (INT-016).                   |
+
+Katalog lengkap dikelola per domain dan divalidasi pada CI kontrak.
+
+---
+
+## 8.5 Internal gRPC Interfaces (Note)
+
+Sesuai ADR-007, komunikasi sinkron antar-layanan internal menggunakan **gRPC** (Protobuf), **tidak** dipapar melalui Kong. Contoh: `coa-service.ValidateAccount()` dipanggil `gl-service` saat posting. Kontrak Protobuf internal didokumentasikan pada **Technical Design** per layanan; API Specification ini fokus pada kontrak eksternal (REST) dan event. Prinsip yang berlaku sama: versioning, error model setara, dan idempotensi untuk operasi mutasi.
+
+---
+
+## 8.6 Appendix A — OpenAPI Example
+
+Cuplikan OpenAPI 3.1 untuk operasi posting jurnal (API-011):
+
+```yaml
+paths:
+  /v1/journal-entries/{id}/post:
+    post:
+      operationId: postJournalEntry
+      summary: Posting jurnal (validasi balanced & period lock)
+      security: [ { oauth2: [ "gl.journal.post" ] } ]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, format: uuid } }
+        - { name: X-Correlation-Id, in: header, required: false, schema: { type: string } }
+      responses:
+        "200": { description: Posted, content: { application/json: { schema: { $ref: "#/components/schemas/JournalEntry" } } } }
+        "409": { description: Period locked, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: Unbalanced, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://idp.erp.example/authorize
+          tokenUrl: https://idp.erp.example/token
+          scopes: { "gl.journal.post": "Posting jurnal GL" }
+```
+
+---
+
+## 8.7 Appendix B — Open Items
+
+| Item                                                              | Tindak Lanjut                              |
+| ---------------------------------------------------------------- | ------------------------------------------ |
+| Kontrak OpenAPI/Protobuf final & lengkap per layanan             | Diturunkan dari spesifikasi ini.           |
+| Resource domain tersisa (Fixed Asset, Budget, Project, dll.)     | Revisi berikutnya, pola sama.              |
+| Definisi skema Avro/Protobuf event di Apicurio                    | Diturunkan dari katalog event (BAB 7).     |
+| Kontrak gRPC internal terperinci                                 | Technical Design per layanan.              |
+| Kebijakan Kong (route/plugin) & rate-limit plan per tenant       | Deployment/Operations.                     |
+
+---
+
+## 8.8 Revision History
+
+| Version | Date       | Author             | Description                                                        | Status |
+| ------- | ---------- | ------------------ | ------------------------------------------------------------------ | ------ |
+| 0.1     | 2026-08-05 | Solution Architect | Rilis awal API Specification — BAB 1–8 (standar, REST per domain, event catalog, traceability). | Draft  |
+
+---
+
+## 8.9 Summary
+
+Bab ini mengonsolidasikan **21 resource API (API-001 s.d. API-021)** dengan matriks traceability yang menautkan setiap API ke INT/BR (BRD), event (BAB 7), tabel (DBDD), dan layanan (SVC) — melengkapi rantai keterlacakan **BO → BR/INT → SVC/ADR → Table → API/Event**. Dilengkapi katalog kode error, catatan gRPC internal, dan contoh OpenAPI, dokumen API Specification ini menjadi kontrak antarmuka final tingkat spesifikasi, siap diturunkan menjadi OpenAPI/Protobuf implementatif dan dikonsumsi oleh frontend Backoffice SPA (React 19) serta integrasi eksternal.
+
+---

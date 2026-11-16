@@ -1,0 +1,145 @@
+# BAB 10. Per-Service Implementation Matrix (SVC-001 … SVC-019)
+
+## 10.1 Overview and Sequencing
+
+BAB ini mencatat **delta** per layanan — hal yang berbeda dari blueprint BAB 2–9: basis data & skema, resource API utama (API Spec BAB 3–6), event yang diproduksi/dikonsumsi (SAD BAB 5.4.1), dependensi, dan catatan implementasi khusus. **Seluruh standar BAB 2–9 berlaku** kecuali dinyatakan lain (RLS via `WithOrgScope`, repository `sqlc`, outbox, envelope, error model, CI). Resource ditulis sebagai kebab-case plural (API Spec 2.2); kontrak final ada di API Specification.
+
+Urutan pembangunan mengikuti arah dependensi (produsen sebelum konsumen):
+
+```mermaid
+flowchart LR
+  org[SVC-001 org] --> user[SVC-002 user]
+  org --> sec[SVC-003 security]
+  org --> wf[SVC-004 workflow]
+  org --> md[SVC-005 masterdata]
+  org --> coa[SVC-006 coa]
+  coa --> gl[SVC-007 gl]
+  coa --> ap[SVC-008 ap]
+  coa --> ar[SVC-009 ar]
+  coa --> tax[SVC-010 tax]
+  gl --> treas[SVC-011 treasury]
+  md --> proc[SVC-012 procurement]
+  md --> inv[SVC-013 inventory]
+  inv --> mfg[SVC-014 manufacturing]
+  md --> sales[SVC-015 sales]
+  inv --> sales
+  org --> hr[SVC-016 hr]
+  hr --> pay[SVC-017 payroll]
+  allsvc[(semua event)] -.-> audit[SVC-018 audit]
+  allsvc -.-> rep[SVC-019 reporting]
+```
+
+> **SDD-070 — Bangun konsumen setelah broker siap.** `audit-service` dan `reporting-service` adalah konsumen lintas domain; keduanya dapat dibangun paralel begitu Kafka/Apicurio siap, tetapi hanya berguna setelah produsen hulunya menghasilkan event.
+
+## 10.2 Platform and Core Services (SVC-001…005, 018)
+
+### SVC-001 `org-service` — `org_db` (skema `org`)
+* **Resource utama (API Spec 3.2):** `/organizations`, `/organization-units`, `/organization-trees`.
+* **Event:** produksi `erp.org.unit.upserted.v1` (ALO+idemp). Dependensi: — (akar).
+* **Catatan:** menyediakan **Organization Tree** yang menjadi basis scope seluruh sistem (BAB 7.4). Org sistem `0000…0000` (pemilik data referensi) di-seed. Layanan paling pertama dibangun.
+
+### SVC-002 `user-service` — `user_db` (skema `user`)
+* **Resource (API Spec 3.3):** `/users`, `/user-profiles`, `/user-organization-assignments`.
+* **Event:** `erp.user.account.upserted.v1` (ALO+idemp). Dependensi: org.
+* **Catatan:** menyimpan identitas & penugasan user↔organisasi; berpadu dengan IdP (INT-012). PII (email, nama) → tidak di-log plaintext.
+
+### SVC-003 `security-service` — `security_db` (skema `security`)
+* **Resource (API Spec 3.4):** `/roles`, `/permissions`, `/role-assignments`.
+* **Event:** `erp.security.access.denied.v1` (audit). Dependensi: user.
+* **Catatan:** **sumber definisi RBAC** (BR-031) — peran & pemetaan hak yang dibaca middleware otorisasi (BAB 7.3). Separation of Duties dikonfigurasi di sini + workflow.
+
+### SVC-004 `workflow-service` — `workflow_db` (skema `workflow`)
+* **Resource (API Spec 3.5):** `/approval-requests`, `/approval-tasks`, `/workflow-definitions`.
+* **Event:** `erp.workflow.approval.requested/completed.v1` (ALO+idemp). Dependensi: org.
+* **Catatan:** orkestrator approval & Saga kompleks (SAD 5.7); menegakkan approval matrix (maker≠approver). Konsumen event domain yang butuh persetujuan.
+
+### SVC-005 `masterdata-service` — `masterdata_db` (skema `masterdata`)
+* **Resource (API Spec 3.6):** `/customers`, `/vendors`, `/items`, `/uoms`.
+* **Event:** `erp.masterdata.{customer,vendor,item}.upserted.v1` (ALO+idemp). Dependensi: org.
+* **Catatan:** master data bersama; hilir (procurement/inventory/sales/ar/ap) mengonsumsi `*.upserted` untuk invalidasi cache (SAD 11.7). ACL untuk integrasi legacy (INT-008).
+
+### SVC-018 `audit-service` — `audit_db` (skema `audit`)
+* **Resource (API Spec 3.7):** `/audit-events` (read-only query).
+* **Event:** **konsumen wildcard** `erp.audit.event.recorded.v1` (dari semua layanan). Produsen: —.
+* **Catatan:** jejak audit **immutable** (user, org, waktu, aksi, before/after, `correlation_id`). Konsumen murni (idempotent via `processed_event`); `audit_log` di-partisi bulanan (DBDD). Read-model, bukan penulis domain.
+
+## 10.3 Financial Services (SVC-006…011)
+
+### SVC-006 `coa-service` — `coa_db` (skema `coa`)
+* **Resource (API Spec 4.2):** `/accounts`, `/account-groups`, `/posting-rules`.
+* **Event:** `erp.coa.account.upserted.v1`, `erp.coa.posting_rule.upserted.v1` (ALO+idemp). Dependensi: org.
+* **Catatan:** fondasi finansial; posting rule dibaca sebagai **data konfigurasi** (SAD 11.2). `document_number_registry` untuk seri akun bila perlu.
+
+### SVC-007 `gl-service` — `gl_db` (skema `gl`) — **REFERENSI**
+* **Resource (API Spec 4.4):** `/journal-entries` (+ aksi `/{id}/post`), `/ledgers`, `/fiscal-periods`, `/account-balances`.
+* **Event:** **produksi `erp.gl.journal.posted.v1` (EOS)**. Dependensi: coa.
+* **Catatan:** implementasi lengkap sudah ada — jadikan template. BR-556 (jurnal seimbang, BAB 5.5), optimistic-lock posting (BAB 5.4), `journal_entry`/`journal_line` terpartisi per `posting_date`, outbox terpartisi.
+
+### SVC-008 `ap-service` — `ap_db` (skema `ap`)
+* **Resource (API Spec 4.5):** `/vendor-invoices` (+ `/{id}/approve`), `/payment-schedules`, `/debit-notes`.
+* **Event:** **produksi `erp.ap.invoice.recorded.v1` (EOS)**; konsumsi `procurement.goods.received`, `masterdata.vendor.upserted`. Dependensi: coa.
+* **Catatan:** `invoice_no` via registry; `invoice` terpartisi bulanan; Saga Procurement→AP→GL (INT-002). Idempotency-Key wajib.
+
+### SVC-009 `ar-service` — `ar_db` (skema `ar`)
+* **Resource (API Spec 4.6):** `/customer-invoices` (+ `/{id}/issue`), `/receipts`, `/credit-notes`.
+* **Event:** **produksi `erp.ar.invoice.issued.v1` (EOS)**; konsumsi `sales.order.confirmed`, `masterdata.customer.upserted`. Dependensi: coa.
+* **Catatan:** simetris AP; `invoice` terpartisi bulanan; Saga Sales→Inventory→AR→GL (INT-001).
+
+### SVC-010 `tax-service` — `tax_db` (skema `tax`)
+* **Resource (API Spec 4.7):** `/tax-codes`, `/tax-invoices` (e-Faktur), `/tax-returns`.
+* **Event:** `erp.tax.invoice.issued.v1`. Dependensi: coa.
+* **Catatan:** integrasi **DJP e-Faktur via ACL** (INT-006); `efaktur_no` unik non-partisi (REVIEW M2). Bukan produsen EOS.
+
+### SVC-011 `treasury-cashbank-service` — `treasury_db` (skema `treasury`)
+* **Resource (API Spec 4.8):** `/bank-accounts`, `/payments` (+ `/{id}/settle`), `/cash-transactions`, `/reconciliations`.
+* **Event:** **produksi `cashbank.payment.settled` → `erp.treasury.payment.settled.v1` (EOS)**. Dependensi: gl.
+* **Catatan:** integrasi **Bank/Payment Gateway via ACL** (INT-005, host-to-host + rekonsiliasi); Payment adalah proses EOS (ADR-005). `payment_no` unik non-partisi. Idempotency-Key wajib.
+
+## 10.4 Operational Services (SVC-012…015)
+
+### SVC-012 `procurement-service` — `procurement_db` (skema `pr`, `po`, `gr`)
+* **Resource (API Spec 5.2):** `/purchase-requisitions`, `/purchase-orders` (+ `/{id}/approve`), `/goods-receipts`.
+* **Event:** `erp.procurement.po.approved.v1`, `erp.procurement.goods.received.v1` (ALO+idemp). Dependensi: masterdata, workflow.
+* **Catatan:** tiga skema (PR→PO→GR) dalam satu DB; approval via workflow-service; hulu bagi AP (INT-002). Konsumsi `masterdata.vendor/item.upserted`.
+
+### SVC-013 `inventory-service` — `inventory_db` (skema `inventory`)
+* **Resource (API Spec 5.3):** `/warehouses`, `/stock-items`, `/stock-movements`, `/reservations` (+ `/{id}/reserve`).
+* **Event:** **produksi `erp.inventory.stock.reserved.v1` & `erp.inventory.goods.issued.v1` (EOS)**, `goods.received` (ALO). Dependensi: masterdata.
+* **Catatan:** `stock_movement` terpartisi bulanan; reservasi & goods-issued adalah proses EOS (ADR-005). Konsumen `sales.order.confirmed` (untuk reservasi, Saga INT-001).
+
+### SVC-014 `manufacturing-service` — `manufacturing_db` (skema `manufacturing`)
+* **Resource (API Spec 5.5):** `/bill-of-materials`, `/work-orders` (+ `/{id}/complete`), `/production-routes`.
+* **Event:** `erp.manufacturing.workorder.completed.v1` (ALO+idemp). Dependensi: inventory.
+* **Catatan:** konsumsi/menghasilkan pergerakan stok via inventory; bukan produsen EOS.
+
+### SVC-015 `sales-service` — `sales_db` (skema `sales`)
+* **Resource (API Spec 5.4):** `/sales-orders` (+ `/{id}/confirm`), `/quotations`, `/deliveries`.
+* **Event:** `erp.sales.order.confirmed.v1` (ALO+idemp). Dependensi: masterdata, inventory.
+* **Catatan:** pemicu Saga INT-001 (Sales→Inventory reserve→AR invoice→GL). Konsumsi `masterdata.customer/item.upserted`, `inventory.stock.reserved`.
+
+## 10.5 Human Resource and Payroll Services (SVC-016…017)
+
+### SVC-016 `hr-service` — `hr_db` (skema `hr`)
+* **Resource (API Spec 6.2):** `/employees`, `/positions`, `/employment-contracts`, `/leave-requests`.
+* **Event:** `erp.hr.employee.updated.v1` (ALO+idemp). Dependensi: org.
+* **Catatan:** **PII berat** — field-level encryption untuk **NIK** & data pribadi (BAB 7.6, UU PDP); PII tidak di-log. Integrasi BPJS via ACL (INT-007).
+
+### SVC-017 `payroll-service` — `payroll_db` (skema `payroll`)
+* **Resource (API Spec 6.3):** `/payroll-runs` (+ `/{id}/run` → **202 Accepted**, async), `/payslips`, `/salary-components`.
+* **Event:** **produksi `erp.payroll.run.completed.v1` (EOS)**; konsumsi `hr.employee.updated`. Dependensi: hr.
+* **Catatan:** run payroll bersifat **asinkron** (202, BAB 4.4); Payroll→GL (INT-003, EOS). **Field-level encryption data gaji**; BPJS/tax (INT-007). PII ketat.
+
+## 10.6 Reporting Service (SVC-019, CQRS Consumer)
+
+### SVC-019 `reporting-service` — `reporting_db` (skema `reporting`)
+* **Resource:** `/reports`, `/dashboards`, `/report-queries` (read-only; materialized views).
+* **Event:** **konsumen lintas domain** (`gl.journal.posted`, `ar.invoice.issued`, `sales.order.confirmed`, dst.) — ALO + idempotency. Produsen: —.
+* **Catatan (ADR-009):** **read model CQRS**, denormalisasi dari event → materialized view / read replica. Konsumen murni (idempotent via `processed_event`); **tanpa outbox / tanpa base-entity** (DBDD). Boleh konek sebagai `erp_app_ro`. Target render dashboard <3s (NFR-003).
+
+> **SDD-071 — Reporting tidak menulis domain.** `reporting-service` **hanya** membangun read model dari event; ia tidak pernah menjadi *system of record* untuk data apa pun (CONS-014). Invalidasi/refresh view dipicu event, bukan panggilan sinkron.
+
+## 10.7 Summary
+
+Baseline 19 layanan mengikuti blueprint yang sama; delta-nya adalah DB/skema, resource API, event, dependensi, dan catatan khusus (EOS untuk GL/AP/AR/Inventory-reserve/Payment/Payroll; ACL untuk integrasi eksternal INT-005/006/007/008; PII berat di HR/Payroll; CQRS read-only di Reporting; wildcard consumer di Audit). Bangun sesuai urutan dependensi (10.1). Checklist scaffolding per layanan ada di BAB 11.4.
+
+---

@@ -1,0 +1,166 @@
+# 9.18 Master Data Management Requirements
+
+## 9.18.1 Overview
+
+Master Data Management (MDM) menyediakan mekanisme sentral untuk mengelola master data yang digunakan bersama (*Shared Master Data*) maupun bersifat lokal (*Isolated Master Data*) di seluruh organisasi dalam ERP.
+
+Sebagaimana ditetapkan pada Analisis Kebutuhan Bisnis ERP, master data tertentu seperti Vendor, Currency, dan Tax bersifat *shared* dan dapat digunakan bersama oleh seluruh entitas organisasi, sementara master data lain seperti Chart of Accounts dan Customer tertentu bersifat *isolated* dan hanya berlaku secara lokal pada organisasi tertentu.
+
+MDM mendefinisikan **Configurable Sharing Scope** (Global, Holding, Sub Holding, Company, Branch) sehingga setiap master data dapat ditentukan tingkat visibilitas dan kepemilikannya melalui konfigurasi, tanpa perubahan source code, sejalan dengan prinsip Configuration over Customization dan Organization Tree First.
+
+---
+
+# 9.18.2 Business Requirement Catalogue
+
+## BR-806 – Master Data Governance Framework
+
+| Attribute           | Description                                                                                                              |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-806                                                                                                               |
+| Requirement Name    | Master Data Governance Framework                                                                                     |
+| Category            | Master Data Management                                                                                              |
+| Priority            | Critical                                                                                                             |
+| Business Objective  | BO-004, BO-010                                                                                                       |
+| Stakeholder Owner   | SH-006 (CIO), SH-007 (Business Owner)                                                                                |
+| Description         | Sistem harus menyediakan kerangka kerja tata kelola master data yang mendefinisikan kepemilikan, klasifikasi, dan siklus hidup setiap entitas master data enterprise. |
+| Business Rationale  | Tata kelola yang jelas mencegah duplikasi, inkonsistensi, dan kepemilikan data yang tumpang tindih antar organisasi.  |
+| Business Value      | Menjadi Single Source of Truth bagi seluruh master data yang digunakan lintas modul ERP.                             |
+| Acceptance Criteria | Setiap entitas master data memiliki definisi kepemilikan (data steward) dan kebijakan sharing yang terdokumentasi.   |
+
+---
+
+## BR-807 – Shared Master Data Definition
+
+| Attribute        | Description                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-807                                                                                                       |
+| Requirement Name | Shared Master Data Definition                                                                                 |
+| Priority         | Critical                                                                                                     |
+| Description      | Sistem harus mendukung master data yang digunakan bersama oleh seluruh organisasi, seperti Vendor, Currency, dan Tax, agar tidak terjadi duplikasi antar entitas. |
+
+---
+
+## BR-808 – Isolated Master Data Definition
+
+| Attribute        | Description                                                                                             |
+| ---------------- | -------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-808                                                                                                 |
+| Requirement Name | Isolated Master Data Definition                                                                          |
+| Priority         | Critical                                                                                               |
+| Description      | Sistem harus mendukung master data yang bersifat lokal pada organisasi tertentu, seperti Chart of Accounts dan Customer tertentu, sesuai kebutuhan bisnis. |
+
+---
+
+## BR-809 – Configurable Sharing Scope
+
+| Attribute           | Description                                                                                                       |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-809                                                                                                         |
+| Requirement Name    | Configurable Sharing Scope                                                                                     |
+| Priority            | Critical                                                                                                       |
+| Description         | Sistem harus mendukung penentuan lingkup penggunaan (*sharing scope*) master data pada level Global, Holding, Sub Holding, Company, atau Branch. |
+| Acceptance Criteria | Administrator dapat mengubah sharing scope suatu master data melalui konfigurasi tanpa perubahan source code.  |
+
+---
+
+## BR-810 – Master Data Ownership and Stewardship
+
+| Attribute        | Description                                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-810                                                                                              |
+| Requirement Name | Master Data Ownership and Stewardship                                                                |
+| Priority         | High                                                                                                |
+| Description      | Sistem harus mendefinisikan pemilik data (*data steward*) yang bertanggung jawab terhadap akurasi dan validitas tiap entitas master data. |
+
+---
+
+## BR-811 – Master Data Duplication Prevention
+
+| Attribute        | Description                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-811                                                                                                |
+| Requirement Name | Master Data Duplication Prevention                                                                     |
+| Priority         | Critical                                                                                              |
+| Description      | Sistem harus menyediakan mekanisme deteksi dan pencegahan duplikasi master data (misalnya Vendor atau Customer dengan identitas yang sama). |
+
+---
+
+## BR-812 – Master Data Approval Workflow
+
+| Attribute        | Description                                                                                        |
+| ---------------- | ---------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-812                                                                                             |
+| Requirement Name | Master Data Approval Workflow                                                                       |
+| Priority         | High                                                                                               |
+| Description      | Perubahan pada master data kritikal harus melalui alur persetujuan sebelum berlaku efektif.        |
+
+---
+
+## BR-813 – Master Data Versioning and Effective Dating
+
+| Attribute        | Description                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-813                                                                                        |
+| Requirement Name | Master Data Versioning and Effective Dating                                                    |
+| Priority         | High                                                                                          |
+| Description      | Sistem harus menyimpan histori perubahan master data beserta periode berlaku (effective date) tanpa menghilangkan riwayat data. |
+
+---
+
+## BR-814 – Master Data Synchronization Across Organization
+
+| Attribute        | Description                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-814                                                                                       |
+| Requirement Name | Master Data Synchronization Across Organization                                                |
+| Priority         | Critical                                                                                      |
+| Description      | Perubahan pada Shared Master Data harus tersinkronisasi secara konsisten ke seluruh organisasi yang menggunakan data tersebut sesuai sharing scope. |
+
+---
+
+## BR-815 – Master Data Audit and Quality Monitoring
+
+| Attribute        | Description                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-815                                                                                          |
+| Requirement Name | Master Data Audit and Quality Monitoring                                                        |
+| Priority         | High                                                                                            |
+| Description      | Sistem harus menyediakan mekanisme pemantauan kualitas master data (kelengkapan, konsistensi, duplikasi) beserta pencatatan seluruh perubahan pada Audit Trail. |
+
+---
+
+# 9.18.3 Master Data Business Rules Reference
+
+| Business Rule ID | Description                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- |
+| BRule-MDM-001     | Setiap entitas master data harus memiliki sharing scope yang jelas: Global, Holding, Sub Holding, Company, atau Branch. |
+| BRule-MDM-002     | Master data yang bersifat Shared tidak boleh diduplikasi pada organisasi turunan yang menggunakan scope yang sama. |
+| BRule-MDM-003     | Perubahan pada Shared Master Data tidak boleh mengubah histori transaksi yang telah menggunakan versi sebelumnya. |
+| BRule-MDM-004     | Master data yang masih direferensikan oleh transaksi aktif tidak boleh dihapus secara permanen.                 |
+| BRule-MDM-005     | Setiap entitas master data wajib memiliki data steward yang bertanggung jawab atas validitasnya.                |
+| BRule-MDM-006     | Seluruh perubahan master data wajib tercatat pada Audit Trail.                                                   |
+
+---
+
+# 9.18.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                    |
+| -------------- | ------------------ | ----------- | ------------------------------------ |
+| BR-806         | BO-004              | SH-007      | Master Data Governance               |
+| BR-807         | BO-019              | SH-006      | Shared Master Data Management         |
+| BR-808         | BO-019              | SH-006      | Isolated Master Data Management       |
+| BR-809         | BO-019              | SH-006      | Sharing Scope Configuration            |
+| BR-810         | BO-010              | SH-007      | Data Stewardship                       |
+| BR-811         | BO-010              | SH-006      | Data Quality Control                   |
+| BR-812         | BO-011              | SH-007      | Master Data Approval                   |
+| BR-813         | BO-029              | SH-010      | Data Versioning                        |
+| BR-814         | BO-014              | SH-006      | Data Synchronization                   |
+| BR-815         | BO-028              | SH-010      | Data Quality & Audit                   |
+
+---
+
+# 9.18.5 Summary
+
+Modul **Master Data Management** memastikan seluruh master data enterprise dikelola secara konsisten sebagai Single Source of Truth, dengan mekanisme Shared dan Isolated Master Data serta Configurable Sharing Scope yang memungkinkan organisasi berkembang tanpa duplikasi atau inkonsistensi data.
+
+Seluruh requirement pada bagian ini akan diturunkan lebih lanjut menjadi Functional Requirements, desain basis data, spesifikasi API, dan skenario pengujian pada dokumen lanjutan.

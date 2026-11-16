@@ -1,0 +1,212 @@
+# 9.5.3.12 Currency Revaluation Requirements
+
+---
+
+# 9.5.3.12.1 Overview
+
+Currency Revaluation merupakan proses bisnis keuangan yang mengevaluasi kembali nilai aset, kewajiban, saldo akun, maupun transaksi dalam mata uang asing menggunakan Exchange Rate yang berlaku pada tanggal tertentu. Proses ini bertujuan untuk memastikan bahwa nilai tercatat dalam pembukuan mencerminkan nilai tukar terkini sesuai dengan standar akuntansi dan kebijakan perusahaan.
+
+Currency Revaluation menghasilkan penyesuaian nilai (*adjustment*), pengakuan keuntungan atau kerugian selisih kurs yang belum direalisasi (*unrealized foreign exchange gain/loss*), serta jurnal akuntansi yang dapat diposting ke General Ledger. Proses ini menjadi bagian penting dari aktivitas penutupan periode (*period-end closing*) dan pelaporan keuangan.
+
+---
+
+# 9.5.3.12.2 Business Capability
+
+Currency Revaluation menyediakan kapabilitas berikut:
+
+* Revaluasi saldo akun mata uang asing.
+* Revaluasi Accounts Receivable.
+* Revaluasi Accounts Payable.
+* Revaluasi Bank & Cash.
+* Revaluasi Intercompany.
+* Revaluasi Loan & Financing.
+* Multi-ledger revaluation.
+* Multi-book accounting.
+* Unrealized FX Gain/Loss calculation.
+* Reversal journal.
+* Preview & simulation.
+* Batch processing.
+* Approval workflow.
+* Audit trail.
+
+---
+
+# 9.5.3.12.3 Business Requirement Catalogue
+
+## BR-191 – Currency Revaluation Process
+
+| Attribute           | Description                                                                                                                                           |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-191                                                                                                                                                |
+| Requirement Name    | Currency Revaluation Process                                                                                                                          |
+| Category            | Currency Revaluation                                                                                                                                  |
+| Priority            | Critical                                                                                                                                              |
+| Business Objective  | BO-011                                                                                                                                                |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                                                      |
+| Description         | Sistem harus menyediakan proses Currency Revaluation yang dapat dijalankan berdasarkan periode, tanggal efektif, atau kebutuhan operasional tertentu. |
+| Business Value      | Memastikan nilai aset dan kewajiban dalam mata uang asing mencerminkan nilai tukar terkini.                                                           |
+| Acceptance Criteria | Sistem dapat menghasilkan hasil revaluasi beserta jurnal penyesuaian secara otomatis.                                                                 |
+
+---
+
+## BR-192 – Revaluation Scope
+
+| Attribute        | Description                                                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-192                                                                                                                                                               |
+| Requirement Name | Revaluation Scope                                                                                                                                                    |
+| Priority         | Critical                                                                                                                                                             |
+| Description      | Sistem harus mendukung revaluasi berdasarkan Financial Organization, Legal Entity, Ledger, Financial Book, Business Unit, Account, Currency, maupun jenis transaksi. |
+
+---
+
+## BR-193 – Exchange Rate Selection
+
+| Attribute        | Description                                                                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-193                                                                                                                                                              |
+| Requirement Name | Exchange Rate Selection                                                                                                                                             |
+| Priority         | Critical                                                                                                                                                            |
+| Description      | Sistem harus memilih Exchange Rate berdasarkan Currency Conversion Policy yang berlaku, termasuk Exchange Rate Type, Provider, Source, Effective Date, dan Version. |
+
+---
+
+## BR-194 – Unrealized FX Gain/Loss Calculation
+
+| Attribute        | Description                                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-194                                                                                                                                     |
+| Requirement Name | Unrealized FX Gain/Loss Calculation                                                                                                        |
+| Priority         | Critical                                                                                                                                   |
+| Description      | Sistem harus menghitung keuntungan atau kerugian selisih kurs yang belum direalisasi berdasarkan nilai tercatat dan nilai hasil revaluasi. |
+
+---
+
+## BR-195 – Journal Generation
+
+| Attribute        | Description                                                                                                                                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-195                                                                                                                                                     |
+| Requirement Name | Revaluation Journal Generation                                                                                                                             |
+| Priority         | Critical                                                                                                                                                   |
+| Description      | Sistem harus menghasilkan jurnal akuntansi secara otomatis berdasarkan hasil Currency Revaluation dan memetakan akun sesuai konfigurasi Chart of Accounts. |
+
+---
+
+## BR-196 – Simulation Mode
+
+| Attribute        | Description                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-196                                                                                                            |
+| Requirement Name | Revaluation Simulation                                                                                            |
+| Priority         | High                                                                                                              |
+| Description      | Sistem harus menyediakan mode simulasi sehingga pengguna dapat melihat dampak revaluasi sebelum jurnal diposting. |
+
+---
+
+## BR-197 – Reversal Processing
+
+| Attribute        | Description                                                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-197                                                                                                                       |
+| Requirement Name | Automatic Reversal                                                                                                           |
+| Priority         | High                                                                                                                         |
+| Description      | Sistem harus mendukung pembuatan jurnal pembalik (*reversal journal*) secara otomatis sesuai kebijakan akuntansi organisasi. |
+
+---
+
+## BR-198 – Approval Workflow
+
+| Attribute        | Description                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-198                                                                                                  |
+| Requirement Name | Revaluation Approval Workflow                                                                           |
+| Priority         | Critical                                                                                                |
+| Description      | Hasil Currency Revaluation harus melalui proses persetujuan sebelum jurnal diposting ke General Ledger. |
+
+---
+
+## BR-199 – Batch Processing
+
+| Attribute        | Description                                                                                                                             |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-199                                                                                                                                  |
+| Requirement Name | Batch Revaluation Processing                                                                                                            |
+| Priority         | High                                                                                                                                    |
+| Description      | Sistem harus mendukung pemrosesan revaluasi secara massal untuk beberapa organisasi, ledger, atau mata uang dalam satu siklus eksekusi. |
+
+---
+
+## BR-200 – Currency Revaluation Auditability
+
+| Attribute        | Description                                                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-200                                                                                                                                                                                      |
+| Requirement Name | Currency Revaluation Auditability                                                                                                                                                           |
+| Priority         | Critical                                                                                                                                                                                    |
+| Description      | Seluruh proses Currency Revaluation, termasuk parameter eksekusi, hasil perhitungan, jurnal, persetujuan, pembatalan, dan pembalikan harus terdokumentasi secara lengkap dalam Audit Trail. |
+
+---
+
+# 9.5.3.12.4 Business Rules
+
+| Business Rule ID | Description                                                                                                                 |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| BRule-CRV-001    | Currency Revaluation hanya dapat dijalankan pada periode akuntansi yang terbuka atau sesuai kebijakan period-end closing.   |
+| BRule-CRV-002    | Setiap proses revaluasi harus menggunakan satu Exchange Rate yang dipilih melalui Currency Conversion Policy yang aktif.    |
+| BRule-CRV-003    | Nilai transaksi historis tidak boleh diubah oleh proses revaluasi; penyesuaian dilakukan melalui jurnal akuntansi.          |
+| BRule-CRV-004    | Hasil revaluasi harus menghasilkan perhitungan Unrealized FX Gain/Loss yang dapat ditelusuri hingga transaksi sumber.       |
+| BRule-CRV-005    | Revaluation Run yang telah diposting tidak dapat diubah; koreksi dilakukan melalui reversal dan proses revaluasi baru.      |
+| BRule-CRV-006    | Satu objek keuangan tidak boleh direvaluasi dua kali pada periode yang sama tanpa proses pembatalan atau reversal yang sah. |
+| BRule-CRV-007    | Seluruh aktivitas revaluasi wajib memiliki jejak audit yang lengkap.                                                        |
+
+---
+
+# 9.5.3.12.5 Data Attributes
+
+| Attribute                   | Description                                                         |
+| --------------------------- | ------------------------------------------------------------------- |
+| Revaluation ID              | Identitas unik proses revaluasi.                                    |
+| Revaluation Number          | Nomor dokumen revaluasi.                                            |
+| Revaluation Date            | Tanggal pelaksanaan revaluasi.                                      |
+| Accounting Period           | Periode akuntansi.                                                  |
+| Financial Organization      | Organisasi keuangan yang diproses.                                  |
+| Legal Entity                | Entitas hukum.                                                      |
+| Ledger                      | Ledger yang direvaluasi.                                            |
+| Financial Book              | Financial Book yang digunakan.                                      |
+| Currency Scope              | Mata uang yang direvaluasi.                                         |
+| Exchange Rate Type          | Jenis kurs yang digunakan.                                          |
+| Exchange Rate Version       | Referensi ke Exchange Rate Version.                                 |
+| Currency Conversion Policy  | Referensi ke kebijakan konversi.                                    |
+| Unrealized Gain/Loss Amount | Nilai keuntungan atau kerugian selisih kurs yang belum direalisasi. |
+| Journal Batch Reference     | Referensi batch jurnal yang dihasilkan.                             |
+| Simulation Flag             | Menunjukkan apakah proses merupakan simulasi.                       |
+| Approval Status             | Draft, Pending Approval, Approved, Rejected, Posted, Reversed.      |
+| Status                      | Draft, Running, Completed, Failed, Posted, Reversed, Archived.      |
+| Created By / Created Date   | Informasi pembuatan proses.                                         |
+| Updated By / Updated Date   | Informasi perubahan terakhir.                                       |
+
+---
+
+# 9.5.3.12.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                 |
+| -------------- | ------------------ | ----------- | ------------------------------ |
+| BR-191         | BO-011             | SH-003      | Currency Revaluation Execution |
+| BR-192         | BO-011             | SH-003      | Scope Selection                |
+| BR-193         | BO-010             | SH-003      | Exchange Rate Resolution       |
+| BR-194         | BO-011             | SH-003      | FX Gain/Loss Calculation       |
+| BR-195         | BO-011             | SH-003      | Journal Generation             |
+| BR-196         | BO-029             | SH-010      | Simulation                     |
+| BR-197         | BO-011             | SH-003      | Reversal Processing            |
+| BR-198         | BO-029             | SH-003      | Approval Workflow              |
+| BR-199         | BO-027             | SH-007      | Batch Processing               |
+| BR-200         | BO-029             | SH-010      | Audit & Compliance             |
+
+---
+
+# 9.5.3.12.7 Summary
+
+Currency Revaluation merupakan proses bisnis inti dalam Financial Management Domain yang memastikan saldo aset, kewajiban, dan akun mata uang asing selalu mencerminkan nilai tukar yang berlaku pada tanggal pelaporan. Dengan dukungan pemilihan kurs berbasis kebijakan, simulasi, perhitungan keuntungan dan kerugian selisih kurs, pembuatan jurnal otomatis, pembalikan jurnal, pemrosesan massal, serta audit trail yang lengkap, ERP mampu mendukung proses penutupan periode dan pelaporan keuangan secara akurat, konsisten, dan sesuai dengan standar akuntansi.
+
+Seluruh requirement pada bagian ini menjadi dasar implementasi **General Ledger**, **Accounts Receivable**, **Accounts Payable**, **Cash & Bank Management**, **Treasury Management**, **Financial Consolidation**, **Period-End Closing**, dan **Financial Reporting**.

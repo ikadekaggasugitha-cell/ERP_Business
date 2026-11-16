@@ -1,0 +1,213 @@
+# BAB 1. Pendahuluan
+
+## 1.1 Purpose of Document
+
+Business Requirement Document (BRD) ini disusun untuk mendefinisikan kebutuhan bisnis tingkat tinggi (*High-Level Business Requirements*) dalam pengembangan **Enterprise Resource Planning (ERP) System**.
+
+Dokumen ini menjadi acuan utama bagi seluruh pemangku kepentingan (*stakeholders*) dalam memahami tujuan bisnis, ruang lingkup, kebutuhan utama, batasan, serta ekspektasi terhadap sistem ERP yang akan dikembangkan.
+
+BRD berfungsi sebagai dasar dalam penyusunan dokumen lanjutan, antara lain:
+
+* Software Requirement Specification (SRS)
+* Functional Specification (FS)
+* Solution Architecture Document (SAD)
+* Database Design
+* API Specification
+* User Interface Specification
+* Test Plan
+* User Acceptance Test (UAT)
+* Deployment Plan
+* Operation Manual
+
+Seluruh kebutuhan bisnis yang terdokumentasi pada BRD akan diturunkan menjadi kebutuhan fungsional dan nonfungsional pada tahap analisis sistem.
+
+---
+
+## 1.2 Project Overview
+
+Proyek ini bertujuan membangun sebuah **Enterprise Resource Planning (ERP) System** yang bersifat **modular**, **configurable**, **scalable**, dan **enterprise-ready**.
+
+ERP dirancang untuk mendukung organisasi dengan struktur yang terus berkembang, mulai dari perusahaan tunggal hingga grup perusahaan yang terdiri atas Holding, Sub Holding, Company, Business Unit, Branch, Department, Warehouse, Plant, Project Site, dan unit organisasi lainnya.
+
+Berbeda dengan banyak ERP yang memiliki struktur organisasi tetap, sistem ini mengadopsi prinsip **Configuration over Customization**, sehingga perubahan struktur organisasi dilakukan melalui konfigurasi tanpa memerlukan perubahan source code.
+
+Selain itu, sistem akan menerapkan prinsip **Organization Tree First**, yaitu seluruh data, hak akses, workflow, master data, dan pelaporan mengacu pada hierarki organisasi yang dikelola secara dinamis.
+
+---
+
+## 1.3 Business Background
+
+Perkembangan organisasi bisnis saat ini menuntut sistem informasi yang mampu mengikuti perubahan struktur perusahaan secara cepat dan efisien. Banyak organisasi memulai operasional sebagai satu perusahaan, kemudian berkembang menjadi grup perusahaan dengan berbagai anak perusahaan, sub holding, unit bisnis, cabang, maupun lokasi operasional yang tersebar.
+
+Pada kondisi tersebut, penggunaan aplikasi yang tidak dirancang untuk mendukung struktur organisasi bertingkat sering menimbulkan berbagai permasalahan, seperti:
+
+* Duplikasi data master antar perusahaan.
+* Sulitnya melakukan konsolidasi laporan.
+* Hak akses yang kompleks dan tidak fleksibel.
+* Workflow persetujuan yang berbeda pada setiap perusahaan.
+* Ketergantungan terhadap perubahan kode ketika organisasi berkembang.
+* Integrasi data yang tidak konsisten.
+
+ERP yang akan dikembangkan ditujukan untuk mengatasi tantangan tersebut melalui platform terpadu yang mampu mengelola seluruh proses bisnis lintas organisasi dalam satu sistem.
+
+---
+
+## 1.4 Business Problem Statement
+
+Berdasarkan hasil identifikasi awal, terdapat beberapa permasalahan utama yang menjadi dasar pengembangan sistem ERP.
+
+1. Struktur organisasi perusahaan bersifat dinamis dan terus berkembang.
+2. Sistem yang ada belum mampu mendukung organisasi bertingkat secara fleksibel.
+3. Master data tersebar pada berbagai sistem sehingga menimbulkan redundansi.
+4. Proses bisnis antar perusahaan belum terstandarisasi.
+5. Mekanisme persetujuan masih bergantung pada struktur organisasi yang bersifat statis.
+6. Laporan konsolidasi membutuhkan proses manual yang memakan waktu.
+7. Pengelolaan hak akses belum mengikuti ruang lingkup organisasi secara konsisten.
+8. Penambahan perusahaan atau unit bisnis sering memerlukan perubahan aplikasi.
+
+---
+
+## 1.5 Business Opportunity
+
+Pembangunan ERP memberikan peluang strategis bagi organisasi untuk:
+
+* Menyatukan seluruh proses bisnis dalam satu platform.
+* Menyediakan **Single Source of Truth** bagi seluruh data perusahaan.
+* Mengurangi duplikasi data dan pekerjaan manual.
+* Mempercepat proses pengambilan keputusan melalui data yang terintegrasi.
+* Mempermudah ekspansi organisasi tanpa perubahan arsitektur aplikasi.
+* Mendukung konsolidasi operasional dan keuangan pada tingkat Holding.
+* Meningkatkan efisiensi operasional melalui otomatisasi proses bisnis.
+* Menyediakan fondasi bagi transformasi digital organisasi.
+
+---
+
+## 1.6 Business Objectives
+
+Pengembangan ERP memiliki tujuan utama sebagai berikut:
+
+* Mendukung struktur organisasi tanpa batas jumlah level.
+* Mendukung pengelolaan multi-company dalam satu platform.
+* Menyediakan mekanisme konfigurasi organisasi tanpa perubahan source code.
+* Mengintegrasikan seluruh proses bisnis ke dalam satu sistem.
+* Menyediakan workflow yang dapat dikonfigurasi sesuai kebutuhan organisasi.
+* Menyediakan pengelolaan master data yang fleksibel (shared maupun isolated).
+* Menjamin keamanan data melalui mekanisme Role-Based Access Control (RBAC) dan Scope-Based Access Control.
+* Menyediakan pelaporan operasional maupun konsolidasi secara real-time.
+* Mendukung ekspansi bisnis jangka panjang.
+
+---
+
+## 1.7 Expected Business Value
+
+Implementasi ERP diharapkan memberikan manfaat sebagai berikut:
+
+### Operational Value
+
+* Standardisasi proses bisnis.
+* Otomatisasi aktivitas operasional.
+* Pengurangan pekerjaan manual.
+* Peningkatan produktivitas pengguna.
+
+### Management Value
+
+* Monitoring operasional secara real-time.
+* Dashboard eksekutif berbasis data.
+* Pengambilan keputusan yang lebih cepat.
+* Transparansi proses bisnis.
+
+### Financial Value
+
+* Efisiensi biaya operasional.
+* Pengurangan biaya integrasi sistem.
+* Peningkatan akurasi laporan keuangan.
+* Konsolidasi laporan lintas perusahaan.
+
+### Strategic Value
+
+* Mendukung pertumbuhan organisasi.
+* Mendukung transformasi digital.
+* Menjadi fondasi pengembangan modul baru.
+* Meningkatkan daya saing organisasi.
+
+---
+
+## 1.8 Scope of the Document
+
+Dokumen BRD ini mencakup kebutuhan bisnis tingkat tinggi untuk seluruh modul ERP, meliputi:
+
+* Organization Management
+* User & Access Management
+* Master Data Management
+* Procurement
+* Purchasing
+* Inventory Management
+* Warehouse Management
+* Sales Management
+* Customer Relationship Management (CRM)
+* Human Resource Management (HRM)
+* Payroll
+* Finance & Accounting
+* Fixed Asset Management
+* Manufacturing
+* Project Management
+* Document Management
+* Reporting & Dashboard
+* Workflow Management
+* Notification Management
+* Integration
+* Audit Trail
+
+Dokumen ini tidak membahas detail implementasi teknis seperti desain basis data, spesifikasi API, maupun rancangan antarmuka pengguna.
+
+---
+
+## 1.9 Intended Audience
+
+Dokumen ini ditujukan kepada:
+
+| Stakeholder          | Purpose                                                 |
+| -------------------- | ------------------------------------------------------- |
+| Executive Management | Menyetujui ruang lingkup dan tujuan bisnis proyek.      |
+| Steering Committee   | Mengarahkan dan mengawasi pelaksanaan proyek.           |
+| Business Owner       | Memastikan kebutuhan bisnis telah terakomodasi.         |
+| Project Manager      | Mengelola pelaksanaan proyek.                           |
+| Business Analyst     | Menurunkan kebutuhan bisnis menjadi kebutuhan sistem.   |
+| Enterprise Architect | Menyusun arsitektur enterprise.                         |
+| Solution Architect   | Mendesain solusi teknis.                                |
+| Development Team     | Mengembangkan sistem sesuai kebutuhan.                  |
+| QA Engineer          | Menyusun dan melaksanakan pengujian.                    |
+| IT Operations        | Menyiapkan implementasi dan operasional sistem.         |
+| Internal Audit       | Memastikan kepatuhan terhadap tata kelola dan regulasi. |
+
+---
+
+## 1.10 References
+
+Dokumen ini disusun dengan mengacu pada praktik terbaik dan standar yang umum digunakan dalam pengembangan sistem enterprise, antara lain:
+
+* IEEE 29148 — Systems and Software Engineering — Life Cycle Processes — Requirements Engineering.
+* BABOK® Guide Version 3 — Business Analysis Body of Knowledge.
+* PMBOK® Guide — Project Management Institute.
+* TOGAF® Standard — Enterprise Architecture.
+* BPMN 2.0 — Business Process Model and Notation.
+* ISO 9001 — Quality Management Systems.
+* ISO/IEC 27001 — Information Security Management Systems.
+* COBIT — Governance and Management of Enterprise IT.
+
+---
+
+## 1.11 Definitions
+
+| Term               | Definition                                                                             |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| ERP                | Enterprise Resource Planning, sistem terpadu untuk mengelola proses bisnis organisasi. |
+| Holding            | Entitas induk yang mengendalikan satu atau lebih perusahaan.                           |
+| Sub Holding        | Entitas di bawah Holding yang mengelola kelompok perusahaan tertentu.                  |
+| Company            | Badan usaha yang menjadi bagian dari struktur organisasi.                              |
+| Organization Unit  | Unit organisasi pada berbagai level dalam hierarki perusahaan.                         |
+| Organization Scope | Ruang lingkup data dan proses berdasarkan posisi organisasi.                           |
+| RBAC               | Role-Based Access Control, mekanisme pemberian hak akses berdasarkan peran.            |
+| Workflow           | Alur proses bisnis dan persetujuan yang dapat dikonfigurasi.                           |
+| Master Data        | Data utama yang digunakan bersama oleh berbagai modul ERP.                             |
+| Configuration      | Pengaturan sistem melalui konfigurasi tanpa perubahan kode aplikasi.                   |

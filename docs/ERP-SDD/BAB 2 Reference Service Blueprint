@@ -1,0 +1,111 @@
+# BAB 2. Reference Service Blueprint (`gl-service`)
+
+## 2.1 Overview
+
+Seluruh layanan backend dibangun dari **satu cetak biru (blueprint) yang sama**. Cetak biru itu bukan abstraksi di atas kertas melainkan kode nyata yang sudah diverifikasi: **`gl-service`** (SVC-007), layanan General Ledger. `gl-service` mengimplementasikan setiap pola lintas layanan — pool koneksi non-owner, batas RLS per-request, repository berbasis `sqlc`, optimistic locking, dan outbox relay — sehingga membuat layanan baru berarti **menyalin struktur ini dan mengganti bagian domain-spesifik** (skema, query, DSN, resource, event).
+
+> **SDD-001 — Reference-First Implementation.** `gl-service` adalah *single source of truth* pola implementasi. Perubahan pola (mis. cara menyuntik scope, cara relay outbox) diubah dulu di `gl-service`, diverifikasi, lalu direplikasi. Paket `internal/platform` disalin **verbatim** antar layanan.
+
+## 2.2 Anatomy of a Service
+
+Struktur direktori kanonik sebuah layanan (contoh `gl-service`):
+
+```text
+services/gl-service/
+├── cmd/server/main.go                 # entrypoint: pool (role app) + /healthz + wiring
+├── db/
+│   ├── schema/schema.sql              # katalog sqlc (DDL polos; source of truth = db/migrations/gl_db)
+│   └── queries/journal.sql            # SQL beranotasi -- name: (input sqlc)
+├── internal/
+│   ├── gldb/                          # DIHASILKAN sqlc (db.go, models.go, journal.sql.go) — jangan diedit
+│   ├── platform/postgres.go           # pgxpool + WithOrgScope (batas RLS) — SHARED verbatim
+│   └── repository/journal_repository.go
+├── sqlc.yaml                          # konfigurasi generator
+├── Makefile                           # target dev & pipeline migrasi
+├── go.mod / go.sum
+└── README.md
+```
+
+Peran tiap bagian:
+
+| Path                         | Peran                                                                                  | Sifat            |
+| ---------------------------- | -------------------------------------------------------------------------------------- | ---------------- |
+| `cmd/server/main.go`         | Entrypoint: buka pool sebagai role app, expose `/healthz`, *wire* repository & handler. | Per-service      |
+| `db/schema/schema.sql`       | Katalog DDL polos untuk `sqlc` (tanpa RLS/partisi/trigger) — hanya untuk *type-inference*. | Per-service      |
+| `db/queries/*.sql`           | Query beranotasi `-- name:` sebagai input `sqlc`.                                       | Per-service      |
+| `internal/<db>/`             | Kode `sqlc` yang dihasilkan — **tidak diedit manual**.                                  | Generated        |
+| `internal/platform/`         | Pool + `WithOrgScope` (batas RLS).                                                      | **Shared verbatim** |
+| `internal/repository/`       | Data-access layer: setiap panggilan scoped berjalan dalam `WithOrgScope`.               | Per-service      |
+
+> **SDD-002 — Migrasi adalah source of truth skema, bukan `schema.sql`.** DDL otoritatif (RANGE partitioning, RLS, trigger, document-number registry) berada di set migrasi repo-wide `db/migrations/<db>` (DBDD). `db/schema/schema.sql` sengaja **polos** — perannya hanya memberi `sqlc` katalog tipe. Keduanya wajib konsisten; gerbang `sqlc diff` di CI (BAB 9.3) menjaga sinkronisasi.
+
+## 2.3 The Layered Architecture (Handler → Repository → sqlc → Postgres)
+
+Aliran sebuah request menembus empat lapisan dengan tanggung jawab tegas:
+
+```mermaid
+flowchart TD
+    K["Kong Gateway<br/>OAuth2/OIDC · rate limit · route"] -->|"Bearer JWT + X-Organization-Id"| H
+    subgraph SVC["Go service (mis. gl-service)"]
+      H["Handler HTTP<br/>(cmd/server + handler)<br/>parse/validasi · envelope · error map"] --> R
+      R["Repository<br/>(internal/repository)<br/>aturan bisnis · transaksi · WithOrgScope"] --> Q
+      Q["Queries sqlc<br/>(internal/gldb)<br/>type-safe · beranotasi -- name:"] --> P
+    end
+    P["PostgreSQL<br/>RLS via app.org_scope · trigger · partisi"]
+    R -.->|"tulis baris outbox<br/>dalam transaksi yang sama"| P
+    Relay["Outbox relay<br/>(DrainOutbox → Kafka)"] -.->|poll| P
+    Relay -->|publish| Kafka["Kafka (Apicurio-validated)"]
+```
+
+* **Handler** (layer API, BAB 4): menerjemahkan HTTP ↔ domain — parsing, validasi bentuk, envelope respons, pemetaan error, header standar. Tidak berisi SQL maupun aturan bisnis inti.
+* **Repository** (layer domain, BAB 5): menegakkan aturan bisnis (BR-xxx), membungkus operasi multi-tabel dalam satu transaksi, dan **selalu** melewati `WithOrgScope` untuk operasi ber-scope.
+* **sqlc queries**: query type-safe yang dihasilkan dari `db/queries/*.sql`; tidak ada string SQL manual di kode Go.
+* **PostgreSQL**: penegak akhir — RLS, trigger nomor dokumen, partisi, constraint.
+
+## 2.4 The RLS Boundary (`WithOrgScope`)
+
+Inti keamanan multi-tenant ada pada satu fungsi di `internal/platform/postgres.go`. Pool **wajib** login sebagai role non-owner (`erp_app_rw`/`erp_app_ro`) yang **tanpa `BYPASSRLS`**, sehingga RLS benar-benar ditegakkan (bukan sekadar ada policy).
+
+```go
+// WithOrgScope menjalankan fn dalam satu transaksi yang scope organisasinya
+// disuntikkan untuk RLS via set_config('app.org_scope', ..., true).
+// `true` => transaction-local (semantik SET LOCAL) => scope tidak bocor antar
+// koneksi pool. Commit bila sukses, rollback bila error.
+func (d *DB) WithOrgScope(ctx context.Context, scope []uuid.UUID, fn func(pgx.Tx) error) (err error) {
+    tx, err := d.Pool.Begin(ctx)
+    if err != nil { return fmt.Errorf("begin: %w", err) }
+    defer func() { if err != nil { _ = tx.Rollback(ctx) } }()
+    if _, err = tx.Exec(ctx, "SELECT set_config('app.org_scope', $1, true)", scopeLiteral(scope)); err != nil {
+        return fmt.Errorf("set org scope: %w", err)
+    }
+    if err = fn(tx); err != nil { return err }
+    return tx.Commit(ctx)
+}
+```
+
+Invarian yang diwariskan seluruh layanan:
+
+* **`set_config(..., true)`** membuat scope **transaction-local** — aman pada pool koneksi bersama; scope tidak pernah bocor ke request lain.
+* **Scope kosong ⇒ `current_org_scope()` = NULL ⇒ RLS menolak semua baris** (*deny-by-default*). Scope diisi dari klaim token (BAB 7.4), berisi *Organization Tree path* pemanggil + org sistem (`0000…0000`) untuk data referensi bersama.
+* Operasi tanpa scope (mis. **outbox relay**) berjalan **di luar** `WithOrgScope` karena tabel teknis outbox tidak ber-RLS (BAB 6.3).
+
+## 2.5 What Is Shared vs What Is Per-Service
+
+| Komponen                                   | Shared verbatim | Per-service (delta)                        |
+| ------------------------------------------ | :-------------: | ------------------------------------------ |
+| `internal/platform/postgres.go`            |       ✔         | —                                          |
+| Pola `WithOrgScope` + role non-owner       |       ✔         | —                                          |
+| Envelope/error/pagination (helper API, BAB 4) |    ✔ (paket bersama) | endpoint & DTO domain                 |
+| Outbox relay skeleton (BAB 6.3)            |    ✔ (pola)     | topik & pemetaan event domain              |
+| `sqlc.yaml`, `Makefile`, CI workflow       |  ✔ (template)   | nama DB, path migrasi, path skema          |
+| `db/schema/schema.sql`, `db/queries/*.sql` |       —         | ✔ (skema & query domain)                   |
+| `internal/repository/*`                    |       —         | ✔ (aturan bisnis & aggregate domain)       |
+| `cmd/server/main.go`                       |  ✔ (kerangka)   | ✔ (wiring repository & handler domain)     |
+
+> **SDD-003 — DSN role app, bukan owner.** Di `main.go`, DSN default menunjuk role **`erp_app_rw`** (non-owner). Migrasi dijalankan terpisah sebagai owner (`erp_migrator`) melalui pipeline (BAB 9.2). Layanan **tidak pernah** memiliki tabelnya sendiri — ini menutup REVIEW O1 dan menjamin RLS aktif.
+
+## 2.6 Summary
+
+`gl-service` menetapkan cetak biru yang seragam: layout empat-lapis, batas RLS `WithOrgScope`, repository berbasis `sqlc`, dan outbox relay. BAB 3–9 memperluas tiap lapisan menjadi standar lintas layanan; BAB 10 hanya mencatat *delta* domain per layanan. Membuat layanan baru = salin blueprint ini + isi delta (checklist BAB 11.4).
+
+---

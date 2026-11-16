@@ -1,0 +1,15 @@
+config {
+  type: "assertion",
+  tags: ["assert", "gl", "cortex_v7"],
+  description: "Asserts Debit equals Credit across FC and PC within 0.01 tolerance"
+}
+
+SELECT
+  gl_journal_id,
+  posting_date,
+  SUM(amount_fc) AS sum_fc,
+  SUM(amount_pc) AS sum_pc
+FROM ${ref("fact_gl_transaction")}
+WHERE posting_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 MONTH)
+GROUP BY gl_journal_id, posting_date
+HAVING ABS(SUM(amount_fc)) > 0.01 OR ABS(SUM(amount_pc)) > 0.01

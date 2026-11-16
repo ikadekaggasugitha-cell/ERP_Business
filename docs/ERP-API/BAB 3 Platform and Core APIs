@@ -1,0 +1,169 @@
+# BAB 3. Platform and Core APIs
+
+## 3.1 Overview
+
+Bab ini mendefinisikan kontrak REST domain **Platform/Core**: Organization, User, Security, Workflow, Master Data, dan Audit. Seluruh *resource* mengikuti **Standard Resource Operations** (BAB 2.6) dan standar lintas API (BAB 2). Hanya skema kunci dan aksi domain yang dirinci. Setiap resource memetakan ke tabel DBDD BAB 3.
+
+---
+
+## 3.2 Organization API — API-001
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/organizations` |
+| Layanan | SVC-001 org-service |
+| Tabel | `org.organization`, `org.organization_type` |
+| Referensi | BR-001–006 (9.1) |
+
+**Endpoint tambahan (di luar CRUD standar):**
+
+| Method & Path                              | Deskripsi                                      |
+| ------------------------------------------ | ---------------------------------------------- |
+| `GET /v1/organizations/{id}/children`      | Anak langsung suatu organisasi.                |
+| `GET /v1/organizations/{id}/tree`          | Subtree (Organization Tree) dari node.         |
+| `POST /v1/organizations/{id}/activate`     | Transisi lifecycle → Active (BR-004).          |
+| `POST /v1/organizations/{id}/archive`      | Transisi lifecycle → Archived.                 |
+| `GET /v1/organization-types`               | Daftar tipe organisasi (API-002).              |
+
+**Skema `Organization` (response):**
+
+```json
+{
+  "id": "uuid",
+  "code": "COMP-001",
+  "name": "PT Contoh",
+  "organizationTypeId": "uuid",
+  "parentId": "uuid",
+  "path": "/holding/subholding/comp-001",
+  "status": "Active",
+  "effectiveFrom": "2026-01-01",
+  "effectiveTo": null,
+  "rowVersion": 3,
+  "createdAt": "2026-01-01T08:00:00Z",
+  "updatedAt": "2026-02-01T09:00:00Z"
+}
+```
+
+**Create request (`POST /v1/organizations`):** `code`, `name`, `organizationTypeId`, `parentId?`, `effectiveFrom`. Validasi: kode unik ber-scope (`409 ORG_CODE_DUPLICATE`, BR-005).
+
+---
+
+## 3.3 User API — API-003
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/users` |
+| Layanan | SVC-002 user-service |
+| Tabel | `usr.app_user`, `usr.user_identity`, `usr.user_org_assignment` |
+| Referensi | 9.2, INT-012 |
+
+**Endpoint tambahan:**
+
+| Method & Path                              | Deskripsi                                      |
+| ------------------------------------------ | ---------------------------------------------- |
+| `GET /v1/users/me`                         | Profil & scope pengguna terautentikasi.        |
+| `GET /v1/users/{id}/assignments`           | Penugasan akses ber-scope pengguna.            |
+| `POST /v1/users/{id}/assignments`          | Tambah penugasan (organization + role).        |
+| `DELETE /v1/users/{id}/assignments/{aid}`  | Cabut penugasan.                               |
+
+> Tidak ada endpoint *password* — autentikasi didelegasikan ke Identity Provider (INT-012, SAD BAB 7.3).
+
+---
+
+## 3.4 Security API (Role/Permission) — API-004
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/roles`, `/v1/permissions` |
+| Layanan | SVC-003 security-service |
+| Tabel | `sec.role`, `sec.permission`, `sec.role_permission`, `sec.role_scope` |
+| Referensi | BR-031–040 (9.4) |
+
+**Endpoint kunci:**
+
+| Method & Path                              | Deskripsi                                      |
+| ------------------------------------------ | ---------------------------------------------- |
+| `GET /v1/permissions`                      | Katalog izin (read-only).                      |
+| `GET /v1/roles/{id}/permissions`           | Izin pada peran.                               |
+| `PUT /v1/roles/{id}/permissions`           | Set izin peran (idempoten).                    |
+| `PUT /v1/roles/{id}/scopes`                | Set Scope-Based Access peran (BR-031).         |
+
+---
+
+## 3.5 Workflow API — API-005
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/workflow-definitions`, `/v1/workflow-instances` |
+| Layanan | SVC-004 workflow-service |
+| Tabel | `wf.workflow_definition/step/instance/task` |
+| Referensi | 9.3, INT-004 |
+
+**Endpoint kunci:**
+
+| Method & Path                                        | Deskripsi                                  |
+| ---------------------------------------------------- | ------------------------------------------ |
+| `POST /v1/workflow-definitions`                      | Buat definisi alur (steps, approver rule). |
+| `GET /v1/workflow-instances?documentRef=…`           | Cari instance per dokumen.                 |
+| `GET /v1/workflow-tasks?assignee=me&status=Pending`  | Tugas approval pengguna.                    |
+| `POST /v1/workflow-tasks/{id}/approve`               | Setujui tugas.                             |
+| `POST /v1/workflow-tasks/{id}/reject`                | Tolak tugas.                               |
+| `POST /v1/workflow-tasks/{id}/delegate`              | Delegasikan tugas.                         |
+
+Keputusan approval memicu *event* `erp.workflow.approval.completed.v1` (BAB 7.3) ke modul asal dokumen.
+
+---
+
+## 3.6 Master Data API — API-006 (Party), API-007 (Item)
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/parties` (customer/vendor), `/v1/items` |
+| Layanan | SVC-005 masterdata-service |
+| Tabel | `md.party`, `md.party_address`, `md.item`, `md.item_uom` |
+| Referensi | 9.18, BO-010 |
+
+**Skema `Party` (response, ringkas):**
+
+```json
+{
+  "id": "uuid",
+  "code": "CUST-0001",
+  "name": "PT Pelanggan",
+  "partyType": "customer",
+  "taxId": "0123456789",
+  "isShared": true,
+  "rowVersion": 1
+}
+```
+
+Perubahan master data menerbitkan `erp.masterdata.{customer,vendor,item}.upserted.v1` (Published Language, BAB 7.3) yang dikonsumsi modul lain.
+
+---
+
+## 3.7 Audit API — API-008
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/audit-logs` |
+| Layanan | SVC-018 audit-service |
+| Tabel | `audit.audit_log` (read-only) |
+| Referensi | BR-826–835 (9.20), NFR-018 |
+
+**Endpoint (read-only, append-only source):**
+
+| Method & Path                                                       | Deskripsi                          |
+| ------------------------------------------------------------------- | ---------------------------------- |
+| `GET /v1/audit-logs?entityType=journal_entry&entityId=…`            | Jejak audit per entitas.           |
+| `GET /v1/audit-logs?actorId=…&occurredAt[gte]=…`                    | Aktivitas per pengguna & rentang.  |
+| `GET /v1/audit-logs?correlationId=…`                                | Rekonstruksi alur lintas layanan.  |
+
+Audit bersifat **read-only** via API (tidak ada create/update/delete); pencatatan terjadi otomatis via konsumsi event (SAD BAB 7.7).
+
+---
+
+## 3.8 Summary
+
+Bab ini mendefinisikan kontrak REST domain Platform/Core: **Organization** (CRUD + traversal tree + lifecycle), **User** (profil, assignment ber-scope, tanpa password), **Security** (role/permission/scope), **Workflow** (definition/instance/task + aksi approve/reject/delegate), **Master Data** (party/item + event Published Language), dan **Audit** (read-only). Seluruh resource mengikuti standar BAB 2 dan memetakan ke tabel DBDD BAB 3 serta layanan SVC-001–005, 018.
+
+---

@@ -1,0 +1,190 @@
+# BAB 2. Design Standards and Conventions
+
+## 2.1 Overview
+
+Bab ini menetapkan standar dan konvensi basis data yang **wajib** diterapkan pada seluruh skema (BAB 3–8). Standardisasi ini menjaga konsistensi, keterujian, dan kemudahan pemeliharaan lintas 19+ basis data layanan, serta menghindari pengulangan definisi pada setiap tabel. Setiap standar diberi identifier **DBS-xxx**.
+
+---
+
+## 2.2 Naming Conventions
+
+| DBS ID  | Aturan                                                                                      |
+| ------- | ------------------------------------------------------------------------------------------- |
+| DBS-001 | Nama tabel & kolom: `snake_case`, huruf kecil, Bahasa Inggris.                               |
+| DBS-002 | Nama tabel: **tunggal** (singular), mis. `journal_entry`, bukan `journal_entries`.          |
+| DBS-003 | *Primary key* bernama `id`; *foreign key* bernama `<referenced_entity>_id`.                  |
+| DBS-004 | Skema (schema) PostgreSQL diberi nama sesuai domain (mis. `gl`, `ar`), di dalam basis data layanan. |
+| DBS-005 | Indeks: `idx_<table>_<columns>`; unik: `uq_<table>_<columns>`; constraint FK: `fk_<table>_<ref>`. |
+| DBS-006 | Kolom boolean berawalan `is_`/`has_` (mis. `is_active`); kolom waktu berakhiran `_at`; tanggal `_date`. |
+| DBS-007 | Kolom jumlah uang berakhiran `_amount`; kuantitas `_qty`; kurs `_rate`.                      |
+
+---
+
+## 2.3 Standard Data Types
+
+| Kebutuhan               | Tipe PostgreSQL                    | Catatan                                             |
+| ----------------------- | ---------------------------------- | --------------------------------------------------- |
+| Primary/Foreign key     | `UUID`                             | Default `gen_random_uuid()`; global-unik, aman untuk distribusi. |
+| Kode/identitas pendek   | `VARCHAR(n)`                       | Mis. `code VARCHAR(50)`.                             |
+| Teks bebas              | `TEXT`                             | Deskripsi, catatan.                                 |
+| Nilai uang              | `NUMERIC(20,4)`                    | Presisi tetap; hindari `float` untuk uang.          |
+| Kuantitas               | `NUMERIC(20,4)`                    | Sesuai presisi UoM.                                 |
+| Kurs                    | `NUMERIC(20,8)`                    | Presisi tinggi untuk konversi.                      |
+| Waktu (timestamp)       | `TIMESTAMPTZ`                      | Disimpan UTC (SAD BAB 11.9).                         |
+| Tanggal                 | `DATE`                             | Tanggal bisnis (posting date, dsb.).                |
+| Boolean                 | `BOOLEAN`                          | —                                                   |
+| Enumerasi status        | `VARCHAR` + `CHECK` **atau** tabel referensi | Enum konfigurabel → tabel referensi (BAB 8.8). |
+| Data semi-terstruktur   | `JSONB`                            | Untuk atribut fleksibel/rule expression (mis. workflow, validation rule). |
+
+---
+
+## 2.4 Common Columns (Base Entity) — DBS-008
+
+Seluruh tabel transaksional & master **mewarisi** kolom umum berikut (tidak diulang pada Data Dictionary per tabel kecuali relevan):
+
+| Column          | Type          | Null | Description                                                        |
+| --------------- | ------------- | ---- | ------------------------------------------------------------------ |
+| `id`            | UUID          | No   | Primary key (`gen_random_uuid()`).                                 |
+| `organization_id`| UUID         | No   | Referensi logis ke `org.organization`; basis Scope-Based Access & RLS. |
+| `created_at`    | TIMESTAMPTZ   | No   | Waktu pembuatan (default `now()`).                                 |
+| `created_by`    | UUID          | No   | Referensi logis pengguna pembuat.                                  |
+| `updated_at`    | TIMESTAMPTZ   | No   | Waktu perubahan terakhir.                                          |
+| `updated_by`    | UUID          | Yes  | Referensi logis pengguna pengubah.                                 |
+| `deleted_at`    | TIMESTAMPTZ   | Yes  | *Soft delete* (NULL = aktif).                                      |
+| `row_version`   | INTEGER       | No   | *Optimistic locking* (default 1, naik tiap update).               |
+
+Pengecualian: tabel `*_line`/anak dapat mengganti `organization_id` dengan warisan dari induk; tabel teknis (outbox) memiliki kolom sendiri (BAB 2.10).
+
+---
+
+## 2.5 Primary Keys, Foreign Keys, and Referential Integrity — DBS-009
+
+* **Primary key**: `UUID` tunggal pada `id`.
+* **Foreign key fisik**: **hanya diperbolehkan di dalam satu basis data layanan** (bounded context). Relasi lintas layanan menggunakan **referensi logis** (kolom `*_id` tanpa FK fisik), divalidasi di aplikasi atau via event (ADR-001).
+* **ON DELETE**: gunakan `RESTRICT`/`NO ACTION` untuk data transaksional; `CASCADE` hanya untuk relasi induk–anak yang benar-benar *composition* (mis. `journal_entry` → `journal_line`).
+* Integritas lintas layanan dijaga melalui Saga/rekonsiliasi (SAD BAB 5.7), bukan FK fisik.
+
+---
+
+## 2.6 Soft Delete and Optimistic Locking — DBS-010
+
+* **Soft delete**: penghapusan logis via `deleted_at`; query default memfilter `deleted_at IS NULL`. *Hard delete* hanya untuk kepatuhan (mis. *right to erasure* UU PDP, BAB 7.4).
+* **Optimistic locking**: `row_version` dicek & dinaikkan pada setiap update untuk mencegah *lost update* pada akses konkuren.
+
+---
+
+## 2.7 Multi-Tenancy Physical Design — DBS-011
+
+Menerapkan **Hybrid Multi-Tenancy** (ADR-002, SAD BAB 6.3):
+
+| Mode                         | Realisasi Fisik                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------- |
+| **Shared-schema (default)**  | Satu skema; seluruh tabel memiliki `organization_id`; isolasi via **RLS** (2.8).|
+| **Schema-per-tenant**        | Skema PostgreSQL terpisah per tenant berisolasi kuat; struktur tabel identik.   |
+
+Aturan keputusan mode mengacu SAD BAB 6.3. Pada mode shared, `organization_id` **wajib** ada di setiap tabel ber-scope dan menjadi bagian dari indeks utama.
+
+---
+
+## 2.8 Row-Level Security (RLS) Pattern — DBS-012
+
+Pada mode shared-schema, setiap tabel ber-scope mengaktifkan RLS:
+
+```sql
+ALTER TABLE gl.journal_entry ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY scope_isolation ON gl.journal_entry
+  USING (organization_id = ANY (current_setting('app.org_scope')::uuid[]));
+```
+
+* Layanan menyuntikkan *scope* organisasi pengguna ke parameter sesi `app.org_scope` (path Organization Tree) sebelum eksekusi query (SAD BAB 6.4, 11.3).
+* RLS menjadi *defense-in-depth* terakhir; filter aplikatif tetap diterapkan pada Data Access Layer.
+* Peran basis data aplikasi berjalan **tanpa** `BYPASSRLS`.
+
+---
+
+## 2.9 Partitioning Standards — DBS-013 (ADR-015)
+
+| Pola                  | Diterapkan pada                                        | Kunci Partisi           |
+| --------------------- | ------------------------------------------------------ | ----------------------- |
+| **RANGE (Utama)**     | Tabel bervolume tinggi berbasis waktu/periode fiskal   | `posting_date`/`created_at` |
+| **HASH (Sub-partisi)**| Isolasi beban jutaan transaksi antar-organisasi        | `organization_id`       |
+| **Composite (Hiper-skala)** | RANGE bulanan by date + HASH sub-partitioning (4–8 bucket)| `gl.journal_line`, `inv.stock_movement` |
+
+* Tabel jurnal GL (`journal_entry` & `journal_line`), pergerakan stok, log audit, dan outbox **dipartisi RANGE** per bulan (DBS-013, ADR-015).
+* Partisi baru dibuat otomatis (via `ensure_future_partitions()` / `pg_partman`) minimal 3 bulan sebelum periode berjalan, dengan RLS aktif otomatis pada partisi baru.
+* **Mandatory Partition Pruning**: Seluruh query data transaksional **wajib** menyertakan predikat filter tanggal dan `organization_id` agar scanner hanya menyentuh satu partisi fisik aktif.
+
+---
+
+## 2.10 Transactional Outbox and Idempotency Tables — DBS-014
+
+Setiap basis data layanan **produsen event** memiliki tabel `outbox` (berpartisi RANGE bulanan by `created_at`); setiap **konsumen event** memiliki tabel `processed_event` (SAD BAB 5.5, 5.6).
+
+**`<db>.outbox`** (PARTITION BY RANGE (`created_at`))
+
+| Column          | Type        | Null | Key | Description                                        |
+| --------------- | ----------- | ---- | --- | -------------------------------------------------- |
+| `id`            | UUID        | No   | PK  | Identitas baris outbox.                            |
+| `aggregate_type`| VARCHAR(100)| No   |     | Jenis agregat sumber (mis. `journal_entry`).       |
+| `aggregate_id`  | UUID        | No   | IDX | ID agregat sumber.                                 |
+| `event_type`    | VARCHAR(150)| No   |     | Nama event (mis. `erp.gl.journal.posted.v1`).      |
+| `payload`       | JSONB       | No   |     | Muatan event (Avro/JSON).                          |
+| `organization_id`| UUID       | No   |     | Scope (untuk partition key/routing).               |
+| `correlation_id`| UUID        | No   | IDX | Korelasi lintas layanan.                           |
+| `created_at`    | TIMESTAMPTZ | No   | PK  | Waktu penulisan (urutan publikasi & kunci partisi).|
+| `published_at`  | TIMESTAMPTZ | Yes  |     | NULL = belum dipublikasikan ke Kafka.              |
+
+**Indeks Kunci Outbox:** `idx_outbox_unpublished` (`WHERE published_at IS NULL`) untuk menjamin kecepatan polling outbox relay sub-milidetik.
+
+**`<db>.processed_event`** (deduplikasi/idempotensi)
+
+| Column          | Type        | Null | Key | Description                                        |
+| --------------- | ----------- | ---- | --- | -------------------------------------------------- |
+| `event_id`      | UUID        | No   | PK  | ID event yang telah diproses.                      |
+| `event_type`    | VARCHAR(150)| No   |     | Jenis event.                                       |
+| `processed_at`  | TIMESTAMPTZ | No   |     | Waktu pemrosesan.                                  |
+
+Penulisan `outbox` terjadi dalam **transaksi yang sama** dengan perubahan data agregat (menghindari *dual-write*).
+
+---
+
+## 2.11 Indexing Standards — DBS-015
+
+* Setiap FK/kolom join memiliki indeks pendukung.
+* Tabel ber-scope: indeks komposit diawali `organization_id` (mis. `idx_journal_entry_org_period`).
+* Gunakan **partial index** untuk `deleted_at IS NULL` pada tabel dengan banyak soft-delete.
+* **BRIN** untuk kolom waktu monoton pada tabel *time-series* besar (log, movement).
+* Kolom `code` unik ber-scope: `UNIQUE (organization_id, code)`.
+
+---
+
+## 2.12 Auditing and Effectivity (Temporal) Standards — DBS-016
+
+* **Audit ringan** disediakan oleh Common Columns (`created_*`, `updated_*`, `row_version`); **audit lengkap** (before/after) dikelola `audit-service` melalui event (BAB 3.7).
+* **Effectivity (temporal)**: entitas dengan masa berlaku memiliki `effective_from DATE` dan `effective_to DATE` (NULL = tak berbatas), mis. struktur organisasi, kurs, konfigurasi. Validasi tumpang-tindih periode dilakukan di aplikasi.
+
+---
+
+## 2.13 Tri-Currency Financial Line Standards — DBS-017 (ADR-014)
+
+Seluruh tabel baris transaksi finansial (`gl.journal_line`, `ar.invoice_line`, `ap.invoice_line`, `treasury.cash_transaction`) **wajib** mencatat nilai moneter dalam 3 lapisan valuta pada saat penulisan (*write-time*):
+
+| Kolom Moneter Standard | Tipe Data | Deskripsi |
+|---|---|---|
+| `<prefix>_amount` | `NUMERIC(20,4)` | Nilai dalam mata uang transaksi asli (*Transaction Currency / TC*). |
+| `currency_code` | `VARCHAR(3)` | Kode ISO 4217 mata uang transaksi. |
+| `functional_amount` | `NUMERIC(20,4)` | Nilai dalam mata uang statutori lokal (*Functional Currency / FC*). |
+| `functional_exchange_rate` | `NUMERIC(18,8)` | Kurs konversi dari TC ke FC pada tanggal posting transaksi. |
+| `presentation_amount` | `NUMERIC(20,4)` | Nilai dalam mata uang konsolidasi grup (*Presentation Currency / PC*). |
+| `presentation_exchange_rate` | `NUMERIC(18,8)`| Kurs konversi dari TC ke PC pada tanggal posting transaksi. |
+| `local_fiscal_period_id` | `UUID` | Periode fiskal statutori cabang (mis. Kalender April–Maret untuk JP/IN). |
+| `group_fiscal_period_id` | `UUID` | Periode fiskal konsolidasi grup holding (Kalender Jan–Des). |
+
+---
+
+## 2.13 Summary
+
+Bab ini menetapkan **16 standar basis data (DBS-001 s.d. DBS-016)** yang berlaku menyeluruh: konvensi penamaan, tipe data baku, **Common Columns**, kebijakan kunci & integritas (FK hanya intra-layanan), soft delete & optimistic locking, multi-tenancy fisik (Hybrid + RLS), partisi, tabel outbox/idempotensi, indeks, serta audit & efektivitas temporal. Seluruh desain per domain pada BAB 3–8 mengasumsikan standar ini kecuali dinyatakan lain.
+
+---

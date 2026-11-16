@@ -1,0 +1,139 @@
+# 9.5.4 General Ledger Requirements
+
+---
+
+# 9.5.4.1 Overview
+
+General Ledger (GL) merupakan modul inti (core module) dalam domain Financial Management yang berfungsi sebagai muara (single point of truth) bagi seluruh pencatatan transaksi akuntansi berbasis Chart of Accounts. Seluruh transaksi keuangan, baik yang berasal dari input manual maupun yang dihasilkan secara otomatis oleh sub-ledger seperti Accounts Payable, Accounts Receivable, Fixed Asset, Inventory, dan modul operasional lainnya, pada akhirnya akan tercatat di dalam General Ledger dalam bentuk jurnal (journal entry).
+
+General Ledger dirancang mengikuti prinsip Configuration over Customization dan Scope-Based Everything, sehingga setiap jurnal senantiasa terhubung dengan Financial Organization, Fiscal Calendar, dan Chart of Accounts yang berlaku pada scope organisasi terkait, tanpa bergantung pada struktur organisasi operasional secara langsung.
+
+Cakupan General Ledger meliputi pencatatan jurnal manual, jurnal otomatis dari sub-ledger, jurnal berulang (recurring journal), alokasi biaya (cost allocation), revaluasi mata uang (currency revaluation), proses penutupan periode (period-end closing), workflow persetujuan jurnal, mekanisme reversal/koreksi, serta kemampuan penelusuran (drill-down) dan audit trail atas seluruh transaksi yang tercatat.
+
+---
+
+# 9.5.4.2 Business Requirement Catalogue
+
+## BR-556 – General Ledger Core Engine & Chart of Accounts Integration
+
+| Attribute           | Description                                                                                                                                                                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | BR-556                                                                                                                                                                                                                                                          |
+| Requirement Name     | General Ledger Core Engine & Chart of Accounts Integration                                                                                                                                                                                                     |
+| Category             | General Ledger                                                                                                                                                                                                                                                 |
+| Priority             | Critical                                                                                                                                                                                                                                                        |
+| Business Objective   | BO-004, BO-022                                                                                                                                                                                                                                                  |
+| Stakeholder Owner    | SH-003 (CFO), SH-028 (Accounting Department)                                                                                                                                                                                                                   |
+| Description          | Sistem harus menyediakan General Ledger sebagai mesin pencatatan jurnal inti berbasis Chart of Accounts, yang menerima, memvalidasi, dan menyimpan seluruh jurnal dari sumber manual maupun otomatis sebagai satu-satunya sumber kebenaran pencatatan akuntansi. |
+| Business Rationale   | Tanpa satu mesin pencatatan jurnal yang terpusat dan konsisten, data keuangan dari berbagai sub-ledger dan entitas organisasi berisiko terfragmentasi, tidak sinkron, dan sulit dipertanggungjawabkan.                                                          |
+| Business Value       | Menjamin keandalan dan konsistensi data keuangan sebagai dasar seluruh pelaporan dan pengambilan keputusan organisasi.                                                                                                                                          |
+| Acceptance Criteria  | Sistem dapat menerima jurnal dari berbagai sumber (manual dan sub-ledger), memvalidasi keseimbangan debit-kredit serta kesesuaian Chart of Accounts dan scope organisasi sebelum jurnal berstatus posted, dan menolak jurnal yang tidak memenuhi validasi.       |
+
+---
+
+## BR-557 – Manual Journal Entry
+
+| Requirement ID | Requirement Name     | Priority | Description                                                                                                                                                        | Acceptance Criteria                                                                                                              |
+| --------------- | --------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| BR-557          | Manual Journal Entry | High     | Sistem harus memungkinkan pengguna yang berwenang untuk membuat, mengubah (sebelum posting), dan memposting jurnal manual dengan referensi dokumen pendukung. | Pengguna dapat membuat jurnal manual dengan minimal dua baris (debit dan kredit), melampirkan dokumen pendukung, dan menyimpannya sebagai draft sebelum diposting. |
+
+---
+
+## BR-558 – Automatic Journal Posting from Sub-Ledger
+
+| Requirement ID | Requirement Name                          | Priority | Description                                                                                                                                                                          | Business Value                                                                                                     |
+| --------------- | ------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| BR-558          | Automatic Journal Posting from Sub-Ledger | Critical | Sistem harus secara otomatis menghasilkan jurnal ke General Ledger berdasarkan transaksi dari Accounts Payable, Accounts Receivable, Fixed Asset, Inventory, dan modul sub-ledger lain sesuai mapping akun yang telah dikonfigurasi. | Menghilangkan input ganda antar modul dan menjamin konsistensi data antara sub-ledger dan General Ledger secara real-time. |
+
+---
+
+## BR-559 – Recurring Journal Template & Scheduling
+
+| Requirement ID | Requirement Name                        | Priority | Description                                                                                                                                                                    | Acceptance Criteria                                                                                                                          |
+| --------------- | ----------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| BR-559          | Recurring Journal Template & Scheduling | Medium   | Sistem harus menyediakan template jurnal berulang (recurring journal) yang dapat dijadwalkan untuk diposting secara otomatis pada periode tertentu, seperti biaya penyusutan berkala, akrual, atau amortisasi. | Pengguna dapat membuat template jurnal recurring dengan frekuensi dan durasi tertentu, dan sistem menghasilkan jurnal secara otomatis sesuai jadwal tanpa input ulang. |
+
+---
+
+## BR-560 – Cost Allocation & Distribution Journal
+
+| Requirement ID | Requirement Name                      | Priority | Description                                                                                                                                                                          |
+| --------------- | ---------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BR-560          | Cost Allocation & Distribution Journal | High     | Sistem harus mendukung alokasi biaya dari satu atau beberapa akun/scope sumber ke beberapa akun/scope tujuan berdasarkan basis alokasi yang dapat dikonfigurasi (persentase, proporsi, atau formula tertentu). |
+
+---
+
+## BR-561 – Currency Revaluation Journal
+
+| Requirement ID | Requirement Name          | Priority | Description                                                                                                                                                            | Business Value                                                                                                     |
+| --------------- | -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| BR-561          | Currency Revaluation Journal | High     | Sistem harus mampu menghasilkan jurnal revaluasi atas saldo akun bertipe mata uang asing (monetary account) menggunakan kurs penutupan periode yang berlaku, sesuai kebijakan Currency Management. | Menjamin saldo akun mata uang asing mencerminkan nilai wajar (fair value) pada setiap periode pelaporan.               |
+
+---
+
+## BR-562 – Period-End Closing & Period Lock
+
+| Requirement ID | Requirement Name                  | Priority | Description                                                                                                                                                              | Acceptance Criteria                                                                                                                     |
+| --------------- | ------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| BR-562          | Period-End Closing & Period Lock   | Critical | Sistem harus menyediakan proses penutupan periode akuntansi (period-end closing) yang mengunci periode dari posting baru setelah seluruh proses rekonsiliasi selesai, dengan mekanisme reopen yang terkendali. | Periode yang berstatus closed tidak dapat menerima jurnal baru kecuali melalui proses reopen yang memerlukan otorisasi khusus dan tercatat pada audit trail. |
+
+---
+
+## BR-563 – Journal Approval Workflow (Maker-Checker)
+
+| Requirement ID | Requirement Name                         | Priority | Description                                                                                                                                            |
+| --------------- | ------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BR-563          | Journal Approval Workflow (Maker-Checker) | High     | Sistem harus mendukung workflow persetujuan jurnal (maker-checker) yang configurable berdasarkan jenis jurnal, nilai nominal, dan scope organisasi sebelum jurnal dapat diposting. |
+
+---
+
+## BR-564 – Journal Reversal & Correction
+
+| Requirement ID | Requirement Name              | Priority | Description                                                                                                                                                    | Acceptance Criteria                                                                                                     |
+| --------------- | -------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| BR-564          | Journal Reversal & Correction   | High     | Sistem harus menyediakan mekanisme pembalikan (reversal) jurnal yang telah diposting, baik secara manual maupun otomatis pada awal periode berikutnya, tanpa menghapus jurnal asli. | Jurnal reversal tercatat sebagai entri baru yang berlawanan dengan jurnal asli, dengan referensi silang ke jurnal sumber, dan jurnal asli tetap tersimpan sebagai riwayat. |
+
+---
+
+## BR-565 – General Ledger Inquiry, Drill-Down & Audit Trail
+
+| Requirement ID | Requirement Name                                    | Priority | Description                                                                                                                                                          |
+| --------------- | ------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BR-565          | General Ledger Inquiry, Drill-Down & Audit Trail      | High     | Sistem harus menyediakan kemampuan penelusuran (drill-down) dari saldo akun/laporan hingga ke jurnal dan dokumen sumber transaksi, disertai jejak audit yang lengkap. |
+
+---
+
+# 9.5.4.3 General Ledger Business Rules
+
+| Business Rule ID | Description                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| BRule-GL-001      | Setiap jurnal wajib balance, yaitu total nilai debit harus sama dengan total nilai kredit, sebelum dapat diposting ke General Ledger.           |
+| BRule-GL-002      | Setiap baris jurnal wajib direferensikan ke Chart of Accounts yang valid, aktif, dan sesuai dengan scope Financial Organization terkait.        |
+| BRule-GL-003      | Jurnal yang dihasilkan secara otomatis dari sub-ledger tidak dapat diubah secara manual di General Ledger; koreksi hanya dapat dilakukan melalui dokumen sumber pada modul asal. |
+| BRule-GL-004      | Periode akuntansi yang telah berstatus closed tidak dapat menerima posting jurnal baru kecuali melalui mekanisme reopen dengan otorisasi khusus. |
+| BRule-GL-005      | Jurnal recurring wajib melalui validasi ulang atas akun dan nilai sebelum diposting secara otomatis pada setiap periode berjalan.                |
+| BRule-GL-006      | Setiap jurnal wajib memiliki jejak audit (audit trail) yang mencatat identitas pembuat, approver, waktu posting, dan sumber transaksi.          |
+| BRule-GL-007      | Revaluasi mata uang hanya berlaku pada akun bertipe monetary/foreign currency, menggunakan kurs penutupan periode sesuai kebijakan Currency Management. |
+
+---
+
+# 9.5.4.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                                  |
+| --------------- | ------------------- | ------------ | ------------------------------------------------ |
+| BR-556          | BO-004, BO-022      | SH-003       | General Ledger Core Engine Design                 |
+| BR-557          | BO-004              | SH-028       | Manual Journal Entry Process Design                |
+| BR-558          | BO-004, BO-022      | SH-028       | Sub-Ledger to GL Integration Design                |
+| BR-559          | BO-022              | SH-028       | Recurring Journal Configuration Design             |
+| BR-560          | BO-022              | SH-027       | Cost Allocation Engine Design                      |
+| BR-561          | BO-021, BO-022      | SH-003       | Currency Revaluation Process Design                |
+| BR-562          | BO-022              | SH-003       | Period-End Closing Process Design                  |
+| BR-563          | BO-028              | SH-028       | Journal Approval Workflow Configuration             |
+| BR-564          | BO-022, BO-028      | SH-028       | Journal Reversal & Correction Process Design        |
+| BR-565          | BO-004, BO-028      | SH-010       | General Ledger Inquiry & Audit Trail Design         |
+
+---
+
+# 9.5.4.5 Summary
+
+General Ledger merupakan modul inti yang menjadi muara seluruh transaksi akuntansi dari Accounts Payable, Accounts Receivable, Fixed Asset, dan modul operasional lainnya. Melalui pencatatan jurnal manual maupun otomatis, jurnal berulang, alokasi biaya, revaluasi mata uang, proses penutupan periode, serta workflow persetujuan dan audit trail yang terkendali, General Ledger menjamin bahwa seluruh data keuangan organisasi tercatat secara akurat, konsisten, dan dapat dipertanggungjawabkan sebagai single source of truth. Seluruh requirement pada bagian ini akan menjadi dasar bagi desain proses dan sistem lanjutan pada dokumen berikutnya.

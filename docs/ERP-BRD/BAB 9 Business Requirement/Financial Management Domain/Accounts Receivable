@@ -1,0 +1,166 @@
+# 9.5.6 Accounts Receivable Requirements
+
+---
+
+# 9.5.6.1 Overview
+
+Accounts Receivable (AR) merupakan domain yang mengelola seluruh siklus piutang usaha kepada pelanggan, mulai dari pencatatan invoice penjualan, penerimaan pembayaran (cash application), pemantauan aging piutang, pengelolaan kredit limit pelanggan, hingga proses collection dan dunning atas tagihan yang telah jatuh tempo.
+
+Domain ini terintegrasi erat dengan modul Sales/Order Management sebagai sumber invoice, modul Cash & Bank sebagai sumber penerimaan pembayaran, serta modul General Ledger sebagai tujuan akhir posting jurnal piutang. Seluruh transaksi Accounts Receivable dicatat berdasarkan Financial Organization dan Scope organisasi tempat transaksi terjadi, sehingga mendukung struktur Holding, Sub Holding, Company, Business Unit, hingga Branch tanpa batasan level melalui konfigurasi.
+
+Dengan pendekatan Configuration over Customization, kebijakan kredit limit, term pembayaran, metode alokasi pembayaran, serta eskalasi dunning dapat dikonfigurasi per Organization/Business Unit tanpa memerlukan perubahan source code, sehingga setiap entitas bisnis dapat menerapkan kebijakan piutang yang berbeda sesuai kebutuhan operasionalnya masing-masing.
+
+---
+
+# 9.5.6.2 Business Requirement Catalogue
+
+## BR-576 – Customer Invoice Recording
+
+| Attribute           | Description                                                                                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-576                                                                                                                                                                              |
+| Requirement Name    | Customer Invoice Recording                                                                                                                                                          |
+| Category            | Accounts Receivable                                                                                                                                                                 |
+| Priority            | Critical                                                                                                                                                                            |
+| Business Objective  | BO-003, BO-022                                                                                                                                                                      |
+| Stakeholder Owner   | SH-003 (CFO), SH-034 (Sales Department)                                                                                                                                             |
+| Description         | Sistem harus dapat mencatat invoice penjualan pelanggan secara otomatis dari transaksi Sales/Order Management maupun secara manual, lengkap dengan detail item, termin pembayaran, pajak, dan Scope organisasi terkait. |
+| Business Rationale  | Pencatatan invoice yang akurat dan terintegrasi dengan proses penjualan merupakan dasar bagi seluruh proses pengelolaan piutang, mulai dari penagihan hingga pelaporan keuangan.    |
+| Business Value      | Mengurangi kesalahan input manual, mempercepat proses penagihan, serta memastikan konsistensi data piutang antara modul penjualan dan modul keuangan.                              |
+| Acceptance Criteria | Sistem dapat membuat invoice pelanggan secara otomatis dari sales order/delivery yang telah disetujui, serta mendukung pembuatan invoice manual dengan validasi kelengkapan data sebelum posting ke General Ledger. |
+
+---
+
+## BR-577 – Cash Application (Payment Matching)
+
+| Requirement ID      | BR-577                                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement Name    | Cash Application (Payment Matching)                                                                                                        |
+| Priority            | Critical                                                                                                                                   |
+| Description         | Sistem harus dapat mencocokkan penerimaan pembayaran pelanggan terhadap satu atau beberapa invoice terbuka, baik secara otomatis berdasarkan referensi pembayaran maupun secara manual oleh pengguna. |
+| Acceptance Criteria | Pengguna dapat mengalokasikan satu penerimaan pembayaran ke banyak invoice atau sebaliknya, dengan sisa saldo yang tercatat sebagai partial payment atau unapplied cash. |
+
+---
+
+## BR-578 – Customer Credit Limit Management
+
+| Requirement ID      | BR-578                                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement Name    | Customer Credit Limit Management                                                                                                             |
+| Priority            | Critical                                                                                                                                      |
+| Description         | Sistem harus menyediakan pengaturan kredit limit per pelanggan yang dapat dikonfigurasi berdasarkan Scope organisasi, serta melakukan validasi otomatis saat transaksi penjualan atau invoice baru dibuat. |
+| Business Value      | Mengurangi risiko piutang tak tertagih melalui kontrol kredit limit yang konsisten di seluruh entitas organisasi.                             |
+
+---
+
+## BR-579 – Accounts Receivable Aging Report
+
+| Requirement ID      | BR-579                                                                                                                                    |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement Name    | Accounts Receivable Aging Report                                                                                                          |
+| Priority            | High                                                                                                                                       |
+| Description         | Sistem harus menyediakan laporan aging piutang yang mengelompokkan saldo piutang terbuka ke dalam interval waktu (bucket) yang dapat dikonfigurasi, per pelanggan, per Organization, maupun konsolidasi. |
+| Acceptance Criteria | Laporan aging dapat difilter berdasarkan Financial Organization, Business Unit, rentang tanggal, dan status pelanggan, serta dapat diekspor. |
+
+---
+
+## BR-580 – Collection and Dunning Process
+
+| Requirement ID      | BR-580                                                                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement Name    | Collection and Dunning Process                                                                                                          |
+| Priority            | High                                                                                                                                     |
+| Description         | Sistem harus mendukung proses collection dan dunning bertahap (dunning level) yang dapat dikonfigurasi berdasarkan umur piutang, dengan notifikasi otomatis kepada pelanggan dan tim penagihan internal. |
+| Business Value      | Mempercepat proses penagihan dan menurunkan tingkat piutang macet melalui eskalasi yang terstruktur dan konsisten.                       |
+
+---
+
+## BR-581 – Customer Statement of Account
+
+| Requirement ID      | BR-581                                                                                                                                 |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement Name    | Customer Statement of Account                                                                                                          |
+| Priority            | Medium                                                                                                                                 |
+| Description         | Sistem harus dapat menghasilkan Statement of Account per pelanggan yang menampilkan seluruh transaksi invoice, pembayaran, dan saldo berjalan dalam periode tertentu. |
+| Acceptance Criteria | Statement of Account dapat dihasilkan per pelanggan, per periode, dan dapat dikirimkan secara otomatis melalui email terjadwal.        |
+
+---
+
+## BR-582 – Credit Note and Debit Note Management
+
+| Requirement ID      | BR-582                                                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement Name    | Credit Note and Debit Note Management                                                                                                    |
+| Priority            | High                                                                                                                                      |
+| Description         | Sistem harus mendukung penerbitan credit note dan debit note terhadap invoice pelanggan untuk keperluan retur, koreksi harga, atau penyesuaian lain, dengan dampak langsung terhadap saldo piutang. |
+| Business Value      | Memastikan penyesuaian piutang tercatat secara akurat dan dapat ditelusuri kembali ke invoice asal.                                      |
+
+---
+
+## BR-583 – Bad Debt Write-Off and Provision
+
+| Requirement ID      | BR-583                                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement Name    | Bad Debt Write-Off and Provision                                                                                                          |
+| Priority            | Medium                                                                                                                                     |
+| Description         | Sistem harus mendukung proses pencadangan piutang tak tertagih (provision) serta penghapusan piutang (write-off) dengan mekanisme persetujuan berjenjang sesuai kebijakan Organization. |
+| Acceptance Criteria | Write-off piutang hanya dapat dilakukan setelah melalui proses approval sesuai matriks otorisasi yang berlaku pada Organization terkait.  |
+
+---
+
+## BR-584 – Multi-Currency Accounts Receivable
+
+| Requirement ID      | BR-584                                                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement Name    | Multi-Currency Accounts Receivable                                                                                                     |
+| Priority            | High                                                                                                                                    |
+| Description         | Sistem harus mendukung pencatatan invoice dan penerimaan pembayaran pelanggan dalam mata uang asing, termasuk perhitungan selisih kurs (realized/unrealized gain-loss) secara otomatis. |
+| Business Value      | Mendukung transaksi lintas negara dan konsolidasi laporan keuangan yang akurat pada organisasi multi-currency.                          |
+
+---
+
+## BR-585 – Accounts Receivable Dashboard and Analytics
+
+| Requirement ID      | BR-585                                                                                                                                       |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement Name    | Accounts Receivable Dashboard and Analytics                                                                                                  |
+| Priority            | Medium                                                                                                                                        |
+| Description         | Sistem harus menyediakan dashboard analitik piutang secara real-time yang menampilkan total outstanding, Days Sales Outstanding (DSO), tren collection, serta pelanggan dengan risiko keterlambatan tertinggi. |
+| Acceptance Criteria | Dashboard dapat difilter berdasarkan Financial Organization, Business Unit, dan periode, serta menampilkan data secara real-time dari transaksi yang tercatat. |
+
+---
+
+# 9.5.6.3 Accounts Receivable Business Rules
+
+| Business Rule ID | Description                                                                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-AR-001     | Setiap invoice pelanggan wajib dikaitkan dengan Financial Organization dan Scope organisasi tempat transaksi penjualan terjadi.  |
+| BRule-AR-002     | Invoice yang telah diposting ke General Ledger tidak dapat dihapus, melainkan hanya dapat dikoreksi melalui credit note atau debit note. |
+| BRule-AR-003     | Validasi kredit limit pelanggan wajib dijalankan sebelum invoice atau sales order baru disetujui, kecuali terdapat otorisasi override yang tercatat. |
+| BRule-AR-004     | Alokasi penerimaan pembayaran terhadap invoice mengikuti urutan First In First Out (FIFO) kecuali ditentukan lain oleh pengguna. |
+| BRule-AR-005     | Aging piutang dihitung berdasarkan tanggal jatuh tempo invoice, bukan tanggal penerbitan invoice.                                |
+| BRule-AR-006     | Write-off piutang wajib melalui proses approval berjenjang sesuai matriks otorisasi pada Organization terkait.                   |
+| BRule-AR-007     | Selisih kurs atas invoice dan pembayaran dalam mata uang asing wajib dihitung dan diposting secara otomatis ke akun selisih kurs yang telah dikonfigurasi. |
+
+---
+
+# 9.5.6.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder    | Future Process                          |
+| -------------- | ------------------- | -------------- | ----------------------------------------- |
+| BR-576         | BO-003, BO-022      | SH-003, SH-034 | Customer Invoice Processing              |
+| BR-577         | BO-003, BO-022      | SH-003, SH-034 | Cash Application Processing              |
+| BR-578         | BO-022              | SH-003, SH-034 | Customer Credit Control                  |
+| BR-579         | BO-022              | SH-003         | Accounts Receivable Aging Reporting      |
+| BR-580         | BO-003              | SH-003, SH-034 | Collection and Dunning Administration    |
+| BR-581         | BO-003              | SH-034         | Customer Statement Generation            |
+| BR-582         | BO-022              | SH-003, SH-034 | Credit/Debit Note Processing             |
+| BR-583         | BO-022              | SH-003         | Bad Debt Write-Off Administration        |
+| BR-584         | BO-021, BO-022      | SH-003         | Multi-Currency Receivable Processing     |
+| BR-585         | BO-022              | SH-003, SH-034 | Accounts Receivable Analytics            |
+
+---
+
+# 9.5.6.5 Summary
+
+Accounts Receivable Requirements menetapkan kebutuhan fungsional utama dalam pengelolaan piutang usaha pelanggan, mencakup pencatatan invoice, cash application, kredit limit, aging, collection/dunning, hingga analitik piutang. Seluruh requirement pada domain ini dirancang agar dapat dikonfigurasi per Financial Organization dan Scope organisasi, sehingga mendukung kebutuhan bisnis yang berbeda di setiap entitas tanpa memerlukan perubahan source code. Domain ini menjadi fondasi bagi integrasi lebih lanjut dengan modul Sales, Cash & Bank, dan General Ledger pada dokumen desain berikutnya.

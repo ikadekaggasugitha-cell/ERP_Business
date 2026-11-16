@@ -1,0 +1,187 @@
+# BAB 2. API Standards and Conventions
+
+## 2.1 Overview
+
+Bab ini menetapkan standar dan konvensi yang **wajib** diterapkan pada seluruh REST API (BAB 3–6). Standardisasi menjamin konsistensi, keterujian, dan kemudahan konsumsi lintas seluruh layanan. Konvensi *event* asinkron ditetapkan pada BAB 7.
+
+---
+
+## 2.2 Base URL, Routing, and API Gateway (Kong)
+
+* Seluruh API publik dipapar melalui **Kong** sebagai *single entry point* (ADR-003, SAD BAB 5.9).
+* Format base URL: `https://api.{env}.erp.example/{version}` (mis. `.../v1`).
+* Kong menangani *routing* ke layanan (SVC), autentikasi, *rate limiting*, dan *versioning* sebelum permintaan mencapai layanan Go.
+* Nama *resource* menggunakan **kebab-case**, **jamak** (plural): `/organizations`, `/journal-entries`, `/purchase-orders`.
+
+---
+
+## 2.3 Versioning
+
+| Aturan                                                                                     | Referensi        |
+| ------------------------------------------------------------------------------------------ | ---------------- |
+| Versi **mayor** pada URI: `/v1`, `/v2`. Perubahan *breaking* menaikkan versi mayor.        | INT-014, NFR-014 |
+| Perubahan *non-breaking* (menambah field opsional/endpoint) tidak menaikkan versi.         | NFR-014          |
+| Versi mayor didukung minimum **12 bulan** setelah rilis penerus (*deprecation policy*).     | NFR-014          |
+| Header `Deprecation` & `Sunset` dikirim pada endpoint yang akan dihentikan.                 | —                |
+
+---
+
+## 2.4 Authentication and Authorization (OAuth2/OIDC)
+
+* Autentikasi menggunakan **OAuth2/OIDC** — *Bearer* JWT pada header `Authorization: Bearer <token>` (INT-015).
+* Token divalidasi di **Kong**; permintaan tanpa/invalid token ditolak `401` (INT-015).
+* **Authorization** berbasis **RBAC + Scope** (SAD BAB 7.4): *scope*/klaim menentukan izin (mis. `gl.journal.post`); kekurangan izin → `403`.
+* Autentikasi antar-layanan internal menggunakan mTLS/token layanan (bukan alur ini).
+
+Contoh klaim token (ilustratif):
+
+```json
+{
+  "sub": "user-uuid",
+  "org_scope": ["org-uuid-1", "org-uuid-2"],
+  "roles": ["ap_officer"],
+  "permissions": ["ap.invoice.create", "ap.invoice.read"]
+}
+```
+
+---
+
+## 2.5 Organization Scope and Context
+
+* Konteks organisasi ditentukan dari klaim `org_scope` pada token; opsional dapat dipersempit dengan header `X-Organization-Id` (harus subset dari scope token).
+* Seluruh operasi tunduk pada **Scope-Based Access** (RLS di basis data, DBDD BAB 2.8). Data di luar scope tidak dikembalikan.
+* `organization_id` **tidak** diminta pada *body*; diturunkan dari konteks (mencegah *spoofing*).
+
+---
+
+## 2.6 Standard Resource Model and Operations
+
+Setiap *resource* mengikuti pola operasi standar (tidak diulang per resource di BAB 3–6, kecuali penyimpangan):
+
+| Operasi          | Method & Path                    | Deskripsi                                  | Sukses |
+| ---------------- | -------------------------------- | ------------------------------------------ | ------ |
+| List             | `GET /{resource}`                | Daftar (paginated, filter, sort).          | 200    |
+| Create           | `POST /{resource}`               | Buat (Idempotency-Key, validasi).          | 201    |
+| Retrieve         | `GET /{resource}/{id}`           | Ambil satu.                                | 200    |
+| Update (penuh)   | `PUT /{resource}/{id}`           | Ganti (optimistic lock via `If-Match`).    | 200    |
+| Update (parsial) | `PATCH /{resource}/{id}`         | Ubah sebagian.                             | 200    |
+| Delete           | `DELETE /{resource}/{id}`        | *Soft delete* (DBDD DBS-010).              | 204    |
+| Domain action    | `POST /{resource}/{id}/{action}` | Aksi domain (mis. `post`, `approve`).      | 200    |
+
+Operasi *mutasi* menghormati **optimistic locking** melalui header `If-Match: <row_version>` (DBDD DBS-010) → `409 Conflict` bila usang.
+
+---
+
+## 2.7 Request/Response Format
+
+* **Content-Type**: `application/json; charset=utf-8`.
+* Penamaan field JSON: **camelCase** (mis. `journalNo`, `postingDate`).
+* Waktu: **ISO 8601 / RFC 3339** (UTC), mis. `2026-08-05T10:00:00Z` (SAD BAB 11.9).
+* Uang: objek `{ "amount": "1000.0000", "currency": "IDR" }` (string desimal untuk presisi).
+* Objek respons *resource* menyertakan `id`, `rowVersion`, dan metadata audit (`createdAt`, `updatedAt`).
+
+---
+
+## 2.8 Pagination, Filtering, and Sorting
+
+* **Pagination** (default): `?page=1&size=25` (maks `size` 100). Alternatif *cursor* (`?cursor=…`) untuk dataset besar.
+* **Envelope** daftar:
+
+```json
+{
+  "data": [ /* items */ ],
+  "page": { "number": 1, "size": 25, "totalElements": 240, "totalPages": 10 }
+}
+```
+
+* **Filtering**: `?filter[status]=Posted&filter[postingDate][gte]=2026-01-01`.
+* **Sorting**: `?sort=-postingDate,journalNo` (prefix `-` = descending).
+
+---
+
+## 2.9 Error Model
+
+Model error seragam (konsisten SAD BAB 5.2.1):
+
+```json
+{
+  "error": {
+    "code": "GL_JOURNAL_UNBALANCED",
+    "message": "Total debit tidak sama dengan total kredit",
+    "correlationId": "b1f2a3c4-…",
+    "details": [
+      { "field": "lines", "issue": "debit=1000, credit=900" }
+    ]
+  }
+}
+```
+
+* `code` bersifat stabil & dapat diprogram (katalog pada BAB 8.4); `message` untuk manusia.
+* `correlationId` mengikuti `X-Correlation-Id` (BAB 2.12) untuk penelusuran (SAD BAB 11.6).
+
+---
+
+## 2.10 Idempotency
+
+* Operasi `POST` yang tidak aman diulang menerima header **`Idempotency-Key: <uuid>`**.
+* Server menyimpan hasil per kunci; permintaan berulang dengan kunci sama mengembalikan respons yang sama tanpa efek ganda (DBDD BAB 2.10, SAD BAB 11.4).
+* Wajib untuk operasi finansial (mis. posting jurnal, pembayaran).
+
+---
+
+## 2.11 Rate Limiting and Throttling
+
+* Diterapkan di **Kong** per konsumen/klien (INT-016).
+* Pelampauan batas → `429 Too Many Requests` dengan header `Retry-After` dan `RateLimit-*`.
+* Batas dikonfigurasi per tenant/plan (tidak mengganggu klien lain — NFR-012).
+
+---
+
+## 2.12 Correlation and Standard Headers
+
+| Header                 | Arah        | Deskripsi                                             |
+| ---------------------- | ----------- | ----------------------------------------------------- |
+| `Authorization`        | request     | Bearer JWT (OAuth2/OIDC).                             |
+| `X-Correlation-Id`     | req/resp    | Korelasi lintas layanan (dibuat bila absen).          |
+| `X-Organization-Id`    | request     | Penyempit scope (opsional; subset token).             |
+| `Idempotency-Key`      | request     | Idempotensi untuk POST tidak aman.                    |
+| `If-Match`             | request     | Optimistic locking (`rowVersion`).                    |
+| `Deprecation`/`Sunset` | response    | Penanda *deprecation* versi/endpoint.                 |
+| `RateLimit-*`/`Retry-After` | response| Informasi rate limiting.                             |
+
+---
+
+## 2.13 HTTP Status Codes
+
+| Kode | Penggunaan                                                       |
+| ---- | ---------------------------------------------------------------- |
+| 200  | OK (retrieve/update/action sukses).                              |
+| 201  | Created (resource baru).                                         |
+| 202  | Accepted (proses asinkron diterima, mis. payroll run).          |
+| 204  | No Content (soft delete).                                        |
+| 400  | Bad Request (validasi format).                                  |
+| 401  | Unauthorized (token invalid/absen).                             |
+| 403  | Forbidden (izin/scope kurang).                                  |
+| 404  | Not Found (di luar scope juga → 404, tidak bocorkan eksistensi).|
+| 409  | Conflict (optimistic lock / state invalid, mis. period locked). |
+| 422  | Unprocessable Entity (validasi bisnis, mis. jurnal unbalanced). |
+| 429  | Too Many Requests (rate limit).                                 |
+| 500  | Internal Server Error.                                          |
+| 503  | Service Unavailable (dependensi/failover).                      |
+
+---
+
+## 2.14 OpenAPI and Contract Governance
+
+* Setiap layanan menyediakan **OpenAPI 3.1** yang dipublikasikan & diagregasi di gateway (INT-013).
+* Perubahan kontrak melalui gerbang CI: *lint* + *breaking-change detection* (SAD BAB 10.6).
+* Skema *event* dikelola **Apicurio** (Avro/Protobuf) dengan kompatibilitas `BACKWARD` (BAB 7.2).
+* Contoh OpenAPI disajikan pada BAB 8.6.
+
+---
+
+## 2.15 Summary
+
+Bab ini menetapkan standar REST menyeluruh: gateway Kong & base URL, versioning URI, autentikasi OAuth2/OIDC + otorisasi RBAC/scope, konteks organisasi, model *resource* & operasi standar (termasuk optimistic locking), format JSON camelCase/ISO 8601, pagination/filter/sort, model error seragam, idempotensi, rate limiting, header standar, kode HTTP, serta tata kelola OpenAPI. Seluruh kontrak pada BAB 3–6 mengasumsikan standar ini kecuali dinyatakan lain.
+
+---

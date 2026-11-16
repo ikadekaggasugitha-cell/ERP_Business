@@ -1,0 +1,209 @@
+# 9.5.3.11 Currency Rounding Rule Requirements
+
+---
+
+# 9.5.3.11.1 Overview
+
+Currency Rounding Rule merupakan konfigurasi bisnis yang mendefinisikan metode pembulatan numerik yang diterapkan pada seluruh proses perhitungan mata uang dalam Enterprise Resource Planning (ERP). Aturan ini memastikan bahwa hasil perhitungan memiliki nilai yang konsisten, dapat direproduksi, serta memenuhi standar akuntansi, perpajakan, regulasi lokal, dan kebijakan organisasi.
+
+Currency Rounding Rule bekerja bersama Currency Precision. Currency Precision menentukan jumlah digit yang dipertahankan, sedangkan Currency Rounding Rule menentukan algoritma yang digunakan ketika nilai harus dibulatkan.
+
+---
+
+# 9.5.3.11.2 Business Capability
+
+Currency Rounding Rule menyediakan kapabilitas berikut:
+
+* Pengelolaan master aturan pembulatan.
+* Dukungan berbagai algoritma pembulatan.
+* Assignment berdasarkan Business Process.
+* Assignment berdasarkan Financial Organization, Legal Entity, Ledger, dan Financial Book.
+* Dukungan threshold pembulatan.
+* Effective dating.
+* Versioning.
+* Approval workflow.
+* Audit trail.
+* Integrasi dengan Financial Calculation Engine.
+
+---
+
+# 9.5.3.11.3 Business Requirement Catalogue
+
+## BR-181 – Currency Rounding Rule Master
+
+| Attribute           | Description                                                                                               |
+| ------------------- | --------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-181                                                                                                    |
+| Requirement Name    | Currency Rounding Rule Master                                                                             |
+| Category            | Currency Rounding Rule                                                                                    |
+| Priority            | Critical                                                                                                  |
+| Business Objective  | BO-009                                                                                                    |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                          |
+| Description         | Sistem harus menyediakan master Currency Rounding Rule yang dapat dikonfigurasi tanpa perubahan aplikasi. |
+| Business Value      | Menjamin konsistensi hasil pembulatan pada seluruh modul ERP.                                             |
+| Acceptance Criteria | Administrator dapat mengelola aturan pembulatan sesuai otorisasi.                                         |
+
+---
+
+## BR-182 – Multiple Rounding Algorithms
+
+| Attribute        | Description                                                                                                                                                                                                                              |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-182                                                                                                                                                                                                                                   |
+| Requirement Name | Multiple Rounding Algorithms                                                                                                                                                                                                             |
+| Priority         | Critical                                                                                                                                                                                                                                 |
+| Description      | Sistem harus mendukung berbagai algoritma pembulatan seperti Round Half Up, Round Half Down, Round Half Even (Banker's Rounding), Round Up (Ceiling), Round Down (Floor), Round Toward Zero, Round Away From Zero, dan Custom Algorithm. |
+
+---
+
+## BR-183 – Business Context Assignment
+
+| Attribute        | Description                                                                                                                                                                                                                      |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-183                                                                                                                                                                                                                           |
+| Requirement Name | Business Context Assignment                                                                                                                                                                                                      |
+| Priority         | High                                                                                                                                                                                                                             |
+| Description      | Aturan pembulatan harus dapat diterapkan berdasarkan konteks seperti Accounts Payable, Accounts Receivable, General Ledger, Tax, Payroll, Treasury, Inventory Costing, Budgeting, Interest Calculation, dan Financial Reporting. |
+
+---
+
+## BR-184 – Organization Scope
+
+| Attribute        | Description                                                                                                                                                                        |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-184                                                                                                                                                                             |
+| Requirement Name | Organization Scope                                                                                                                                                                 |
+| Priority         | High                                                                                                                                                                               |
+| Description      | Currency Rounding Rule harus dapat diterapkan secara global maupun dibatasi berdasarkan Financial Organization, Legal Entity, Ledger, Financial Book, Business Unit, atau Country. |
+
+---
+
+## BR-185 – Threshold Configuration
+
+| Attribute        | Description                                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-185                                                                                                                                     |
+| Requirement Name | Threshold Configuration                                                                                                                    |
+| Priority         | High                                                                                                                                       |
+| Description      | Sistem harus mendukung konfigurasi nilai ambang (*rounding threshold*) yang menentukan kapan suatu nilai dibulatkan ke atas atau ke bawah. |
+
+---
+
+## BR-186 – Effective Dating
+
+| Attribute        | Description                                                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-186                                                                                                                |
+| Requirement Name | Effective Dating                                                                                                      |
+| Priority         | High                                                                                                                  |
+| Description      | Setiap Currency Rounding Rule harus memiliki periode efektif sehingga perubahan tidak memengaruhi transaksi historis. |
+
+---
+
+## BR-187 – Rule Versioning
+
+| Attribute        | Description                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-187                                                                                                 |
+| Requirement Name | Currency Rounding Rule Versioning                                                                      |
+| Priority         | High                                                                                                   |
+| Description      | Sistem harus mendukung versioning terhadap aturan pembulatan sehingga histori perubahan tetap terjaga. |
+
+---
+
+## BR-188 – Approval Workflow
+
+| Attribute        | Description                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-188                                                                                                           |
+| Requirement Name | Rounding Rule Approval Workflow                                                                                  |
+| Priority         | Critical                                                                                                         |
+| Description      | Perubahan Currency Rounding Rule harus melalui proses persetujuan sebelum digunakan dalam transaksi operasional. |
+
+---
+
+## BR-189 – Dependency Validation
+
+| Attribute        | Description                                                                                                                                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-189                                                                                                                                                                                                |
+| Requirement Name | Dependency Validation                                                                                                                                                                                 |
+| Priority         | Critical                                                                                                                                                                                              |
+| Description      | Sistem harus mencegah penghapusan Currency Rounding Rule yang masih digunakan oleh Currency Precision, Currency Conversion Policy, Financial Calculation Engine, atau transaksi yang telah diposting. |
+
+---
+
+## BR-190 – Currency Rounding Rule Auditability
+
+| Attribute        | Description                                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-190                                                                                                                               |
+| Requirement Name | Currency Rounding Rule Auditability                                                                                                  |
+| Priority         | Critical                                                                                                                             |
+| Description      | Seluruh perubahan aturan pembulatan, proses persetujuan, publikasi, dan penonaktifan harus dicatat secara lengkap dalam Audit Trail. |
+
+---
+
+# 9.5.3.11.4 Business Rules
+
+| Business Rule ID | Description                                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+| BRule-CRR-001    | Setiap Currency Rounding Rule harus menggunakan satu algoritma pembulatan sebagai metode utama.                    |
+| BRule-CRR-002    | Currency Rounding Rule dapat dikaitkan dengan satu atau lebih Currency Precision sesuai konteks bisnis.            |
+| BRule-CRR-003    | Hasil pembulatan harus selalu diterapkan setelah proses perhitungan dan sebelum nilai diposting atau disajikan.    |
+| BRule-CRR-004    | Perubahan aturan pembulatan tidak boleh mengubah nilai transaksi yang telah diposting.                             |
+| BRule-CRR-005    | Hanya Currency Rounding Rule berstatus Approved dan Active yang dapat digunakan oleh Financial Calculation Engine. |
+| BRule-CRR-006    | Aturan yang telah digunakan pada transaksi historis tidak boleh dihapus secara permanen.                           |
+| BRule-CRR-007    | Seluruh aktivitas konfigurasi dan eksekusi aturan pembulatan wajib tercatat pada Audit Trail.                      |
+
+---
+
+# 9.5.3.11.5 Data Attributes
+
+| Attribute                    | Description                                                                         |
+| ---------------------------- | ----------------------------------------------------------------------------------- |
+| Currency Rounding Rule ID    | Identitas unik sistem.                                                              |
+| Rule Code                    | Kode unik aturan.                                                                   |
+| Rule Name                    | Nama aturan.                                                                        |
+| Description                  | Deskripsi bisnis.                                                                   |
+| Rounding Algorithm           | Half Up, Half Down, Half Even, Ceiling, Floor, Toward Zero, Away From Zero, Custom. |
+| Threshold Value              | Nilai ambang pembulatan.                                                            |
+| Precision Context            | Referensi ke Currency Precision Context.                                            |
+| Business Process Scope       | AP, AR, GL, Tax, Payroll, Treasury, Costing, Budgeting, Reporting, dll.             |
+| Financial Organization Scope | Ruang lingkup organisasi keuangan.                                                  |
+| Legal Entity Scope           | Ruang lingkup entitas hukum.                                                        |
+| Ledger Scope                 | Ruang lingkup ledger.                                                               |
+| Financial Book Scope         | Ruang lingkup financial book.                                                       |
+| Effective From               | Tanggal mulai berlaku.                                                              |
+| Effective To                 | Tanggal akhir berlaku.                                                              |
+| Approval Status              | Draft, Pending Approval, Approved, Published, Archived.                             |
+| Version                      | Nomor versi aturan.                                                                 |
+| Status                       | Active, Suspended, Inactive, Archived.                                              |
+| Remarks                      | Catatan bisnis.                                                                     |
+| Created By / Created Date    | Informasi pembuatan data.                                                           |
+| Updated By / Updated Date    | Informasi perubahan terakhir.                                                       |
+
+---
+
+# 9.5.3.11.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                 |
+| -------------- | ------------------ | ----------- | ------------------------------ |
+| BR-181         | BO-009             | SH-003      | Rounding Rule Administration   |
+| BR-182         | BO-010             | SH-003      | Numeric Calculation            |
+| BR-183         | BO-010             | SH-003      | Business Process Configuration |
+| BR-184         | BO-009             | SH-003      | Organization Assignment        |
+| BR-185         | BO-010             | SH-003      | Threshold Evaluation           |
+| BR-186         | BO-029             | SH-010      | Effective Date Governance      |
+| BR-187         | BO-029             | SH-010      | Version Management             |
+| BR-188         | BO-029             | SH-003      | Approval Workflow              |
+| BR-189         | BO-029             | SH-010      | Dependency Validation          |
+| BR-190         | BO-029             | SH-010      | Audit & Compliance             |
+
+---
+
+# 9.5.3.11.7 Summary
+
+Currency Rounding Rule menyediakan mekanisme standar untuk menentukan bagaimana hasil perhitungan mata uang dibulatkan sebelum digunakan dalam transaksi, jurnal, pelaporan, maupun proses konsolidasi. Dengan mendukung berbagai algoritma pembulatan, ruang lingkup organisasi, konteks bisnis, versioning, serta audit trail, ERP mampu menghasilkan perhitungan yang konsisten, dapat diaudit, dan sesuai dengan standar akuntansi maupun regulasi yang berlaku.
+
+Currency Rounding Rule menjadi komponen inti dalam **Financial Calculation Engine** dan bekerja bersama **Currency Precision**, **Currency Conversion Policy**, **Tax Calculation Engine**, **Interest Calculation Engine**, **Inventory Costing**, serta **Financial Reporting**.

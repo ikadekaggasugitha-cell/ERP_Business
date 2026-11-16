@@ -1,0 +1,178 @@
+# 9.11 Asset Management Requirements
+
+## 9.11.1 Overview
+
+Asset Management mengelola pengelolaan aset tetap (*fixed asset*) dari sisi operasional, mulai dari registrasi aset, penentuan lokasi aset, pemeliharaan (*maintenance*), perpindahan aset antar unit organisasi, hingga penghapusan (*disposal*) aset yang sudah tidak layak digunakan.
+
+Modul ini bekerja secara terintegrasi dengan modul **Fixed Asset** pada **Financial Management Domain**, di mana Asset Management berperan sebagai sumber data operasional (kondisi, lokasi, status, riwayat pemeliharaan, dan riwayat perpindahan), sedangkan Fixed Asset berperan sebagai sumber data akuntansi (nilai perolehan, penyusutan, dan nilai buku).
+
+ERP harus memastikan bahwa data aset tercatat secara konsisten pada seluruh organisasi—Holding, Sub Holding, Company, Business Unit, Branch, Department, Warehouse, maupun Project Site—tanpa batas level, sesuai prinsip **Scope-Based Everything** dan **Single Source of Truth**.
+
+Setiap kebutuhan bisnis pada bagian ini menggunakan **Requirement ID (BR-xxx)** agar dapat ditelusuri ke Business Objectives (BO-xxx), Stakeholder (SH-xxx), Functional Requirements (FR-xxx), dan Test Cases (TC-xxx).
+
+---
+
+# 9.11.2 Business Requirement Catalogue
+
+## BR-736 – Asset Registration and Master Data
+
+| Attribute              | Description                                                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Requirement ID         | BR-736                                                                                                                                                          |
+| Requirement Name       | Asset Registration and Master Data                                                                                                                              |
+| Category               | Asset Management                                                                                                                                                 |
+| Priority               | Critical                                                                                                                                                        |
+| Business Objective     | BO-004, BO-014                                                                                                                                                  |
+| Stakeholder Owner      | SH-038 (Asset Management Department)                                                                                                                            |
+| Description            | Sistem harus menyediakan fungsi registrasi aset tetap secara terpusat, mencakup atribut identitas aset, kategori, spesifikasi, tanggal perolehan, dan Organization Scope kepemilikan. |
+| Business Rationale     | Registrasi aset yang terpusat dan konsisten diperlukan agar data aset dapat menjadi satu-satunya acuan (*single source of truth*) yang digunakan oleh seluruh unit organisasi maupun modul Fixed Asset. |
+| Business Value         | Data aset yang akurat dan konsisten sejak awal siklus hidup aset, serta mengurangi duplikasi pencatatan aset antar unit.                                        |
+| Acceptance Criteria    | Setiap aset yang diregistrasi memperoleh Asset Code unik dan tidak dapat diduplikasi pada organisasi manapun.                                                    |
+| Related Modules        | Asset Management, Fixed Asset (Financial Management Domain)                                                                                                     |
+| Related Business Rules | BRule-AST-001                                                                                                                                                   |
+
+---
+
+## BR-737 – Asset Location Management
+
+| Attribute           | Description                                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------|
+| Requirement ID      | BR-737                                                                                                                               |
+| Requirement Name    | Asset Location Management                                                                                                            |
+| Priority            | Critical                                                                                                                             |
+| Description         | Sistem harus mencatat dan memutakhirkan lokasi fisik setiap aset, termasuk Organization Scope, Warehouse, Department, atau Project Site tempat aset berada. |
+| Acceptance Criteria | Sistem dapat menampilkan lokasi terkini setiap aset beserta riwayat lokasi sebelumnya.                                               |
+
+---
+
+## BR-738 – Asset Identification and Tagging
+
+| Attribute           | Description                                                                                                          |
+| ------------------- | -----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Requirement ID      | BR-738                                                                                                               |
+| Requirement Name    | Asset Identification and Tagging                                                                                     |
+| Priority            | High                                                                                                                 |
+| Description         | Sistem harus mendukung identifikasi aset melalui label fisik seperti barcode atau QR Code yang terhubung dengan Asset Code pada sistem. |
+| Business Value      | Mempercepat proses identifikasi, verifikasi, dan pelacakan aset di lapangan.                                        |
+
+---
+
+## BR-739 – Preventive Maintenance Scheduling
+
+| Attribute           | Description                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-739                                                                                                                            |
+| Requirement Name    | Preventive Maintenance Scheduling                                                                                                 |
+| Priority            | High                                                                                                                              |
+| Description         | Sistem harus mendukung penjadwalan pemeliharaan preventif berdasarkan periode waktu atau parameter penggunaan aset yang dapat dikonfigurasi. |
+| Acceptance Criteria | Sistem menghasilkan notifikasi otomatis saat jadwal pemeliharaan aset jatuh tempo.                                               |
+
+---
+
+## BR-740 – Maintenance Work Order and History
+
+| Attribute           | Description                                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-740                                                                                                                         |
+| Requirement Name    | Maintenance Work Order and History                                                                                             |
+| Priority            | High                                                                                                                           |
+| Description         | Sistem harus mencatat setiap kegiatan pemeliharaan aset dalam bentuk *Work Order* beserta riwayat lengkap pemeliharaan aset tersebut. |
+| Business Value      | Riwayat pemeliharaan yang lengkap mendukung evaluasi kondisi aset dan perencanaan penggantian aset.                            |
+
+---
+
+## BR-741 – Asset Movement and Transfer
+
+| Attribute           | Description                                                                                                                             |
+| ------------------- | -----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Requirement ID      | BR-741                                                                                                                                  |
+| Requirement Name    | Asset Movement and Transfer                                                                                                             |
+| Priority            | Critical                                                                                                                                |
+| Description         | Sistem harus mendukung proses perpindahan aset antar unit organisasi melalui mekanisme persetujuan (*approval*) yang dapat dikonfigurasi. |
+| Acceptance Criteria | Setiap perpindahan aset tercatat sebagai riwayat perpindahan dan memutakhirkan Organization Scope kepemilikan aset secara otomatis.      |
+
+---
+
+## BR-742 – Asset Condition and Status Monitoring
+
+| Attribute        | Description                                                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-742                                                                                                                                         |
+| Requirement Name | Asset Condition and Status Monitoring                                                                                                         |
+| Priority         | Medium                                                                                                                                        |
+| Description      | Sistem harus mencatat status dan kondisi aset seperti Active, Under Maintenance, Idle, Damaged, atau Disposed, beserta riwayat perubahannya. |
+
+---
+
+## BR-743 – Asset Disposal and Write-off
+
+| Attribute           | Description                                                                                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Requirement ID      | BR-743                                                                                                                                              |
+| Requirement Name    | Asset Disposal and Write-off                                                                                                                        |
+| Priority            | Critical                                                                                                                                            |
+| Description         | Sistem harus mendukung proses pengajuan dan persetujuan penghapusan aset (*disposal*) yang tidak layak digunakan, rusak, hilang, atau dijual.       |
+| Acceptance Criteria | Aset yang telah disetujui untuk dihapuskan tidak dapat lagi dipindahkan, digunakan, atau dijadwalkan pemeliharaannya.                               |
+
+---
+
+## BR-744 – Integration with Fixed Asset Accounting
+
+| Attribute           | Description                                                                                                                                     |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-744                                                                                                                                          |
+| Requirement Name    | Integration with Fixed Asset Accounting                                                                                                        |
+| Priority            | Critical                                                                                                                                        |
+| Description         | Sistem harus mengintegrasikan data operasional aset (registrasi, lokasi, perpindahan, disposal) dengan modul Fixed Asset pada Financial Management Domain untuk keperluan penyusutan dan nilai buku. |
+| Business Value      | Konsistensi data aset antara sisi operasional dan sisi akuntansi tanpa duplikasi pencatatan.                                                   |
+
+---
+
+## BR-745 – Asset Physical Verification
+
+| Attribute           | Description                                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Requirement ID      | BR-745                                                                                                                                   |
+| Requirement Name    | Asset Physical Verification                                                                                                              |
+| Priority            | Medium                                                                                                                                   |
+| Description         | Sistem harus mendukung kegiatan verifikasi fisik aset (*stock opname aset*) secara berkala untuk memastikan kesesuaian antara data sistem dan kondisi fisik aset di lapangan. |
+| Acceptance Criteria | Sistem mencatat selisih (*discrepancy*) antara data aset pada sistem dengan hasil verifikasi fisik untuk ditindaklanjuti.               |
+
+---
+
+# 9.11.3 Asset Management Business Rules Reference
+
+| Business Rule ID | Description                                                                                                                       |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------|
+| BRule-AST-001     | Setiap aset wajib memiliki Asset Code unik sebelum dapat digunakan secara operasional.                                           |
+| BRule-AST-002     | Setiap aset wajib memiliki Organization Scope lokasi yang valid dan dapat ditelusuri kapan saja.                                 |
+| BRule-AST-003     | Perpindahan aset antar unit organisasi wajib melalui persetujuan berjenjang dan tercatat sebagai riwayat perpindahan.            |
+| BRule-AST-004     | Aset berstatus Under Maintenance tidak dapat dipindahkan atau dihapuskan sampai proses pemeliharaan selesai.                     |
+| BRule-AST-005     | Penghapusan (disposal) aset wajib melalui persetujuan berjenjang dan memicu penyesuaian nilai buku pada modul Fixed Asset.       |
+| BRule-AST-006     | Data operasional aset harus selalu sinkron dengan data akuntansi aset pada modul Fixed Asset sebagai single source of truth.     |
+| BRule-AST-007     | Setiap perubahan data aset wajib tercatat dalam audit trail, meliputi pengguna, waktu, dan alasan perubahan.                     |
+
+---
+
+# 9.11.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process              |
+| -------------- | ------------------ | ----------- | ---------------------------- |
+| BR-736         | BO-004             | SH-038      | Asset Registration           |
+| BR-737         | BO-014             | SH-038      | Asset Location Tracking      |
+| BR-738         | BO-004             | SH-038      | Asset Identification         |
+| BR-739         | BO-014             | SH-038      | Asset Maintenance Planning   |
+| BR-740         | BO-004             | SH-038      | Asset Maintenance History    |
+| BR-741         | BO-014             | SH-038      | Asset Movement               |
+| BR-742         | BO-004             | SH-038      | Asset Monitoring             |
+| BR-743         | BO-014             | SH-038      | Asset Disposal               |
+| BR-744         | BO-004, BO-014      | SH-038      | Fixed Asset Integration       |
+| BR-745         | BO-004             | SH-038      | Asset Verification           |
+
+---
+
+# 9.11.5 Summary
+
+Modul **Asset Management** mengelola siklus hidup aset tetap dari sisi operasional—registrasi, lokasi, pemeliharaan, perpindahan, hingga penghapusan—dengan tetap menjaga keselarasan data terhadap modul **Fixed Asset** pada Financial Management Domain sebagai sumber data akuntansi.
+
+Seluruh requirement pada bagian ini akan diturunkan lebih lanjut menjadi Functional Requirements, desain basis data, spesifikasi API, dan skenario pengujian pada dokumen lanjutan.

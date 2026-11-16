@@ -1,0 +1,168 @@
+# 9.5.2 Fiscal Calendar Requirements
+
+---
+
+# 9.5.2.1 Overview
+
+Financial Fiscal Calendar merupakan komponen inti dalam Financial Management Domain yang mengatur struktur tahun fiskal, periode akuntansi, periode pelaporan, dan siklus penutupan keuangan.
+
+Modul ini memastikan seluruh transaksi keuangan diposting ke periode yang benar, mendukung berbagai kalender fiskal dalam satu grup perusahaan, serta menyediakan mekanisme pengendalian pembukaan, penutupan, dan penyesuaian periode akuntansi.
+
+Financial Fiscal Calendar harus dapat digunakan oleh seluruh modul keuangan seperti General Ledger, Accounts Payable, Accounts Receivable, Fixed Asset, Treasury, Tax Management, Budget Management, dan Financial Reporting.
+
+---
+
+# 9.5.2.2 Business Requirement Catalogue
+
+## BR-061 – Fiscal Calendar Master
+
+| Attribute           | Description                                                                                                                      |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-061                                                                                                                           |
+| Requirement Name    | Fiscal Calendar Master                                                                                                           |
+| Category            | Financial Fiscal Calendar                                                                                                        |
+| Priority            | Critical                                                                                                                         |
+| Business Objective  | BO-009                                                                                                                           |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                                 |
+| Description         | Sistem harus menyediakan master Fiscal Calendar yang dapat dikonfigurasi secara independen dari struktur organisasi operasional. |
+| Business Value      | Mendukung berbagai kalender fiskal dalam satu grup perusahaan.                                                                   |
+| Acceptance Criteria | Administrator dapat membuat, mengubah, mengaktifkan, dan menonaktifkan Fiscal Calendar tanpa memengaruhi histori transaksi.      |
+
+---
+
+## BR-062 – Multiple Fiscal Calendar
+
+| Attribute           | Description                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-062                                                                                         |
+| Requirement Name    | Multiple Fiscal Calendar                                                                       |
+| Priority            | Critical                                                                                       |
+| Description         | Sistem harus mendukung lebih dari satu Fiscal Calendar yang aktif dalam satu implementasi ERP. |
+| Acceptance Criteria | Setiap Financial Organization dapat menggunakan Fiscal Calendar yang berbeda.                  |
+
+---
+
+## BR-063 – Configurable Fiscal Year
+
+| Attribute        | Description                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-063                                                                                                              |
+| Requirement Name | Configurable Fiscal Year                                                                                            |
+| Priority         | Critical                                                                                                            |
+| Description      | Sistem harus memungkinkan konfigurasi awal dan akhir tahun fiskal tanpa dibatasi tahun kalender (Januari–Desember). |
+
+---
+
+## BR-064 – Accounting Period Management
+
+| Attribute        | Description                                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-064                                                                                                                         |
+| Requirement Name | Accounting Period Management                                                                                                   |
+| Priority         | Critical                                                                                                                       |
+| Description      | Sistem harus mendukung pembentukan periode akuntansi bulanan, kuartalan, mingguan, atau pola lain sesuai kebijakan perusahaan. |
+
+---
+
+## BR-065 – Adjustment Period
+
+| Attribute        | Description                                                                                                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-065                                                                                                                                                                |
+| Requirement Name | Adjustment Period                                                                                                                                                     |
+| Priority         | High                                                                                                                                                                  |
+| Description      | Sistem harus mendukung satu atau lebih Adjustment Period yang digunakan untuk jurnal penyesuaian dan audit tanpa mengubah transaksi operasional pada periode reguler. |
+
+---
+
+## BR-066 – Period Status Management
+
+| Attribute        | Description                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-066                                                                                                              |
+| Requirement Name | Period Status Management                                                                                            |
+| Priority         | Critical                                                                                                            |
+| Description      | Setiap periode akuntansi harus memiliki status Draft, Open, Soft Close, Hard Close, Locked, Reopened, dan Archived. |
+
+---
+
+## BR-067 – Financial Period Locking
+
+| Attribute        | Description                                                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-067                                                                                                                                           |
+| Requirement Name | Financial Period Locking                                                                                                                         |
+| Priority         | Critical                                                                                                                                         |
+| Description      | Sistem harus mencegah transaksi baru diposting ke periode yang telah ditutup atau dikunci, kecuali oleh pengguna yang memiliki otorisasi khusus. |
+
+---
+
+## BR-068 – Fiscal Calendar Assignment
+
+| Attribute        | Description                                                                                                                 |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-068                                                                                                                      |
+| Requirement Name | Fiscal Calendar Assignment                                                                                                  |
+| Priority         | Critical                                                                                                                    |
+| Description      | Setiap Financial Organization wajib dikaitkan dengan satu Fiscal Calendar aktif sebelum dapat melakukan transaksi keuangan. |
+
+---
+
+## BR-069 – Fiscal Calendar Versioning
+
+| Attribute        | Description                                                                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-069                                                                                                                                                           |
+| Requirement Name | Fiscal Calendar Versioning                                                                                                                                       |
+| Priority         | High                                                                                                                                                             |
+| Description      | Sistem harus mendukung versioning terhadap konfigurasi Fiscal Calendar agar perubahan struktur periode tidak memengaruhi histori transaksi yang telah diposting. |
+
+---
+
+## BR-070 – Fiscal Calendar Auditability
+
+| Attribute        | Description                                                                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-070                                                                                                                                                                                                 |
+| Requirement Name | Fiscal Calendar Auditability                                                                                                                                                                           |
+| Priority         | Critical                                                                                                                                                                                               |
+| Description      | Seluruh perubahan pada Fiscal Calendar, periode akuntansi, dan status periode harus tercatat dalam Audit Trail beserta informasi pengguna, waktu perubahan, dan nilai sebelum serta sesudah perubahan. |
+
+---
+
+# 9.5.2.3 Financial Fiscal Calendar Business Rules
+
+| Business Rule ID | Description                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| BRule-FCAL-001   | Setiap Financial Organization wajib memiliki satu Fiscal Calendar aktif.                           |
+| BRule-FCAL-002   | Satu Fiscal Calendar dapat digunakan oleh lebih dari satu Financial Organization.                  |
+| BRule-FCAL-003   | Periode dengan status Hard Close atau Locked tidak dapat menerima transaksi baru.                  |
+| BRule-FCAL-004   | Reopening periode hanya dapat dilakukan oleh pengguna yang memiliki otorisasi khusus.              |
+| BRule-FCAL-005   | Adjustment Period hanya dapat digunakan untuk jurnal penyesuaian dan aktivitas penutupan keuangan. |
+| BRule-FCAL-006   | Perubahan konfigurasi Fiscal Calendar tidak boleh mengubah histori transaksi yang telah diposting. |
+| BRule-FCAL-007   | Seluruh perubahan status periode wajib tercatat pada Audit Trail.                                  |
+
+---
+
+# 9.5.2.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                    |
+| -------------- | ------------------ | ----------- | --------------------------------- |
+| BR-061         | BO-009             | SH-003      | Fiscal Calendar Administration    |
+| BR-062         | BO-009             | SH-003      | Multi Fiscal Calendar             |
+| BR-063         | BO-009             | SH-003      | Fiscal Year Configuration         |
+| BR-064         | BO-010             | SH-003      | Accounting Period Management      |
+| BR-065         | BO-011             | SH-003      | Adjustment Period Management      |
+| BR-066         | BO-011             | SH-003      | Period Status Control             |
+| BR-067         | BO-011             | SH-003      | Financial Closing                 |
+| BR-068         | BO-009             | SH-003      | Financial Organization Assignment |
+| BR-069         | BO-029             | SH-010      | Configuration Governance          |
+| BR-070         | BO-029             | SH-010      | Audit & Compliance                |
+
+---
+
+# 9.5.2.5 Summary
+
+Financial Fiscal Calendar menyediakan mekanisme standar untuk mengelola tahun fiskal, periode akuntansi, penyesuaian, dan penutupan keuangan dalam lingkungan enterprise. Dengan dukungan multi-calendar, versioning, penguncian periode, dan audit trail, modul ini memastikan integritas data keuangan sekaligus memberikan fleksibilitas bagi grup perusahaan yang memiliki kebijakan fiskal berbeda.
+
+Seluruh requirement pada bagian ini akan menjadi dasar bagi desain **General Ledger**, **Financial Close**, **Budget Management**, **Tax Management**, **Financial Reporting**, serta proses konsolidasi keuangan lintas perusahaan.

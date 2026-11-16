@@ -1,0 +1,178 @@
+# BAB 9. Business Requirements
+
+# 9.1 Organization Management Requirements
+
+## 9.1.1 Overview
+
+Organization Management merupakan fondasi utama Enterprise Resource Planning (ERP). Seluruh modul, data, workflow, hak akses, pelaporan, dan konfigurasi sistem bergantung pada struktur organisasi yang dikelola dalam modul ini.
+
+ERP harus mampu mendukung organisasi dengan struktur yang berkembang secara dinamis, mulai dari perusahaan tunggal hingga grup perusahaan yang terdiri atas Holding, Sub Holding, Company, Business Unit, Branch, Department, Warehouse, Plant, Project Site, maupun level organisasi lain yang ditentukan oleh kebutuhan bisnis.
+
+Setiap kebutuhan bisnis pada bagian ini menggunakan **Requirement ID (BR-xxx)** agar dapat ditelusuri ke Business Objectives (BO-xxx), Stakeholder (SH-xxx), Functional Requirements (FR-xxx), dan Test Cases (TC-xxx).
+
+---
+
+# 9.1.2 Business Requirement Catalogue
+
+## BR-001 – Dynamic Organization Hierarchy
+
+| Attribute              | Description                                                                                                             |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID         | BR-001                                                                                                                  |
+| Requirement Name       | Dynamic Organization Hierarchy                                                                                          |
+| Category               | Organization Management                                                                                                 |
+| Priority               | Critical                                                                                                                |
+| Business Objective     | BO-002, BO-005                                                                                                          |
+| Stakeholder Owner      | SH-007 (Business Owner)                                                                                                 |
+| Description            | Sistem harus mendukung struktur organisasi bertingkat tanpa batas jumlah level.                                         |
+| Business Rationale     | Struktur organisasi perusahaan dapat berkembang dari waktu ke waktu sehingga tidak boleh dibatasi oleh desain aplikasi. |
+| Business Value         | Fleksibilitas organisasi dan kemudahan ekspansi.                                                                        |
+| Acceptance Criteria    | Administrator dapat menambah level organisasi baru tanpa perubahan source code.                                         |
+| Related Modules        | Organization Management                                                                                                 |
+| Related Business Rules | BRule-ORG-001                                                                                                           |
+
+---
+
+## BR-002 – Configurable Organization Type
+
+| Attribute           | Description                                                                                                                                   |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-002                                                                                                                                        |
+| Requirement Name    | Configurable Organization Type                                                                                                                |
+| Category            | Organization Management                                                                                                                       |
+| Priority            | Critical                                                                                                                                      |
+| Business Objective  | BO-002                                                                                                                                        |
+| Stakeholder Owner   | SH-007                                                                                                                                        |
+| Description         | Sistem harus memungkinkan administrator mendefinisikan jenis organisasi melalui konfigurasi.                                                  |
+| Business Value      | Tidak bergantung pada struktur organisasi tertentu.                                                                                           |
+| Acceptance Criteria | Administrator dapat membuat tipe organisasi baru seperti Holding, Division, Region, Estate, Factory, atau tipe lain tanpa perubahan aplikasi. |
+
+---
+
+## BR-003 – Parent Child Organization
+
+| Attribute           | Description                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-003                                                                                                          |
+| Requirement Name    | Parent Child Relationship                                                                                       |
+| Priority            | Critical                                                                                                        |
+| Description         | Setiap organisasi harus memiliki hubungan Parent–Child yang membentuk Organization Tree.                        |
+| Acceptance Criteria | Sistem dapat menampilkan struktur organisasi secara hierarkis dan menjaga integritas hubungan antar organisasi. |
+
+---
+
+## BR-004 – Organization Lifecycle Management
+
+| Attribute        | Description                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-004                                                                                                            |
+| Requirement Name | Organization Lifecycle                                                                                            |
+| Priority         | High                                                                                                              |
+| Description      | Sistem harus mendukung siklus hidup organisasi mulai dari Draft, Active, Inactive, Merge, Split, hingga Archived. |
+| Business Value   | Riwayat organisasi tetap terjaga dan perubahan dapat diaudit.                                                     |
+
+---
+
+## BR-005 – Organization Code Management
+
+| Attribute           | Description                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-005                                                                                           |
+| Requirement Name    | Organization Code                                                                                |
+| Priority            | High                                                                                             |
+| Description         | Setiap organisasi harus memiliki kode unik yang dapat dikonfigurasi sesuai kebijakan perusahaan. |
+| Acceptance Criteria | Sistem menolak kode organisasi yang duplikat.                                                    |
+
+---
+
+## BR-006 – Organization Naming Convention
+
+| Attribute        | Description                                                                                                                               |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-006                                                                                                                                    |
+| Requirement Name | Organization Naming Convention                                                                                                            |
+| Priority         | Medium                                                                                                                                    |
+| Description      | Sistem harus mendukung nama pendek (*Short Name*), nama resmi (*Legal Name*), dan nama tampilan (*Display Name*) untuk setiap organisasi. |
+
+---
+
+## BR-007 – Organization Scope
+
+| Attribute           | Description                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-007                                                                                                       |
+| Requirement Name    | Organization Scope                                                                                           |
+| Priority            | Critical                                                                                                     |
+| Description         | Seluruh data dan transaksi harus memiliki Organization Scope sebagai dasar pengendalian akses dan pelaporan. |
+| Business Value      | Mendukung pemisahan data antar entitas dan konsolidasi sesuai kebutuhan.                                     |
+| Acceptance Criteria | Setiap transaksi wajib memiliki referensi Organization Scope yang valid.                                     |
+
+---
+
+## BR-008 – Effective Date Management
+
+| Attribute        | Description                                                                                                                                                                 |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-008                                                                                                                                                                      |
+| Requirement Name | Effective Date                                                                                                                                                              |
+| Priority         | High                                                                                                                                                                        |
+| Description      | Struktur organisasi harus memiliki tanggal mulai berlaku (*Effective From*) dan tanggal berakhir (*Effective To*) untuk mendukung perubahan organisasi dari waktu ke waktu. |
+
+---
+
+## BR-009 – Organization Status
+
+| Attribute        | Description                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-009                                                                                             |
+| Requirement Name | Organization Status                                                                                |
+| Priority         | Medium                                                                                             |
+| Description      | Sistem harus mendukung status organisasi seperti Draft, Active, Suspended, Inactive, dan Archived. |
+
+---
+
+## BR-010 – Organization Metadata
+
+| Attribute        | Description                                                                                                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-010                                                                                                                        |
+| Requirement Name | Organization Metadata                                                                                                         |
+| Priority         | Medium                                                                                                                        |
+| Description      | Setiap organisasi harus memiliki atribut metadata seperti alamat, kontak, zona waktu, mata uang, bahasa, dan informasi legal. |
+
+---
+
+# 9.1.3 Organization Business Rules Reference
+
+| Business Rule ID | Description                                                           |
+| ---------------- | --------------------------------------------------------------------- |
+| BRule-ORG-001    | Struktur organisasi tidak memiliki batas jumlah level.                |
+| BRule-ORG-002    | Setiap organisasi memiliki satu Parent kecuali Root Organization.     |
+| BRule-ORG-003    | Organization Code harus unik.                                         |
+| BRule-ORG-004    | Organization Scope wajib melekat pada seluruh transaksi.              |
+| BRule-ORG-005    | Perubahan struktur organisasi tidak boleh menghilangkan histori data. |
+
+---
+
+# 9.1.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process              |
+| -------------- | ------------------ | ----------- | --------------------------- |
+| BR-001         | BO-002             | SH-007      | Organization Management     |
+| BR-002         | BO-002             | SH-007      | Organization Management     |
+| BR-003         | BO-002             | SH-007      | Organization Management     |
+| BR-004         | BO-005             | SH-007      | Organization Lifecycle      |
+| BR-005         | BO-002             | SH-007      | Organization Governance     |
+| BR-006         | BO-002             | SH-007      | Organization Configuration  |
+| BR-007         | BO-018             | SH-007      | Scope-Based Access          |
+| BR-008         | BO-017             | SH-007      | Organization Lifecycle      |
+| BR-009         | BO-017             | SH-007      | Organization Administration |
+| BR-010         | BO-002             | SH-007      | Organization Profile        |
+
+---
+
+# 9.1.5 Summary
+
+Modul **Organization Management** menjadi fondasi utama ERP. Seluruh modul lain—seperti User Management, Workflow, Finance, Procurement, Inventory, HRM, dan Reporting—harus menggunakan struktur organisasi yang dikelola pada modul ini sebagai acuan utama dalam menentukan ruang lingkup data, hak akses, alur persetujuan, dan konsolidasi informasi.
+
+Seluruh requirement pada bagian ini akan diturunkan lebih lanjut menjadi Functional Requirements, desain basis data, spesifikasi API, dan skenario pengujian pada dokumen lanjutan.

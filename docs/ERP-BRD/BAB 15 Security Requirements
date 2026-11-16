@@ -1,0 +1,286 @@
+# BAB 15. Security Requirements
+
+## 15.1 Overview
+
+Bab ini menetapkan **Security Requirements** sebagai kerangka kebijakan keamanan enterprise yang menyeluruh (*enterprise-wide security policy framework*) bagi seluruh platform Enterprise Resource Planning (ERP) modular, configurable, dan multi-organisasi. Bab ini melengkapi, bukan menggantikan, dua bagian Business Requirement yang telah membahas keamanan pada tingkat modul fungsional:
+
+- **Security Management (BAB 9.4, BR-031 s.d. BR-040)** — membahas kebutuhan fungsional modul keamanan, termasuk Role-Based Access Control (RBAC), Scope-Based Access Control, Multi-Factor Authentication, enkripsi, manajemen sesi, dan deteksi anomali.
+- **Audit Trail (BAB 9.20, BR-826 s.d. BR-835)** — membahas kebutuhan fungsional pencatatan aktivitas (*logging*), retensi log, dan pelaporan kepatuhan audit.
+
+Sementara BR-031 s.d. BR-040 dan BR-826 s.d. BR-835 menjelaskan **apa yang harus dibangun oleh modul**, bab ini menjelaskan **kebijakan dan prinsip tata kelola keamanan (*security governance*) tingkat perusahaan** yang harus dipatuhi oleh seluruh modul, seluruh organisasi (Holding, Sub Holding, Company, Business Unit, Branch, Department, Warehouse, Project Site), dan seluruh siklus hidup sistem — mulai dari perancangan, implementasi, operasional, hingga disposisi data.
+
+Requirement pada bab ini menggunakan skema identifikasi baru **SECR-xxx** (Security Requirement) agar dapat ditelusuri secara independen dari BR-xxx modul fungsional, namun tetap saling merujuk (*cross-reference*) satu sama lain melalui tabel traceability pada bagian 15.9. Bab ini **tidak mengulang** detail teknis atau *acceptance criteria* yang telah dijabarkan pada BR-031–BR-040 dan BR-826–BR-835, melainkan berfokus pada requirement kebijakan yang lebih menyeluruh, lintas modul, dan berorientasi pada tata kelola (*governance*), kepatuhan (*compliance*), dan manajemen risiko keamanan informasi perusahaan.
+
+Total terdapat **18 (delapan belas) Security Requirement** yang dikelompokkan ke dalam 6 (enam) kategori: Authentication, Authorization, Data Protection, Encryption, Audit Logging, dan Access Control.
+
+---
+
+## 15.2 Authentication
+
+### SECR-001 – Enterprise Password and MFA Policy Governance
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-001                                                                                                                                                                                                               |
+| Requirement Name  | Enterprise Password and MFA Policy Governance                                                                                                                                                                          |
+| Priority          | Critical                                                                                                                                                                                                               |
+| Description       | Perusahaan harus menetapkan kebijakan kata sandi dan Multi-Factor Authentication (MFA) tingkat enterprise yang berlaku sebagai baseline minimum di seluruh organisasi, dengan opsi pengetatan (*never loosening*) pada level Company/Business Unit tertentu sesuai profil risiko. Kebijakan ini menjadi acuan tata kelola bagi implementasi fungsional pada BR-032 (MFA) dan BR-035 (Password Policy). |
+| Cross-Reference   | BR-032, BR-035 (BAB 9.4)                                                                                                                                                                                                |
+
+---
+
+### SECR-002 – Enterprise Session Timeout Standard
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-002                                                                                                                                                                                                               |
+| Requirement Name  | Enterprise Session Timeout Standard                                                                                                                                                                                    |
+| Priority          | High                                                                                                                                                                                                                    |
+| Description       | Perusahaan harus menetapkan standar batas waktu sesi (*idle timeout*) dan batas sesi ganda (*concurrent session limit*) minimum yang berlaku menyeluruh di seluruh organisasi dan modul, dengan pengecualian yang harus disetujui secara formal melalui proses *risk acceptance* apabila suatu modul memerlukan durasi sesi lebih panjang. |
+| Cross-Reference   | BR-034 (BAB 9.4)                                                                                                                                                                                                        |
+
+---
+
+### SECR-003 – Enterprise Single Sign-On (SSO) Policy
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-003                                                                                                                                                                                                               |
+| Requirement Name  | Enterprise Single Sign-On (SSO) Policy                                                                                                                                                                                 |
+| Priority          | High                                                                                                                                                                                                                    |
+| Description       | Seluruh modul ERP harus tunduk pada kebijakan Single Sign-On (SSO) tingkat perusahaan agar identitas pengguna terkelola secara terpusat (*centralized identity governance*) dan konsisten di seluruh organisasi, mengurangi proliferasi kredensial terpisah antar modul serta mempercepat proses *deprovisioning* saat pengguna resign atau mutasi. |
+| Cross-Reference   | BR-031 (BAB 9.4), Modul User Management                                                                                                                                                                                |
+
+---
+
+## 15.3 Authorization
+
+### SECR-004 – Enterprise RBAC and Scope-Based Access Policy
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-004                                                                                                                                                                                                               |
+| Requirement Name  | Enterprise RBAC and Scope-Based Access Policy                                                                                                                                                                          |
+| Priority          | Critical                                                                                                                                                                                                               |
+| Description       | Perusahaan harus menetapkan kebijakan tata kelola RBAC dan Scope-Based Access Control yang berlaku menyeluruh, termasuk standar penamaan Role, batas maksimum hak istimewa (*privilege ceiling*) per level organisasi, dan proses persetujuan formal (*governance workflow*) untuk pembuatan atau perubahan Role baru di seluruh modul. |
+| Cross-Reference   | BR-031 (BAB 9.4)                                                                                                                                                                                                        |
+
+---
+
+### SECR-005 – Segregation of Duties (SoD) Policy
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-005                                                                                                                                                                                                               |
+| Requirement Name  | Segregation of Duties (SoD) Policy                                                                                                                                                                                     |
+| Priority          | Critical                                                                                                                                                                                                               |
+| Description       | Sistem dan organisasi harus menerapkan kebijakan pemisahan tugas (*Segregation of Duties*) tingkat enterprise, memastikan tidak ada kombinasi Role yang memungkinkan satu pengguna melakukan pengajuan, persetujuan, dan pencairan pada satu transaksi kritikal yang sama (misalnya pengadaan, pembayaran, penggajian, jurnal akuntansi). Kebijakan ini berlaku lintas modul dan harus dapat dideteksi secara otomatis apabila terjadi pelanggaran (*SoD conflict detection*). |
+| Cross-Reference   | BR-031 (BAB 9.4), Modul Workflow, Financial Management Domain                                                                                                                                                          |
+
+---
+
+### SECR-006 – Least Privilege Principle Enforcement
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-006                                                                                                                                                                                                               |
+| Requirement Name  | Least Privilege Principle Enforcement                                                                                                                                                                                  |
+| Priority          | High                                                                                                                                                                                                                    |
+| Description       | Seluruh pemberian hak akses di seluruh modul dan organisasi harus mengikuti prinsip hak akses minimum (*least privilege*), di mana pengguna hanya diberikan akses yang secara eksplisit diperlukan untuk menjalankan tanggung jawabnya, dan permintaan akses tambahan harus melalui justifikasi bisnis serta persetujuan berjenjang. |
+| Cross-Reference   | BR-031 (BAB 9.4)                                                                                                                                                                                                        |
+
+---
+
+## 15.4 Data Protection
+
+### SECR-007 – Enterprise Data Classification Policy
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-007                                                                                                                                                                                                               |
+| Requirement Name  | Enterprise Data Classification Policy                                                                                                                                                                                  |
+| Priority          | Critical                                                                                                                                                                                                               |
+| Description       | Perusahaan harus menetapkan kebijakan klasifikasi data yang berlaku di seluruh modul dan organisasi, dengan empat tingkat klasifikasi minimum: **Public**, **Internal**, **Confidential**, dan **Restricted**. Setiap entitas data pada seluruh modul (Financial, HR, Payroll, CRM, Procurement, dan lainnya) harus dipetakan ke salah satu klasifikasi tersebut, dan kontrol akses/enkripsi/masking harus disesuaikan dengan tingkat klasifikasinya. |
+| Cross-Reference   | BR-039, BR-040 (BAB 9.4)                                                                                                                                                                                                |
+
+---
+
+### SECR-008 – Enterprise Data Masking Policy for Sensitive Data
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-008                                                                                                                                                                                                               |
+| Requirement Name  | Enterprise Data Masking Policy for Sensitive Data                                                                                                                                                                      |
+| Priority          | High                                                                                                                                                                                                                    |
+| Description       | Perusahaan harus menetapkan kebijakan menyeluruh mengenai jenis data yang wajib di-masking (misalnya data gaji, nomor rekening, Nomor Induk Kependudukan/NIK, data kesehatan karyawan) beserta standar teknik masking minimum yang berlaku konsisten di seluruh modul, terlepas dari implementasi teknis masing-masing modul yang diatur pada BR-039. |
+| Cross-Reference   | BR-039 (BAB 9.4)                                                                                                                                                                                                        |
+
+---
+
+### SECR-009 – Data Retention and Disposal Policy
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-009                                                                                                                                                                                                               |
+| Requirement Name  | Data Retention and Disposal Policy                                                                                                                                                                                     |
+| Priority          | High                                                                                                                                                                                                                    |
+| Description       | Perusahaan harus menetapkan kebijakan retensi data dan disposisi data (*secure disposal*) yang berlaku menyeluruh di seluruh modul, mendefinisikan masa simpan minimum/maksimum per klasifikasi data, prosedur penghapusan aman (*secure deletion*) setelah masa retensi berakhir, dan pengecualian retensi untuk kebutuhan regulasi atau hukum. |
+| Cross-Reference   | BR-830 (Audit Log Retention Policy, BAB 9.20), BR-040 (BAB 9.4)                                                                                                                                                        |
+
+---
+
+## 15.5 Encryption
+
+### SECR-010 – Enterprise Encryption-at-Rest Standard
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-010                                                                                                                                                                                                               |
+| Requirement Name  | Enterprise Encryption-at-Rest Standard                                                                                                                                                                                 |
+| Priority          | Critical                                                                                                                                                                                                               |
+| Description       | Perusahaan harus menetapkan standar algoritma dan panjang kunci enkripsi minimum untuk data yang tersimpan (*at rest*) di seluruh basis data, media penyimpanan, dan backup pada seluruh modul, tanpa terkecuali data klasifikasi Confidential dan Restricted sebagaimana ditetapkan pada SECR-007. |
+| Cross-Reference   | BR-033 (BAB 9.4)                                                                                                                                                                                                        |
+
+---
+
+### SECR-011 – Enterprise Encryption-in-Transit Standard (TLS)
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-011                                                                                                                                                                                                               |
+| Requirement Name  | Enterprise Encryption-in-Transit Standard (TLS)                                                                                                                                                                        |
+| Priority          | Critical                                                                                                                                                                                                               |
+| Description       | Seluruh komunikasi data antar modul, antar organisasi, serta antara klien dan server harus menggunakan protokol Transport Layer Security (TLS) dengan versi minimum yang ditetapkan secara enterprise, termasuk komunikasi API internal, integrasi pihak ketiga, dan akses antarmuka pengguna, tanpa pengecualian. |
+| Cross-Reference   | BR-033 (BAB 9.4)                                                                                                                                                                                                        |
+
+---
+
+### SECR-012 – Enterprise Key Management Policy
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-012                                                                                                                                                                                                               |
+| Requirement Name  | Enterprise Key Management Policy                                                                                                                                                                                       |
+| Priority          | Critical                                                                                                                                                                                                               |
+| Description       | Perusahaan harus menetapkan kebijakan pengelolaan kunci enkripsi (*key management*) yang mencakup pemisahan tugas dalam penyimpanan kunci, rotasi kunci berkala, prosedur pemulihan kunci (*key recovery*), serta pembatasan akses terhadap kunci enkripsi hanya kepada peran yang berwenang, terpisah dari administrator aplikasi biasa. |
+| Cross-Reference   | BR-033 (BAB 9.4)                                                                                                                                                                                                        |
+
+---
+
+## 15.6 Audit Logging
+
+### SECR-013 – Enterprise Audit Trail Governance
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-013                                                                                                                                                                                                               |
+| Requirement Name  | Enterprise Audit Trail Governance                                                                                                                                                                                      |
+| Priority          | Critical                                                                                                                                                                                                               |
+| Description       | Perusahaan harus menetapkan kebijakan tata kelola audit trail tingkat enterprise yang mewajibkan seluruh modul mengintegrasikan aktivitasnya ke layanan Audit Trail terpusat, sebagaimana diimplementasikan secara fungsional pada BR-826 s.d. BR-835, serta menetapkan pihak yang berwenang meninjau log audit secara berkala. |
+| Cross-Reference   | BR-826, BR-828, BR-834 (BAB 9.20)                                                                                                                                                                                       |
+
+---
+
+### SECR-014 – Enterprise Log Retention Governance
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-014                                                                                                                                                                                                               |
+| Requirement Name  | Enterprise Log Retention Governance                                                                                                                                                                                    |
+| Priority          | High                                                                                                                                                                                                                    |
+| Description       | Perusahaan harus menetapkan kebijakan retensi log audit dan log keamanan tingkat enterprise, termasuk periode retensi minimum sesuai kepatuhan regulasi (misalnya perpajakan, ketenagakerjaan), otoritas yang dapat menyetujui pemusnahan log setelah masa retensi berakhir, dan mekanisme arsip log jangka panjang. |
+| Cross-Reference   | BR-830 (BAB 9.20)                                                                                                                                                                                                       |
+
+---
+
+### SECR-015 – Tamper-Proof Logging Assurance
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-015                                                                                                                                                                                                               |
+| Requirement Name  | Tamper-Proof Logging Assurance                                                                                                                                                                                         |
+| Priority          | Critical                                                                                                                                                                                                               |
+| Description       | Perusahaan harus menetapkan kebijakan jaminan integritas log (*tamper-proof logging assurance*) yang menetapkan mekanisme verifikasi independen (misalnya hashing berantai atau *write-once storage*) untuk memastikan log audit yang telah tercatat pada BR-832 tidak dapat dimodifikasi oleh siapa pun, termasuk oleh administrator infrastruktur dan penyedia layanan pihak ketiga. |
+| Cross-Reference   | BR-832 (BAB 9.20)                                                                                                                                                                                                       |
+
+---
+
+## 15.7 Access Control
+
+### SECR-016 – Periodic Access Review Policy
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-016                                                                                                                                                                                                               |
+| Requirement Name  | Periodic Access Review Policy                                                                                                                                                                                          |
+| Priority          | High                                                                                                                                                                                                                    |
+| Description       | Perusahaan harus menetapkan kebijakan peninjauan akses berkala (*periodic access review/recertification*) yang mewajibkan pemilik proses bisnis (*business process owner*) meninjau dan mengonfirmasi kesesuaian hak akses pengguna pada seluruh modul secara terjadwal (minimum triwulanan atau sesuai kebijakan risiko), sebagai kontrol lanjutan atas RBAC dan Scope-Based Access Control pada BR-031. |
+| Cross-Reference   | BR-031 (BAB 9.4)                                                                                                                                                                                                        |
+
+---
+
+### SECR-017 – Access Revocation Policy on Resignation/Mutation
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-017                                                                                                                                                                                                               |
+| Requirement Name  | Access Revocation Policy on Resignation/Mutation                                                                                                                                                                       |
+| Priority          | Critical                                                                                                                                                                                                               |
+| Description       | Perusahaan harus menetapkan kebijakan pencabutan hak akses (*access revocation*) yang wajib dijalankan segera saat pengguna resign, dimutasi, atau berubah jabatan, termasuk batas waktu maksimum pencabutan akses (*Service Level Agreement/SLA deprovisioning*) sejak tanggal efektif perubahan status kepegawaian diterima dari modul HR. |
+| Cross-Reference   | BR-031 (BAB 9.4), Modul HR, User Management                                                                                                                                                                             |
+
+---
+
+### SECR-018 – Emergency Access (Break-Glass) Policy
+
+| Attribute        | Description                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | SECR-018                                                                                                                                                                                                               |
+| Requirement Name  | Emergency Access (Break-Glass) Policy                                                                                                                                                                                  |
+| Priority          | High                                                                                                                                                                                                                    |
+| Description       | Perusahaan harus menetapkan kebijakan akses darurat (*break-glass access*) untuk situasi krusial yang memerlukan akses segera di luar hak akses normal (misalnya insiden operasional mendesak), dengan syarat setiap penggunaan akses darurat wajib disetujui, dibatasi waktu, dan dicatat secara khusus pada Audit Trail untuk ditinjau ulang pasca-insiden. |
+| Cross-Reference   | BR-031 (BAB 9.4), BR-833 (BAB 9.20)                                                                                                                                                                                     |
+
+---
+
+## 15.8 Security Governance Principles
+
+Seluruh Security Requirement pada bab ini didasarkan pada prinsip tata kelola keamanan berikut, yang menjadi acuan bagi perancangan arsitektur, implementasi, dan operasional keamanan di seluruh platform ERP:
+
+- **Security by Design** — kontrol keamanan harus menjadi bagian integral dari perancangan arsitektur dan proses bisnis sejak tahap awal, bukan ditambahkan sebagai lapisan tambahan setelah sistem selesai dibangun.
+- **Zero Trust** — tidak ada entitas, baik pengguna, perangkat, maupun layanan internal sekalipun, yang dipercaya secara *default*; setiap permintaan akses harus diverifikasi secara eksplisit berdasarkan identitas, konteks, dan scope organisasi.
+- **Defense in Depth** — perlindungan keamanan diterapkan secara berlapis (jaringan, aplikasi, data, dan operasional) sehingga kegagalan satu lapisan kontrol tidak serta-merta mengakibatkan kompromi sistem secara menyeluruh.
+- **Compliance dengan ISO/IEC 27001** — seluruh kebijakan keamanan pada bab ini selaras dengan kerangka kerja manajemen keamanan informasi ISO/IEC 27001, mencakup manajemen risiko, klasifikasi aset informasi, dan continual improvement terhadap kontrol keamanan.
+
+---
+
+## 15.9 Security Requirement Traceability
+
+| SECR ID  | Category       | Priority | Related Module (BR-xxx)      |
+| -------- | -------------- | -------- | ----------------------------- |
+| SECR-001 | Authentication | Critical | BR-032, BR-035                |
+| SECR-002 | Authentication | High     | BR-034                         |
+| SECR-003 | Authentication | High     | BR-031                         |
+| SECR-004 | Authorization  | Critical | BR-031                         |
+| SECR-005 | Authorization  | Critical | BR-031                         |
+| SECR-006 | Authorization  | High     | BR-031                         |
+| SECR-007 | Data Protection| Critical | BR-039, BR-040                 |
+| SECR-008 | Data Protection| High     | BR-039                         |
+| SECR-009 | Data Protection| High     | BR-830, BR-040                 |
+| SECR-010 | Encryption     | Critical | BR-033                         |
+| SECR-011 | Encryption     | Critical | BR-033                         |
+| SECR-012 | Encryption     | Critical | BR-033                         |
+| SECR-013 | Audit Logging  | Critical | BR-826, BR-828, BR-834         |
+| SECR-014 | Audit Logging  | High     | BR-830                         |
+| SECR-015 | Audit Logging  | Critical | BR-832                         |
+| SECR-016 | Access Control | High     | BR-031                         |
+| SECR-017 | Access Control | Critical | BR-031                         |
+| SECR-018 | Access Control | High     | BR-031, BR-833                 |
+
+---
+
+## 15.10 Summary
+
+Bab **Security Requirements** menetapkan kerangka kebijakan keamanan enterprise berupa 18 (delapan belas) requirement dengan skema identifikasi **SECR-xxx**, yang mencakup enam pilar utama: Authentication, Authorization, Data Protection, Encryption, Audit Logging, dan Access Control. Requirement ini bersifat melengkapi (*complementary*), bukan menduplikasi, kebutuhan fungsional yang telah dijabarkan pada modul **Security Management (BR-031–BR-040)** dan **Audit Trail (BR-826–BR-835)** pada BAB 9.
+
+Kebijakan pada bab ini berfungsi sebagai **payung tata kelola (*governance umbrella*)** yang mengikat seluruh modul dan organisasi dalam platform ERP, memastikan konsistensi standar keamanan di seluruh entitas bisnis (Holding, Sub Holding, Company, Business Unit, Branch, Department, Warehouse, Project Site), serta menjadi dasar bagi audit kepatuhan terhadap ISO/IEC 27001. Seluruh Security Requirement ini akan diturunkan lebih lanjut menjadi kebijakan operasional, standar teknis, prosedur (*Standard Operating Procedure*), dan skenario pengujian keamanan pada dokumen turunan berikutnya.

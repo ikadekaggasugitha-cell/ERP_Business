@@ -1,0 +1,166 @@
+# 9.17 Payroll Management Requirements
+
+## 9.17.1 Overview
+
+Payroll Management mengelola perhitungan dan pembayaran gaji karyawan berdasarkan data kepegawaian (*Employee Master*), kehadiran, dan cuti yang dikelola pada modul Human Resource Management (HR).
+
+Payroll menghitung komponen gaji (gaji pokok, tunjangan, potongan), pajak penghasilan karyawan (PPh 21), iuran BPJS Kesehatan dan Ketenagakerjaan, menghasilkan slip gaji (*payslip*), serta melakukan posting otomatis ke General Ledger sesuai Cost Center dan organisasi masing-masing karyawan.
+
+ERP harus mendukung komponen gaji yang dapat dikonfigurasi per jenis hubungan kerja (Pegawai Tetap, Kontrak, Magang), perhitungan otomatis yang taat terhadap perubahan regulasi perpajakan dan ketenagakerjaan, serta workflow persetujuan sebelum pembayaran gaji dieksekusi.
+
+---
+
+# 9.17.2 Business Requirement Catalogue
+
+## BR-796 – Payroll Component Master
+
+| Attribute           | Description                                                                                                          |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-796                                                                                                              |
+| Requirement Name    | Payroll Component Master                                                                                            |
+| Category            | Payroll Management                                                                                                  |
+| Priority            | Critical                                                                                                            |
+| Business Objective  | BO-005, BO-009                                                                                                      |
+| Stakeholder Owner   | SH-005 (CHRO)                                                                                                       |
+| Description         | Sistem harus menyediakan master komponen gaji (gaji pokok, tunjangan, potongan) yang dapat dikonfigurasi per jenis hubungan kerja dan organisasi. |
+| Business Rationale  | Setiap organisasi atau jenis kepegawaian dapat memiliki struktur komponen gaji yang berbeda.                        |
+| Business Value      | Fleksibilitas pengelolaan struktur remunerasi tanpa perubahan aplikasi.                                             |
+| Acceptance Criteria | Administrator dapat menambah, mengubah, dan menonaktifkan komponen gaji melalui konfigurasi.                        |
+
+---
+
+## BR-797 – Payroll Calculation Engine
+
+| Attribute        | Description                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-797                                                                                              |
+| Requirement Name | Payroll Calculation Engine                                                                           |
+| Priority         | Critical                                                                                             |
+| Description      | Sistem harus melakukan perhitungan gaji secara otomatis berdasarkan komponen gaji, kehadiran, dan kebijakan organisasi. |
+
+---
+
+## BR-798 – Attendance and Leave Integration
+
+| Attribute        | Description                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-798                                                                                     |
+| Requirement Name | Attendance and Leave Integration                                                            |
+| Priority         | Critical                                                                                    |
+| Description      | Sistem harus mengintegrasikan data kehadiran dan cuti dari modul Human Resource Management ke dalam perhitungan gaji. |
+
+---
+
+## BR-799 – Income Tax Calculation (PPh 21)
+
+| Attribute        | Description                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-799                                                                                           |
+| Requirement Name | Income Tax Calculation (PPh 21)                                                                    |
+| Priority         | Critical                                                                                          |
+| Description      | Sistem harus menghitung pajak penghasilan karyawan (PPh 21) secara otomatis sesuai ketentuan perpajakan yang berlaku dan dapat diperbarui melalui konfigurasi. |
+
+---
+
+## BR-800 – Statutory Contribution Management (BPJS)
+
+| Attribute        | Description                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-800                                                                                          |
+| Requirement Name | Statutory Contribution Management (BPJS)                                                          |
+| Priority         | Critical                                                                                        |
+| Description      | Sistem harus menghitung dan mencatat iuran BPJS Kesehatan dan Ketenagakerjaan bagi perusahaan dan karyawan. |
+
+---
+
+## BR-801 – Payslip Generation
+
+| Attribute        | Description                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-801                                                                                     |
+| Requirement Name | Payslip Generation                                                                          |
+| Priority         | High                                                                                        |
+| Description      | Sistem harus menghasilkan slip gaji digital bagi setiap karyawan yang dapat diakses secara mandiri (self-service). |
+
+---
+
+## BR-802 – Payroll Approval Workflow
+
+| Attribute        | Description                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-802                                                                                          |
+| Requirement Name | Payroll Approval Workflow                                                                       |
+| Priority         | Critical                                                                                        |
+| Description      | Hasil perhitungan gaji harus melalui persetujuan berjenjang sebelum proses pembayaran dieksekusi. |
+
+---
+
+## BR-803 – Payroll Disbursement Integration
+
+| Attribute        | Description                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-803                                                                                          |
+| Requirement Name | Payroll Disbursement Integration                                                                 |
+| Priority         | High                                                                                             |
+| Description      | Sistem harus mendukung pembuatan file transfer bank untuk pembayaran gaji secara massal (bulk payment). |
+
+---
+
+## BR-804 – Payroll Posting to General Ledger
+
+| Attribute           | Description                                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-804                                                                                              |
+| Requirement Name    | Payroll Posting to General Ledger                                                                    |
+| Priority            | Critical                                                                                             |
+| Description         | Hasil payroll harus diposting secara otomatis ke General Ledger sesuai Cost Center dan organisasi karyawan. |
+| Acceptance Criteria | Jurnal payroll dapat direkonsiliasi terhadap total pembayaran gaji per periode.                      |
+
+---
+
+## BR-805 – Payroll Reporting and Compliance
+
+| Attribute        | Description                                                                                   |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-805                                                                                       |
+| Requirement Name | Payroll Reporting and Compliance                                                              |
+| Priority         | High                                                                                          |
+| Description      | Sistem harus menyediakan laporan payroll (rekap gaji, pajak, BPJS) sesuai kebutuhan internal maupun pelaporan kepada otoritas terkait. |
+
+---
+
+# 9.17.3 Payroll Business Rules Reference
+
+| Business Rule ID | Description                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------ |
+| BRule-PAY-001     | Perhitungan gaji hanya dapat dilakukan setelah periode kehadiran dan cuti pada periode tersebut ditutup. |
+| BRule-PAY-002     | Payroll yang telah disetujui dan dibayarkan tidak dapat diubah; koreksi dilakukan pada periode berikutnya. |
+| BRule-PAY-003     | Perhitungan PPh 21 dan BPJS wajib mengikuti tarif dan aturan yang berlaku pada periode payroll terkait.  |
+| BRule-PAY-004     | Payslip hanya dapat diakses oleh karyawan bersangkutan dan pihak yang berwenang.                        |
+| BRule-PAY-005     | Setiap payroll run wajib menghasilkan jurnal yang seimbang (balanced) sebelum diposting ke General Ledger. |
+| BRule-PAY-006     | Seluruh aktivitas payroll wajib tercatat pada Audit Trail.                                               |
+
+---
+
+# 9.17.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                |
+| -------------- | ------------------ | ----------- | -------------------------------- |
+| BR-796         | BO-005              | SH-005      | Payroll Configuration             |
+| BR-797         | BO-009              | SH-005      | Payroll Calculation                |
+| BR-798         | BO-014              | SH-029      | Attendance Integration              |
+| BR-799         | BO-007              | SH-005      | Tax Compliance                     |
+| BR-800         | BO-007              | SH-005      | Statutory Compliance                |
+| BR-801         | BO-034              | SH-029      | Employee Self-Service               |
+| BR-802         | BO-011              | SH-005      | Payroll Approval                    |
+| BR-803         | BO-009              | SH-003      | Payment Disbursement                |
+| BR-804         | BO-022              | SH-003      | Financial Integration                |
+| BR-805         | BO-007              | SH-005      | Payroll Reporting                    |
+
+---
+
+# 9.17.5 Summary
+
+Modul **Payroll Management** mengotomatisasi perhitungan gaji, kepatuhan perpajakan dan BPJS, serta penerbitan slip gaji, dengan integrasi penuh terhadap data kehadiran/cuti pada Human Resource Management dan pencatatan jurnal pada General Ledger.
+
+Seluruh requirement pada bagian ini akan diturunkan lebih lanjut menjadi Functional Requirements, desain basis data, spesifikasi API, dan skenario pengujian pada dokumen lanjutan.

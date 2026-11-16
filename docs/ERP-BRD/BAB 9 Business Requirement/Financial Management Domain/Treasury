@@ -1,0 +1,139 @@
+# 9.5.8 Treasury Requirements
+
+---
+
+# 9.5.8.1 Overview
+
+Treasury Requirements mengatur pengelolaan kas dan likuiditas perusahaan secara korporat, mencakup pemantauan posisi kas (cash position), proyeksi kas (cash forecasting), pengelolaan fasilitas pinjaman (loan/credit facility), penempatan investasi jangka pendek, manajemen risiko nilai tukar (hedging), hingga rekonsiliasi bank tingkat korporat.
+
+Fungsi Treasury bersifat lintas entitas dan lintas mata uang, sehingga memerlukan konsolidasi data kas dari seluruh Organization Node (Holding, Sub Holding, Company, Business Unit, Branch) yang tersebar dalam struktur organisasi. Pengelolaan Treasury dilakukan secara terpusat namun tetap mengacu pada Scope-Based Access Control agar visibilitas dan otorisasi transaksi kas tetap terkendali sesuai kewenangan masing-masing entitas.
+
+Domain ini menjadi fondasi bagi pengambilan keputusan likuiditas, pengendalian risiko keuangan, serta efisiensi pemanfaatan kas grup perusahaan secara keseluruhan.
+
+---
+
+# 9.5.8.2 Business Requirement Catalogue
+
+## BR-596 – Corporate Cash Position Master & Real-Time Visibility
+
+| Attribute           | Description                                                                                                                                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-596                                                                                                                                                                                                                                    |
+| Requirement Name    | Corporate Cash Position Master & Real-Time Visibility                                                                                                                                                                                    |
+| Category            | Treasury Management                                                                                                                                                                                                                       |
+| Priority            | Critical                                                                                                                                                                                                                                   |
+| Business Objective  | BO-020, BO-021                                                                                                                                                                                                                             |
+| Stakeholder Owner   | SH-003 (CFO), SH-027 (Finance Department)                                                                                                                                                                                                |
+| Description         | Sistem harus menyediakan modul Cash Position yang mengkonsolidasikan saldo kas dan bank dari seluruh Bank Account di seluruh Organization Node secara real-time maupun periodik, dengan dukungan multi-currency dan konversi ke base currency korporat. |
+| Business Rationale  | Pengelolaan kas yang terfragmentasi antar entitas menyebabkan keterlambatan pengambilan keputusan likuiditas serta risiko idle cash atau cash shortage yang tidak terdeteksi secara dini.                                               |
+| Business Value      | Memberikan visibilitas kas korporat secara konsolidatif untuk mendukung keputusan likuiditas yang cepat, akurat, dan berbasis data.                                                                                                      |
+| Acceptance Criteria | Sistem dapat menampilkan cash position terkonsolidasi berdasarkan scope organisasi yang dipilih, termasuk breakdown per Bank Account dan per currency, beserta nilai konversi ke base currency, dengan data yang dapat di-refresh sesuai konfigurasi. |
+
+---
+
+## BR-597 – Multi-Entity & Multi-Currency Cash Forecasting
+
+| Requirement ID      | Requirement Name                               | Priority | Description                                                                                                                                                                    | Business Value                                                                    |
+| ------------------- | ----------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| BR-597              | Multi-Entity & Multi-Currency Cash Forecasting | Critical | Sistem harus menyediakan cash forecasting yang memproyeksikan penerimaan dan pengeluaran kas di seluruh entitas dan mata uang berdasarkan data transaksi terjadwal (AP, AR, payroll, loan repayment) dan asumsi manual. | Meningkatkan akurasi perencanaan likuiditas jangka pendek dan menengah lintas entitas. |
+
+---
+
+## BR-598 – Bank Account Master & Scope-Based Access
+
+| Requirement ID      | Requirement Name                          | Priority | Description                                                                                                                                                                             |
+| ------------------- | ------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| BR-598              | Bank Account Master & Scope-Based Access  | Critical | Sistem harus menyediakan master data Bank Account yang terhubung ke Financial Organization dan Organization Node, mendukung multi-bank, multi-currency, serta pengaturan otorisasi signer. |
+
+---
+
+## BR-599 – Loan & Credit Facility Management
+
+| Requirement ID      | Requirement Name                | Priority | Description                                                                                                                                                                          | Acceptance Criteria                                                                                                     |
+| ------------------- | -------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| BR-599              | Loan & Credit Facility Management | High     | Sistem harus mengelola master fasilitas pinjaman/kredit (loan, credit line, overdraft) termasuk limit, tenor, suku bunga, jaminan (collateral), dan jadwal pembayaran pokok/bunga. | Sistem dapat menampilkan utilisasi fasilitas terhadap limit serta mengingatkan jadwal jatuh tempo pembayaran secara otomatis. |
+
+---
+
+## BR-600 – Short-Term Investment Management
+
+| Requirement ID      | Requirement Name                  | Priority | Description                                                                                                                                                              |
+| ------------------- | ----------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BR-600              | Short-Term Investment Management  | High     | Sistem harus mendukung pencatatan dan pemantauan penempatan investasi jangka pendek (deposito, money market, surat berharga) beserta jatuh tempo, imbal hasil, dan counterparty. |
+
+---
+
+## BR-601 – Foreign Exchange Exposure & Hedging Management
+
+| Requirement ID      | Requirement Name                             | Priority | Description                                                                                                                                                                              | Acceptance Criteria                                                                                                    |
+| ------------------- | ---------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| BR-601              | Foreign Exchange Exposure & Hedging Management | Critical | Sistem harus mengidentifikasi eksposur nilai tukar dari transaksi dan saldo multi-currency, serta mencatat instrumen hedging (forward, swap, option) yang terkait dengan eksposur tersebut. | Sistem dapat menghasilkan laporan eksposur per currency dan mengaitkan setiap instrumen hedging dengan eksposur yang di-cover. |
+
+---
+
+## BR-602 – Corporate Bank Reconciliation
+
+| Requirement ID      | Requirement Name              | Priority | Description                                                                                                                                                                     |
+| ------------------- | -------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BR-602              | Corporate Bank Reconciliation   | Critical | Sistem harus menyediakan proses rekonsiliasi bank tingkat korporat yang mencocokkan mutasi bank statement dengan buku besar kas untuk setiap Bank Account dan periode, termasuk penanganan outstanding items. |
+
+---
+
+## BR-603 – Intercompany Cash Pooling & Sweep
+
+| Requirement ID      | Requirement Name               | Priority | Description                                                                                                                                                                       |
+| ------------------- | --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BR-603              | Intercompany Cash Pooling & Sweep | Medium   | Sistem harus mendukung mekanisme cash pooling/sweep antar entitas dalam grup untuk mengoptimalkan penggunaan likuiditas, dengan pencatatan otomatis transaksi intercompany yang timbul. |
+
+---
+
+## BR-604 – Treasury Approval Workflow & Limit Control
+
+| Requirement ID      | Requirement Name                       | Priority | Description                                                                                                                                                                    |
+| ------------------- | ----------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BR-604              | Treasury Approval Workflow & Limit Control | High     | Sistem harus menerapkan workflow approval berjenjang yang configurable untuk transaksi treasury (pencairan dana, penempatan investasi, transaksi hedging) berdasarkan ambang nilai dan scope organisasi. |
+
+---
+
+## BR-605 – Treasury Reporting & Analytics Dashboard
+
+| Requirement ID      | Requirement Name                       | Priority | Description                                                                                                                                                                                                     |
+| ------------------- | ----------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BR-605              | Treasury Reporting & Analytics Dashboard | High     | Sistem harus menyediakan dashboard dan laporan analitik treasury yang mencakup cash position, forecast accuracy, utilisasi fasilitas pinjaman, kinerja investasi, dan eksposur nilai tukar secara konsolidasi maupun per entitas. |
+
+---
+
+# 9.5.8.3 Treasury Business Rules
+
+| Business Rule ID | Description                                                                                                                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-TRS-001     | Setiap transaksi kas dan bank harus tercatat berdasarkan Bank Account yang terhubung ke Financial Organization dan Organization Node tertentu (scope-based).     |
+| BRule-TRS-002     | Cash Position dan Cash Forecast harus mendukung multi-currency dengan konversi ke base currency organisasi menggunakan kurs yang berlaku pada tanggal posisi.     |
+| BRule-TRS-003     | Setiap fasilitas pinjaman (loan/credit facility) harus memiliki limit, jangka waktu, suku bunga, dan jadwal pembayaran yang dikelola secara terpusat.            |
+| BRule-TRS-004     | Transaksi hedging harus direferensikan ke eksposur (exposure) yang mendasarinya dan tidak dapat berdiri sendiri tanpa keterkaitan transaksi bisnis.               |
+| BRule-TRS-005     | Bank reconciliation tingkat korporat harus dilakukan berdasarkan matching antara mutasi bank statement dan buku besar kas per Bank Account per periode.          |
+| BRule-TRS-006     | Perubahan limit fasilitas pinjaman, penempatan investasi, dan transaksi hedging di atas ambang tertentu memerlukan approval berjenjang sesuai workflow yang dikonfigurasi. |
+| BRule-TRS-007     | Seluruh transaksi treasury tunduk pada Scope-Based Access Control sesuai hak akses pengguna terhadap Organization Node terkait.                                   |
+
+---
+
+# 9.5.8.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                             |
+| -------------- | ------------------- | ----------- | -------------------------------------------- |
+| BR-596         | BO-020, BO-021      | SH-003      | Cash Position Consolidation & Monitoring    |
+| BR-597         | BO-020, BO-021      | SH-003      | Cash Forecasting Process                    |
+| BR-598         | BO-020              | SH-003      | Bank Account Administration                 |
+| BR-599         | BO-020              | SH-003      | Loan & Credit Facility Administration       |
+| BR-600         | BO-020              | SH-003      | Short-Term Investment Administration        |
+| BR-601         | BO-021              | SH-003      | FX Exposure & Hedging Management            |
+| BR-602         | BO-020              | SH-003      | Corporate Bank Reconciliation Process       |
+| BR-603         | BO-020              | SH-003      | Intercompany Cash Pooling Process           |
+| BR-604         | BO-020              | SH-003      | Treasury Approval Workflow Configuration    |
+| BR-605         | BO-020, BO-021      | SH-003      | Treasury Reporting & Analytics              |
+
+---
+
+# 9.5.8.5 Summary
+
+Treasury Requirements membentuk fondasi pengelolaan likuiditas dan risiko keuangan korporat secara terkonsolidasi lintas entitas dan mata uang. Melalui sepuluh requirement pada bagian ini, sistem memastikan visibilitas kas yang real-time, proyeksi likuiditas yang akurat, pengendalian fasilitas pembiayaan dan investasi, mitigasi risiko nilai tukar, serta rekonsiliasi bank yang andal. Seluruh kapabilitas ini akan menjadi dasar bagi desain proses Treasury lebih lanjut pada dokumen berikutnya, termasuk integrasinya dengan domain General Ledger, Financial Consolidation, dan Currency Management.

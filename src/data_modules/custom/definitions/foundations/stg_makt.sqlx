@@ -1,0 +1,24 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc", "s4"],
+  description: "SAP Material Descriptions staging view with multi-language fallback priority"
+}
+
+SELECT
+  MANDT AS mandt,
+  MATNR AS material_number,
+  SPRAS AS language_key,
+  MAKTX AS material_description,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "makt")}
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY MANDT, MATNR
+  ORDER BY 
+    CASE 
+      WHEN SPRAS = 'E' THEN 1 
+      WHEN SPRAS IN ('M', 'I') THEN 2 
+      ELSE 3 
+    END,
+    recordstamp DESC
+) = 1

@@ -1,0 +1,81 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["annotation", "material", "cortex_v7"],
+  description: "Unified Material Master across SAP and NEW_ERP (LGORT joined from MARD, not MARC)"
+}
+
+WITH sap_materials AS (
+  SELECT
+    'SAP' AS source_system,
+    mara.mandt,
+    mara.material_number,
+    makt.material_description AS material_name,
+    mara.material_type,
+    mara.material_group,
+    mara.base_unit_of_measure AS base_uom,
+    marc.plant AS plant_code,
+    -- Join storage location from MARD (MARC.LGORT does not exist in SAP DDIC)
+    mard.storage_location,
+    marc.abc_indicator,
+    COALESCE(CAST(mard.unrestricted_stock AS NUMERIC), NUMERIC '0') AS unrestricted_stock,
+    COALESCE(CAST(mard.blocked_stock AS NUMERIC), NUMERIC '0') AS blocked_stock,
+    ${sap_helpers.latestRecordstamp([
+      "mara.recordstamp",
+      "makt.recordstamp",
+      "marc.recordstamp",
+      "mard.recordstamp"
+    ])} AS source_last_updated_at
+  FROM ${ref("stg_mara")} mara
+  LEFT JOIN ${ref("stg_makt")} makt
+    ON mara.mandt = makt.mandt
+    AND mara.material_number = makt.material_number
+  LEFT JOIN ${ref("stg_marc")} marc
+    ON mara.mandt = marc.mandt
+    AND mara.material_number = marc.material_number
+  LEFT JOIN ${ref("stg_mard")} mard
+    ON marc.mandt = mard.mandt
+    AND marc.material_number = mard.material_number
+    AND marc.plant = mard.plant
+),
+
+new_erp_materials AS (
+  SELECT
+    'NEW_ERP' AS source_system,
+    '000' AS mandt,
+    CAST(item_id AS STRING) AS material_number,
+    CAST(item_name AS STRING) AS material_name,
+    CAST(category AS STRING) AS material_type,
+    CAST(item_group AS STRING) AS material_group,
+    CAST(uom AS STRING) AS base_uom,
+    CAST(plant_code AS STRING) AS plant_code,
+    CAST(storage_location AS STRING) AS storage_location,
+    CAST(abc_class AS STRING) AS abc_indicator,
+    CAST(current_stock AS NUMERIC) AS unrestricted_stock,
+    NUMERIC '0' AS blocked_stock,
+    CAST(updated_at AS TIMESTAMP) AS source_last_updated_at
+  FROM ${ref("erp_staging", "stg_items_cdc")}
+),
+
+combined AS (
+  SELECT * FROM sap_materials
+  UNION ALL
+  SELECT * FROM new_erp_materials
+)
+
+SELECT
+  TO_HEX(MD5(CONCAT(source_system, '|', mandt, '|', material_number, '|', COALESCE(plant_code, ''), '|', COALESCE(storage_location, '')))) AS material_id,
+  source_system,
+  mandt,
+  material_number,
+  material_name,
+  material_type,
+  material_group,
+  base_uom,
+  plant_code,
+  storage_location,
+  abc_indicator,
+  unrestricted_stock,
+  blocked_stock,
+  source_last_updated_at
+FROM combined

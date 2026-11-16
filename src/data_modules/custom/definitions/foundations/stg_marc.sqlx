@@ -1,0 +1,20 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc", "s4"],
+  description: "SAP Plant Data for Material staging view (LGORT excluded - lives in MARD)"
+}
+
+SELECT
+  MANDT AS mandt,
+  MATNR AS material_number,
+  WERKS AS plant,
+  EKGRP AS purchasing_group,
+  MAABC AS abc_indicator,
+  PRCTR AS profit_center,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "marc")}
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY MANDT, MATNR, WERKS
+  ORDER BY recordstamp DESC
+) = 1

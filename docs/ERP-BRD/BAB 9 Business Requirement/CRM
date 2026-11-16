@@ -1,0 +1,165 @@
+# 9.15 Customer Relationship Management Requirements
+
+## 9.15.1 Overview
+
+Customer Relationship Management (CRM) mengelola seluruh data dan interaksi dengan calon pelanggan (*lead*), prospek (*opportunity*), maupun pelanggan aktif (*customer*), mencakup identitas pelanggan, riwayat komunikasi, peluang penjualan, keluhan, serta aktivitas tindak lanjut (*follow-up*) tim penjualan.
+
+CRM menjadi perluasan dari Customer Master yang digunakan bersama oleh modul Sales dan Accounts Receivable, sehingga memberikan visibilitas 360 derajat terhadap pelanggan mulai dari tahap akuisisi hingga transaksi berulang.
+
+ERP harus mampu mengelola siklus hubungan pelanggan (*customer lifecycle*) secara terkonfigurasi, mendukung segmentasi pelanggan, pelacakan *sales pipeline*, serta terintegrasi dengan modul Sales agar data pelanggan tidak terduplikasi antar sistem.
+
+---
+
+# 9.15.2 Business Requirement Catalogue
+
+## BR-776 – Customer 360 Master
+
+| Attribute           | Description                                                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-776                                                                                                                        |
+| Requirement Name    | Customer 360 Master                                                                                                           |
+| Category            | Customer Relationship Management                                                                                              |
+| Priority            | Critical                                                                                                                      |
+| Business Objective  | BO-008, BO-014                                                                                                                |
+| Stakeholder Owner   | SH-034 (Sales Department)                                                                                                     |
+| Description         | Sistem harus menyediakan profil pelanggan terpadu (Customer 360) yang menggabungkan data identitas, transaksi, interaksi, dan status kredit dalam satu tampilan. |
+| Business Rationale  | Data pelanggan yang tersebar menyulitkan tim sales dalam memahami konteks pelanggan secara menyeluruh.                        |
+| Business Value      | Meningkatkan kualitas layanan dan pengambilan keputusan berbasis data pelanggan yang lengkap.                                 |
+| Acceptance Criteria | Pengguna dapat melihat riwayat transaksi, interaksi, dan status kredit pelanggan dalam satu layar.                            |
+
+---
+
+## BR-777 – Lead and Opportunity Management
+
+| Attribute        | Description                                                                                                   |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-777                                                                                                        |
+| Requirement Name | Lead and Opportunity Management                                                                               |
+| Priority         | Critical                                                                                                      |
+| Description      | Sistem harus mendukung pencatatan dan pengelolaan lead serta opportunity, termasuk sumber lead, tahapan kualifikasi, dan estimasi nilai penjualan. |
+
+---
+
+## BR-778 – Customer Segmentation
+
+| Attribute        | Description                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-778                                                                                                     |
+| Requirement Name | Customer Segmentation                                                                                      |
+| Priority         | Medium                                                                                                     |
+| Description      | Sistem harus mendukung pengelompokan pelanggan berdasarkan kriteria bisnis (nilai transaksi, wilayah, industri, tingkat loyalitas). |
+
+---
+
+## BR-779 – Interaction and Activity History
+
+| Attribute        | Description                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-779                                                                                              |
+| Requirement Name | Interaction and Activity History                                                                    |
+| Priority         | High                                                                                                |
+| Description      | Sistem harus mencatat seluruh riwayat interaksi dengan pelanggan (panggilan, pertemuan, email, catatan tindak lanjut). |
+
+---
+
+## BR-780 – Complaint and Case Management
+
+| Attribute        | Description                                                                                                 |
+| ---------------- | --------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-780                                                                                                    |
+| Requirement Name | Complaint and Case Management                                                                             |
+| Priority         | High                                                                                                      |
+| Description      | Sistem harus mendukung pencatatan, eskalasi, dan penyelesaian keluhan pelanggan (*case*) hingga tuntas.    |
+
+---
+
+## BR-781 – Sales Pipeline and Funnel Tracking
+
+| Attribute        | Description                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-781                                                                                                    |
+| Requirement Name | Sales Pipeline and Funnel Tracking                                                                        |
+| Priority         | High                                                                                                      |
+| Description      | Sistem harus menampilkan visualisasi tahapan pipeline penjualan (funnel) beserta probabilitas konversi tiap tahap. |
+
+---
+
+## BR-782 – Follow-Up Reminder and Task Assignment
+
+| Attribute        | Description                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-782                                                                                            |
+| Requirement Name | Follow-Up Reminder and Task Assignment                                                             |
+| Priority         | Medium                                                                                             |
+| Description      | Sistem harus mendukung penjadwalan pengingat tindak lanjut dan penugasan aktivitas kepada anggota tim sales. |
+
+---
+
+## BR-783 – Customer Credit Profile Integration
+
+| Attribute           | Description                                                                                              |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-783                                                                                                   |
+| Requirement Name    | Customer Credit Profile Integration                                                                      |
+| Priority            | Critical                                                                                                 |
+| Description         | Sistem harus menampilkan status kredit dan saldo piutang pelanggan dari modul Accounts Receivable secara real-time. |
+| Acceptance Criteria | Tim sales dapat melihat sisa limit kredit pelanggan sebelum membuat Sales Order.                         |
+
+---
+
+## BR-784 – Customer Satisfaction Tracking
+
+| Attribute        | Description                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-784                                                                                            |
+| Requirement Name | Customer Satisfaction Tracking                                                                     |
+| Priority         | Low                                                                                                |
+| Description      | Sistem harus mendukung pencatatan skor kepuasan pelanggan (survei, rating) untuk kebutuhan analisis kualitas layanan. |
+
+---
+
+## BR-785 – CRM Analytics and Reporting
+
+| Attribute        | Description                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-785                                                                                              |
+| Requirement Name | CRM Analytics and Reporting                                                                         |
+| Priority         | High                                                                                                |
+| Description      | Sistem harus menyediakan laporan konversi lead, kinerja pipeline, dan tren interaksi pelanggan per organisasi. |
+
+---
+
+# 9.15.3 CRM Business Rules Reference
+
+| Business Rule ID | Description                                                                                          |
+| ----------------- | -------------------------------------------------------------------------------------------------- |
+| BRule-CRM-001     | Setiap lead yang dikonversi menjadi Customer wajib memiliki satu Customer ID unik (tidak duplikat). |
+| BRule-CRM-002     | Opportunity harus dikaitkan dengan minimal satu Customer atau Lead.                                  |
+| BRule-CRM-003     | Case yang belum diselesaikan tidak dapat ditutup tanpa catatan resolusi.                              |
+| BRule-CRM-004     | Perubahan status kredit pelanggan pada Accounts Receivable harus tercermin secara real-time pada CRM. |
+| BRule-CRM-005     | Seluruh aktivitas dan perubahan data pelanggan wajib tercatat pada Audit Trail.                       |
+
+---
+
+# 9.15.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process               |
+| -------------- | ------------------ | ----------- | ------------------------------ |
+| BR-776         | BO-008              | SH-034      | Customer Profile Management   |
+| BR-777         | BO-009              | SH-034      | Lead & Opportunity Management |
+| BR-778         | BO-008              | SH-034      | Customer Segmentation         |
+| BR-779         | BO-014              | SH-034      | Interaction Tracking           |
+| BR-780         | BO-032              | SH-034      | Case Management                |
+| BR-781         | BO-008              | SH-034      | Pipeline Management             |
+| BR-782         | BO-009              | SH-034      | Task Management                 |
+| BR-783         | BO-014              | SH-003      | Credit Integration              |
+| BR-784         | BO-034              | SH-034      | Customer Experience             |
+| BR-785         | BO-008              | SH-034      | CRM Analytics                   |
+
+---
+
+# 9.15.5 Summary
+
+Modul **Customer Relationship Management** memberikan visibilitas menyeluruh terhadap pelanggan dan menjadi jembatan antara aktivitas pemasaran/penjualan dengan pencatatan transaksi pada modul Sales dan Accounts Receivable.
+
+Seluruh requirement pada bagian ini akan diturunkan lebih lanjut menjadi Functional Requirements, desain basis data, spesifikasi API, dan skenario pengujian pada dokumen lanjutan.

@@ -1,0 +1,20 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc", "s4"],
+  description: "SAP Fiscal Period Calendar Mapping staging view"
+}
+
+SELECT
+  MANDT AS mandt,
+  PERIV AS fiscal_year_variant,
+  BDATJ AS fiscal_year,
+  POPER AS posting_period,
+  BUMON AS calendar_month,
+  BUTAG AS calendar_day,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "t009b")}
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY MANDT, PERIV, BDATJ, POPER
+  ORDER BY recordstamp DESC
+) = 1

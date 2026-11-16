@@ -1,0 +1,125 @@
+config {
+  type: "incremental",
+  schema: dataform.projectConfig.vars.target_dataset,
+  uniqueKey: ["order_id", "line_number"],
+  tags: ["fact", "cortex_v7", "sales", "tri_currency"],
+  partitionBy: "DATE_TRUNC(order_date, MONTH)",
+  clusterBy: ["org_id", "customer_id"],
+  description: "Incremental sales order fact table with tri-currency valuation and deduplicated dimensions"
+}
+
+WITH base_sales AS (
+  SELECT *
+  FROM ${ref("ann_sales_order")} s
+  ${when(incremental(), `WHERE s.order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 MONTH)`)}
+),
+
+dedup_org AS (
+  SELECT *
+  FROM ${ref("dim_organization")}
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY COALESCE(sap_company_code, org_id)
+    ORDER BY is_active DESC
+  ) = 1
+),
+
+dedup_material AS (
+  SELECT *
+  FROM ${ref("ann_material")}
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY material_number, COALESCE(plant_code, '')
+    ORDER BY source_last_updated_at DESC
+  ) = 1
+),
+
+dedup_period AS (
+  SELECT *
+  FROM ${ref("dim_fiscal_period")}
+  WHERE is_closing_period = FALSE
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY country_code, period_start_date, period_end_date
+    ORDER BY period_number ASC
+  ) = 1
+),
+
+dedup_fx AS (
+  SELECT
+    rate_date,
+    from_currency,
+    to_currency,
+    mid_rate
+  FROM ${ref("dim_currency")}
+  WHERE rate_type IN ('M', 'SPOT', 'DEFAULT')
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY rate_date, from_currency, to_currency
+    ORDER BY mid_rate DESC
+  ) = 1
+)
+
+SELECT
+  s.order_id,
+  s.line_number,
+  s.source_system,
+  COALESCE(org.org_id, CONCAT('UNKNOWN_', s.company_code)) AS org_id,
+  s.sales_order_number,
+  s.sales_org,
+  s.distribution_channel,
+  s.division,
+  s.customer_id,
+  s.material_id,
+  mat.material_name,
+  s.plant_code,
+  s.storage_location,
+  fp.fiscal_period_id,
+  s.order_date,
+  s.order_type,
+  s.document_category,
+  s.order_quantity,
+  s.uom,
+  s.unit_price,
+  
+  -- Tri-currency triplet
+  s.net_amount_tc,
+  s.currency_tc,
+  
+  -- Functional Currency Triplet
+  CASE
+    WHEN s.currency_tc = org.functional_currency THEN s.net_amount_tc
+    ELSE s.net_amount_tc * fx_fc.mid_rate
+  END AS net_amount_fc,
+  COALESCE(org.functional_currency, s.currency_tc) AS currency_fc,
+  COALESCE(
+    fx_fc.mid_rate,
+    CASE WHEN s.currency_tc = org.functional_currency THEN NUMERIC '1' ELSE CAST(NULL AS NUMERIC) END
+  ) AS exchange_rate_fc,
+  
+  -- Presentation Currency Triplet (Group Presentation Currency: USD)
+  CASE
+    WHEN s.currency_tc = 'USD' THEN s.net_amount_tc
+    ELSE s.net_amount_tc * fx_pc.mid_rate
+  END AS net_amount_pc,
+  'USD' AS currency_pc,
+  COALESCE(
+    fx_pc.mid_rate,
+    CASE WHEN s.currency_tc = 'USD' THEN NUMERIC '1' ELSE CAST(NULL AS NUMERIC) END
+  ) AS exchange_rate_pc,
+  
+  s.source_last_updated_at
+FROM base_sales s
+LEFT JOIN dedup_org org
+  ON (s.source_system = 'SAP_SD' AND org.sap_company_code = s.company_code)
+  OR (s.source_system = 'NEW_ERP' AND org.org_id = s.company_code)
+LEFT JOIN dedup_material mat
+  ON mat.material_number = s.material_id
+  AND COALESCE(mat.plant_code, '') = COALESCE(s.plant_code, '')
+LEFT JOIN dedup_period fp
+  ON fp.country_code = COALESCE(org.country_code, 'GLOBAL')
+  AND s.order_date BETWEEN fp.period_start_date AND fp.period_end_date
+LEFT JOIN dedup_fx fx_fc
+  ON fx_fc.rate_date = s.order_date
+  AND fx_fc.from_currency = s.currency_tc
+  AND fx_fc.to_currency = org.functional_currency
+LEFT JOIN dedup_fx fx_pc
+  ON fx_pc.rate_date = s.order_date
+  AND fx_pc.from_currency = s.currency_tc
+  AND fx_pc.to_currency = 'USD'

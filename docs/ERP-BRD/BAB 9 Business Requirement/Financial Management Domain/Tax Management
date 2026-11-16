@@ -1,0 +1,173 @@
+# 9.5.13 Tax Management Requirements
+
+---
+
+# 9.5.13.1 Overview
+
+Tax Management merupakan domain yang mengatur pengelolaan perpajakan secara menyeluruh dalam sistem ERP, mencakup konfigurasi jenis dan tarif pajak, perhitungan pajak otomatis pada seluruh transaksi bisnis, pencatatan Pajak Keluaran dan Pajak Masukan, rekonsiliasi saldo pajak, hingga pelaporan pajak sesuai regulasi yang berlaku di masing-masing yurisdiksi tempat entitas beroperasi.
+
+Mengingat setiap Organization/Company dalam struktur Holding, Sub Holding, hingga Branch dapat memiliki kewajiban perpajakan yang berbeda sesuai domisili dan regulasi setempat, konfigurasi pajak harus dapat diterapkan secara scope-based tanpa memerlukan perubahan source code. Domain ini juga menjadi jembatan antara transaksi operasional (Sales, Purchasing, Inventory, Fixed Asset, Payroll) dengan kewajiban pelaporan kepada otoritas pajak, sehingga akurasi dan konsistensi data pajak menjadi prasyarat utama bagi tata kelola keuangan yang transparan.
+
+---
+
+# 9.5.13.2 Business Requirement Catalogue
+
+## BR-646 – Tax Type and Tax Rate Master Configuration
+
+| Attribute           | Description                                                                                                                                                                                                     |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-646                                                                                                                                                                                                          |
+| Requirement Name    | Tax Type and Tax Rate Master Configuration                                                                                                                                                                     |
+| Category            | Tax Configuration                                                                                                                                                                                               |
+| Priority            | Critical                                                                                                                                                                                                        |
+| Business Objective  | BO-007, BO-022                                                                                                                                                                                                  |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer), SH-011 (Compliance Officer)                                                                                                                                                  |
+| Description         | Sistem harus menyediakan master data Tax Type (misalnya PPN, PPh 21, PPh 22, PPh 23, PPh Final, Bea Meterai) beserta Tax Rate yang dapat dikonfigurasi secara scope-based per Organization/Company sesuai yurisdiksi dan regulasi yang berlaku, termasuk histori perubahan tarif berbasis Effective Date. |
+| Business Rationale  | Ketidakseragaman pengaturan tarif pajak antar entitas serta perubahan tarif yang tidak terkendali dapat menimbulkan kesalahan perhitungan pajak dan risiko ketidakpatuhan terhadap regulasi perpajakan.       |
+| Business Value      | Menjamin keakuratan perhitungan pajak di seluruh entitas serta mempercepat penyesuaian sistem saat terjadi perubahan regulasi pajak.                                                                          |
+| Acceptance Criteria | Administrator dapat mendefinisikan Tax Type dan Tax Rate berbasis Effective Date per Organization/Company, dan sistem secara otomatis menerapkan tarif yang berlaku sesuai tanggal transaksi.                 |
+
+---
+
+## BR-647 – Tax Code and Tax Group Setup
+
+| Attribute           | Description                                                                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-647                                                                                                                                                                            |
+| Requirement Name    | Tax Code and Tax Group Setup                                                                                                                                                     |
+| Priority            | High                                                                                                                                                                              |
+| Description         | Sistem harus menyediakan konfigurasi Tax Code yang mengelompokkan kombinasi Tax Type, Tax Rate, dan akun perpajakan (GL Account) agar dapat digunakan secara konsisten di seluruh modul transaksi (Sales, Purchasing, Inventory, Fixed Asset, dan lainnya). |
+| Acceptance Criteria | Tax Code dapat dipetakan secara otomatis ke akun Pajak Keluaran dan Pajak Masukan pada saat transaksi diposting ke General Ledger.                                               |
+
+---
+
+## BR-648 – Automatic Tax Calculation on Transactions
+
+| Attribute           | Description                                                                                                                                                          |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-648                                                                                                                                                                |
+| Requirement Name    | Automatic Tax Calculation on Transactions                                                                                                                            |
+| Priority            | Critical                                                                                                                                                              |
+| Description         | Sistem harus melakukan perhitungan pajak secara otomatis pada dokumen transaksi (Sales Order, Sales Invoice, Purchase Order, Purchase Invoice, Payment) berdasarkan Tax Code yang berlaku tanpa memerlukan input manual. |
+| Business Value      | Mengurangi kesalahan hitung pajak secara manual serta mempercepat proses pemrosesan transaksi harian.                                                                |
+
+---
+
+## BR-649 – Multi-Tax and Compound Tax Applicability
+
+| Attribute           | Description                                                                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-649                                                                                                                                                          |
+| Requirement Name    | Multi-Tax and Compound Tax Applicability                                                                                                                       |
+| Priority            | High                                                                                                                                                            |
+| Description         | Sistem harus mendukung penerapan lebih dari satu jenis pajak pada satu transaksi (multi-tax) maupun perhitungan pajak bertingkat (compound tax) sesuai kebutuhan regulasi tertentu. |
+| Acceptance Criteria | Sistem dapat menghitung kombinasi pajak sesuai urutan perhitungan (calculation sequence) yang dapat dikonfigurasi oleh Administrator.                          |
+
+---
+
+## BR-650 – Tax Exemption and Special Tax Treatment
+
+| Attribute           | Description                                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-650                                                                                                                                                                |
+| Requirement Name    | Tax Exemption and Special Tax Treatment                                                                                                                              |
+| Priority            | High                                                                                                                                                                  |
+| Description         | Sistem harus mendukung pengecualian pajak (tax exemption), pajak ditanggung pemerintah (DTP), serta perlakuan khusus lain berdasarkan kategori pelanggan, produk, atau proyek tertentu. |
+| Acceptance Criteria | Pengguna dapat menandai transaksi atau entitas tertentu sebagai bebas pajak dengan dasar hukum yang dapat direferensikan pada dokumen transaksi.                    |
+
+---
+
+## BR-651 – Withholding Tax (PPh) Management
+
+| Attribute           | Description                                                                                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-651                                                                                                                                                                                              |
+| Requirement Name    | Withholding Tax (PPh) Management                                                                                                                                                                   |
+| Priority            | Critical                                                                                                                                                                                            |
+| Description         | Sistem harus mengelola perhitungan dan pencatatan Withholding Tax (PPh 21, 22, 23, 4(2), dan jenis lainnya), baik yang dipotong oleh perusahaan maupun yang dipotong oleh pihak lain, termasuk penerbitan dan pencatatan bukti potong. |
+| Acceptance Criteria | Sistem dapat menghasilkan bukti potong pajak secara otomatis dan mengaitkannya dengan transaksi sumber yang relevan.                                                                               |
+
+---
+
+## BR-652 – Output Tax and Input Tax Recording
+
+| Attribute           | Description                                                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-652                                                                                                                                                             |
+| Requirement Name    | Output Tax and Input Tax Recording                                                                                                                                |
+| Priority            | Critical                                                                                                                                                           |
+| Description         | Sistem harus mencatat Pajak Keluaran (Output Tax) dari transaksi penjualan dan Pajak Masukan (Input Tax) dari transaksi pembelian secara terpisah dan tertaut dengan faktur pajak masing-masing. |
+| Business Value      | Menjaga integritas pencatatan pajak sebagai dasar bagi proses rekonsiliasi dan pelaporan pajak.                                                                   |
+
+---
+
+## BR-653 – Tax Reconciliation (Output Tax vs Input Tax)
+
+| Attribute           | Description                                                                                                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-653                                                                                                                                                                   |
+| Requirement Name    | Tax Reconciliation (Output Tax vs Input Tax)                                                                                                                            |
+| Priority            | Critical                                                                                                                                                                 |
+| Description         | Sistem harus menyediakan proses rekonsiliasi antara Pajak Keluaran dan Pajak Masukan per periode pajak untuk memastikan kesesuaian saldo pajak sebelum pelaporan kepada otoritas pajak. |
+| Acceptance Criteria | Sistem menghasilkan laporan rekonsiliasi yang menyoroti selisih (variance) antara pencatatan internal dan dokumen faktur pajak yang diterima/diterbitkan.               |
+
+---
+
+## BR-654 – Tax Reporting and Regulatory Compliance
+
+| Attribute           | Description                                                                                                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-654                                                                                                                                                                          |
+| Requirement Name    | Tax Reporting and Regulatory Compliance                                                                                                                                        |
+| Priority            | Critical                                                                                                                                                                        |
+| Description         | Sistem harus menghasilkan laporan pajak sesuai format regulasi yang berlaku (misalnya SPT Masa PPN, e-Faktur, bukti potong PPh) yang dapat diekspor untuk keperluan pelaporan kepada otoritas pajak. |
+| Acceptance Criteria | Laporan pajak dapat dihasilkan per periode dan per entitas sesuai format yang dipersyaratkan regulasi yang berlaku.                                                            |
+
+---
+
+## BR-655 – Tax Period Closing and Audit Trail
+
+| Attribute           | Description                                                                                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-655                                                                                                                                                                  |
+| Requirement Name    | Tax Period Closing and Audit Trail                                                                                                                                     |
+| Priority            | High                                                                                                                                                                    |
+| Description         | Sistem harus menyediakan mekanisme penutupan periode pajak (tax period closing) beserta audit trail atas seluruh perubahan data pajak untuk mendukung proses audit internal maupun eksternal. |
+| Acceptance Criteria | Setelah periode pajak ditutup, transaksi pajak pada periode tersebut terkunci dari perubahan kecuali melalui mekanisme pembetulan (revisi) yang tercatat.              |
+
+---
+
+# 9.5.13.3 Tax Management Business Rules
+
+| Business Rule ID | Description                                                                                                                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| BRule-TAX-001     | Setiap transaksi yang dikenakan pajak harus direferensikan ke Tax Code yang valid dan berstatus aktif pada tanggal transaksi.                          |
+| BRule-TAX-002     | Tarif pajak yang berlaku pada suatu transaksi adalah tarif yang aktif berdasarkan Effective Date, bukan tarif yang berlaku pada saat pelaporan.        |
+| BRule-TAX-003     | Konfigurasi pajak harus mengikuti hierarki Scope Organization/Company sehingga setiap entitas dapat memiliki pengaturan pajak sesuai yurisdiksinya.    |
+| BRule-TAX-004     | Pajak Keluaran dan Pajak Masukan harus dicatat secara terpisah dan tidak dapat saling dikompensasi tanpa melalui proses rekonsiliasi resmi.            |
+| BRule-TAX-005     | Perubahan Tax Rate tidak boleh mengubah nilai pajak pada transaksi yang telah diposting sebelumnya.                                                     |
+| BRule-TAX-006     | Dokumen pajak yang telah dilaporkan pada suatu periode pajak tidak dapat diubah secara langsung, melainkan melalui mekanisme pembetulan yang tercatat. |
+| BRule-TAX-007     | Bukti potong Withholding Tax yang diterima dari pihak lain harus dapat direkonsiliasi dengan pencatatan pajak masukan/pengurang pajak perusahaan.      |
+
+---
+
+# 9.5.13.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder    | Future Process                                  |
+| -------------- | ------------------- | -------------- | ------------------------------------------------ |
+| BR-646         | BO-007, BO-022       | SH-003, SH-011 | Tax Type and Tax Rate Configuration Administration |
+| BR-647         | BO-022               | SH-003         | Tax Code and GL Mapping Setup                    |
+| BR-648         | BO-022               | SH-003         | Automatic Tax Calculation Engine Design           |
+| BR-649         | BO-022               | SH-003         | Multi-Tax and Compound Tax Calculation Design     |
+| BR-650         | BO-007, BO-022       | SH-011         | Tax Exemption and Special Treatment Administration |
+| BR-651         | BO-007, BO-022       | SH-011, SH-003 | Withholding Tax and Bukti Potong Management        |
+| BR-652         | BO-022               | SH-003         | Output Tax and Input Tax Ledger Design            |
+| BR-653         | BO-007, BO-022       | SH-011         | Tax Reconciliation Process Design                 |
+| BR-654         | BO-007               | SH-011         | Tax Reporting and Regulatory Submission            |
+| BR-655         | BO-007               | SH-011         | Tax Period Closing and Audit Trail Administration  |
+
+---
+
+# 9.5.13.5 Summary
+
+Tax Management Requirements menetapkan fondasi pengelolaan perpajakan yang konsisten, akurat, dan sesuai regulasi di seluruh entitas dalam struktur organisasi grup. Dengan konfigurasi pajak yang scope-based, perhitungan otomatis pada transaksi, serta mekanisme rekonsiliasi dan pelaporan yang terstruktur, domain ini mendukung tata kelola perpajakan yang transparan sekaligus menjadi dasar bagi desain proses perpajakan yang lebih rinci pada dokumen berikutnya.

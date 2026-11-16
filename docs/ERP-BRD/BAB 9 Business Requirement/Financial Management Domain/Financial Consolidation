@@ -1,0 +1,176 @@
+# 9.5.15 Financial Consolidation Requirements
+
+---
+
+# 9.5.15.1 Overview
+
+Financial Consolidation merupakan proses penggabungan laporan keuangan dari beberapa entitas legal (Company) yang tergabung dalam satu grup usaha, mencakup Holding, Sub Holding, dan Company, menjadi satu set laporan keuangan konsolidasian yang mencerminkan kondisi keuangan grup secara keseluruhan.
+
+Proses konsolidasi mencakup penentuan metode konsolidasi berdasarkan persentase kepemilikan, eliminasi transaksi antar perusahaan (intercompany elimination) untuk menghilangkan duplikasi nilai, translasi mata uang bagi entitas anak yang menggunakan mata uang fungsional berbeda dari mata uang penyajian grup, perhitungan kepentingan non-pengendali (Non-Controlling Interest), serta penyusunan laporan keuangan konsolidasian akhir.
+
+Mengingat struktur organisasi pada platform ERP ini bersifat hierarkis tanpa batas level (Holding, Sub Holding, Company, dan seterusnya) dan dapat berubah melalui konfigurasi, maka kemampuan konsolidasi keuangan harus dirancang agar dapat mendukung struktur grup yang kompleks dan bertingkat (multi-tier), tanpa memerlukan perubahan pada source code aplikasi.
+
+---
+
+# 9.5.15.2 Business Requirement Catalogue
+
+## BR-666 – Consolidation Group & Hierarchy Master
+
+| Attribute           | Description                                                                                                                                                                                                              |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-666                                                                                                                                                                                                                  |
+| Requirement Name    | Consolidation Group & Hierarchy Master                                                                                                                                                                                 |
+| Category            | Financial Consolidation                                                                                                                                                                                                |
+| Priority            | Critical                                                                                                                                                                                                                |
+| Business Objective  | BO-020                                                                                                                                                                                                                  |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                                                                                                                       |
+| Description         | Sistem harus menyediakan master data Consolidation Group yang memetakan hierarki Holding, Sub Holding, dan Company ke dalam struktur konsolidasi keuangan, terpisah dari struktur organisasi operasional maupun Financial Organization, serta dapat dikonfigurasi tanpa perubahan source code. |
+| Business Rationale  | Struktur konsolidasi keuangan grup usaha dapat berbeda dari struktur organisasi operasional maupun struktur kepemilikan legal, sehingga diperlukan representasi tersendiri yang fleksibel untuk mendukung pelaporan konsolidasian yang akurat. |
+| Business Value      | Memberikan fondasi yang fleksibel bagi seluruh proses konsolidasi, termasuk eliminasi, translasi, dan penyusunan laporan keuangan konsolidasian, tanpa bergantung pada perubahan aplikasi.                              |
+| Acceptance Criteria | Administrator dapat mendefinisikan Consolidation Group multi-level (Holding–Sub Holding–Company) berikut persentase kepemilikan pada setiap tingkat, dan perubahan struktur dapat dilakukan melalui konfigurasi tanpa memengaruhi transaksi historis. |
+
+---
+
+## BR-667 – Consolidation Method Determination
+
+| Attribute        | Description                                                                                                                                                                                          |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-667                                                                                                                                                                                             |
+| Requirement Name  | Consolidation Method Determination                                                                                                                                                                |
+| Priority          | Critical                                                                                                                                                                                           |
+| Description       | Sistem harus menentukan metode konsolidasi (Full Consolidation, Proportional Consolidation, atau Equity Method) secara otomatis berdasarkan persentase kepemilikan dan tingkat pengendalian yang dikonfigurasi pada Consolidation Group, dengan opsi override manual oleh pengguna berwenang. |
+| Business Value    | Memastikan penerapan metode konsolidasi sesuai standar akuntansi dan kebijakan grup tanpa proses manual yang rawan kesalahan.                                                                     |
+
+---
+
+## BR-668 – Intercompany Transaction Identification & Tagging
+
+| Attribute        | Description                                                                                                                                                                                 |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-668                                                                                                                                                                                    |
+| Requirement Name  | Intercompany Transaction Identification & Tagging                                                                                                                                        |
+| Priority          | Critical                                                                                                                                                                                  |
+| Description       | Sistem harus mampu mengidentifikasi dan menandai transaksi intercompany secara otomatis pada saat pencatatan, berdasarkan pihak (partner company) yang terlibat dalam Consolidation Group yang sama. |
+| Business Value    | Menjadi dasar bagi proses eliminasi otomatis dan memastikan seluruh transaksi antar perusahaan dapat ditelusuri secara konsisten.                                                        |
+
+---
+
+## BR-669 – Intercompany Elimination Engine
+
+| Attribute           | Description                                                                                                                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-669                                                                                                                                                                                                        |
+| Requirement Name    | Intercompany Elimination Engine                                                                                                                                                                              |
+| Priority            | Critical                                                                                                                                                                                                      |
+| Description         | Sistem harus menyediakan mesin eliminasi otomatis untuk transaksi intercompany, mencakup piutang-utang antar perusahaan, penjualan-pembelian antar perusahaan, laba belum terealisasi (unrealized profit), serta investasi dan ekuitas antar entitas. |
+| Business Value      | Mengurangi risiko duplikasi nilai transaksi antar perusahaan dalam laporan konsolidasian dan mempercepat proses tutup buku konsolidasi.                                                                       |
+| Acceptance Criteria | Sistem menghasilkan jurnal eliminasi otomatis beserta rincian akun dan nilai yang dieliminasi, dan pengguna berwenang dapat meninjau sebelum laporan konsolidasian difinalisasi.                             |
+
+---
+
+## BR-670 – Currency Translation for Consolidation
+
+| Attribute        | Description                                                                                                                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-670                                                                                                                                                                                                            |
+| Requirement Name  | Currency Translation for Consolidation                                                                                                                                                                           |
+| Priority          | Critical                                                                                                                                                                                                          |
+| Description       | Sistem harus menyediakan mekanisme translasi mata uang dari mata uang fungsional masing-masing entitas ke mata uang penyajian grup, menggunakan closing rate untuk pos neraca dan average rate untuk pos laba rugi, serta mencatat selisih translasi sebagai Cumulative Translation Adjustment (CTA). |
+| Business Value    | Menjamin konsistensi penyajian laporan keuangan konsolidasian pada satu mata uang pelaporan meskipun entitas anak menggunakan mata uang fungsional berbeda.                                                     |
+
+---
+
+## BR-671 – Non-Controlling Interest (NCI) Calculation
+
+| Attribute        | Description                                                                                                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-671                                                                                                                                                        |
+| Requirement Name  | Non-Controlling Interest (NCI) Calculation                                                                                                                   |
+| Priority          | High                                                                                                                                                          |
+| Description       | Sistem harus menghitung dan menyajikan Non-Controlling Interest secara otomatis berdasarkan persentase kepemilikan pihak minoritas pada entitas anak yang dikonsolidasikan secara penuh. |
+| Business Value    | Memastikan kepatuhan terhadap prinsip akuntansi konsolidasi terkait pemisahan kepentingan non-pengendali dari ekuitas pemilik entitas induk.                  |
+
+---
+
+## BR-672 – Consolidation Adjustment & Top-Side Journal
+
+| Attribute        | Description                                                                                                                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-672                                                                                                                                                                    |
+| Requirement Name  | Consolidation Adjustment & Top-Side Journal                                                                                                                              |
+| Priority          | High                                                                                                                                                                      |
+| Description       | Sistem harus menyediakan fasilitas jurnal penyesuaian tingkat konsolidasi (top-side adjustment) yang terpisah dari ledger entitas legal, untuk mengakomodasi koreksi, reklasifikasi, atau penyesuaian kebijakan akuntansi grup. |
+| Business Value    | Memberikan fleksibilitas bagi tim konsolidasi untuk melakukan penyesuaian tanpa mengubah pembukuan entitas legal individu.                                               |
+
+---
+
+## BR-673 – Consolidated Financial Statement Generation
+
+| Attribute        | Description                                                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-673                                                                                                                                                                                                      |
+| Requirement Name  | Consolidated Financial Statement Generation                                                                                                                                                                |
+| Priority          | Critical                                                                                                                                                                                                    |
+| Description       | Sistem harus mampu menyusun laporan keuangan konsolidasian (Laporan Posisi Keuangan, Laporan Laba Rugi, Laporan Arus Kas, dan Laporan Perubahan Ekuitas) secara otomatis berdasarkan data hasil eliminasi, translasi, dan penyesuaian konsolidasi. |
+| Business Value    | Mempercepat penyusunan laporan keuangan grup dan meningkatkan akurasi pelaporan kepada manajemen maupun regulator.                                                                                          |
+
+---
+
+## BR-674 – Consolidation Audit Trail & Version Control
+
+| Attribute        | Description                                                                                                                                                                                                       |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-674                                                                                                                                                                                                        |
+| Requirement Name  | Consolidation Audit Trail & Version Control                                                                                                                                                                   |
+| Priority          | High                                                                                                                                                                                                           |
+| Description       | Sistem harus mencatat audit trail lengkap atas setiap proses konsolidasi, termasuk perubahan struktur grup, jurnal eliminasi, jurnal penyesuaian, serta versi laporan konsolidasian yang dihasilkan pada setiap periode. |
+| Business Value    | Mendukung transparansi, akuntabilitas, dan kepatuhan terhadap audit internal maupun eksternal atas proses konsolidasi.                                                                                        |
+
+---
+
+## BR-675 – Multi-Level & Multi-Tier Consolidation
+
+| Attribute        | Description                                                                                                                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | BR-675                                                                                                                                                                              |
+| Requirement Name  | Multi-Level & Multi-Tier Consolidation                                                                                                                                              |
+| Priority          | High                                                                                                                                                                                |
+| Description       | Sistem harus mendukung proses konsolidasi bertingkat (multi-tier), di mana laporan konsolidasian Sub Holding menjadi input bagi proses konsolidasi pada tingkat Holding di atasnya, tanpa batasan jumlah level struktur. |
+| Business Value    | Mendukung skalabilitas struktur organisasi yang kompleks dan terus berkembang tanpa memerlukan perubahan aplikasi.                                                                  |
+
+---
+
+# 9.5.15.3 Financial Consolidation Business Rules
+
+| Business Rule ID | Description                                                                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-FCON-001    | Setiap Company yang tergabung dalam grup usaha harus dipetakan ke dalam satu Consolidation Group sebelum dapat diikutsertakan dalam proses konsolidasi.        |
+| BRule-FCON-002    | Metode konsolidasi (full, proporsional, ekuitas) ditentukan berdasarkan persentase kepemilikan dan tingkat pengendalian yang berlaku sesuai kebijakan grup dan standar akuntansi. |
+| BRule-FCON-003    | Setiap transaksi intercompany wajib ditandai dengan kode entitas pasangan (intercompany partner) agar dapat diidentifikasi dalam proses eliminasi.             |
+| BRule-FCON-004    | Proses eliminasi intercompany harus dijalankan sebelum laporan keuangan konsolidasian difinalisasi pada setiap periode pelaporan.                               |
+| BRule-FCON-005    | Translasi mata uang menggunakan closing rate untuk pos neraca dan average rate untuk pos laba rugi; selisih yang timbul dicatat sebagai Cumulative Translation Adjustment (CTA) pada ekuitas konsolidasian. |
+| BRule-FCON-006    | Non-Controlling Interest dihitung berdasarkan persentase kepemilikan pihak minoritas dan disajikan terpisah dari ekuitas pemilik entitas induk.                 |
+| BRule-FCON-007    | Jurnal penyesuaian tingkat konsolidasi tidak boleh memengaruhi pembukuan (ledger) entitas legal individu dan harus tercatat dengan audit trail lengkap.         |
+
+---
+
+# 9.5.15.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                                |
+| -------------- | ------------------- | ----------- | ---------------------------------------------- |
+| BR-666         | BO-020              | SH-003      | Consolidation Group Configuration              |
+| BR-667         | BO-020              | SH-003      | Consolidation Method Assignment                |
+| BR-668         | BO-020              | SH-028      | Intercompany Transaction Tagging               |
+| BR-669         | BO-020              | SH-028      | Intercompany Elimination Processing            |
+| BR-670         | BO-021              | SH-003      | Currency Translation for Consolidation         |
+| BR-671         | BO-020              | SH-003      | Non-Controlling Interest Reporting             |
+| BR-672         | BO-020              | SH-028      | Consolidation Adjustment Entry                 |
+| BR-673         | BO-022              | SH-003      | Consolidated Financial Statement Preparation   |
+| BR-674         | BO-028              | SH-010      | Consolidation Audit & Compliance Review        |
+| BR-675         | BO-020              | SH-003      | Multi-Tier Consolidation Processing            |
+
+---
+
+# 9.5.15.5 Summary
+
+Financial Consolidation Requirements menetapkan kebutuhan bisnis untuk pengelolaan struktur konsolidasi grup, penentuan metode konsolidasi, eliminasi transaksi antar perusahaan, translasi mata uang, perhitungan kepentingan non-pengendali, hingga penyusunan laporan keuangan konsolidasian secara bertingkat (multi-tier). Kesepuluh requirement pada bagian ini menjadi fondasi bagi domain Financial Consolidation dan akan menjadi acuan bagi desain teknis serta integrasi lanjutan dengan modul General Ledger, Currency Management, dan Financial Reporting pada dokumen berikutnya.

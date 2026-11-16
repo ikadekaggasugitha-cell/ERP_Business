@@ -1,0 +1,214 @@
+# BAB 2. Business Background
+
+## 2.1 Overview
+
+Perkembangan teknologi informasi telah mengubah cara organisasi mengelola proses bisnis, sumber daya, dan pengambilan keputusan. Organisasi modern dituntut untuk memiliki sistem yang mampu mengintegrasikan seluruh fungsi bisnis ke dalam satu platform yang terpusat, fleksibel, dan mudah dikembangkan.
+
+Seiring pertumbuhan perusahaan, struktur organisasi menjadi semakin kompleks. Perusahaan dapat berkembang dari satu entitas menjadi grup perusahaan yang terdiri atas Holding Company, Sub Holding, anak perusahaan, unit bisnis, cabang, gudang, pabrik, hingga lokasi proyek yang tersebar di berbagai wilayah.
+
+Kompleksitas tersebut memerlukan sebuah platform Enterprise Resource Planning (ERP) yang mampu mengelola organisasi secara dinamis tanpa bergantung pada perubahan kode aplikasi.
+
+---
+
+## 2.2 Business Context
+
+Organisasi yang menjadi target implementasi ERP memiliki karakteristik sebagai berikut:
+
+* Memiliki struktur organisasi bertingkat (*multi-level organization*).
+* Mengelola lebih dari satu perusahaan (*multi-company*).
+* Memiliki unit bisnis dengan karakteristik operasional yang berbeda.
+* Menggunakan proses bisnis yang saling terintegrasi.
+* Membutuhkan konsolidasi data lintas organisasi.
+* Memerlukan mekanisme pengelolaan hak akses berdasarkan struktur organisasi.
+* Memiliki kebutuhan workflow yang berbeda pada setiap unit bisnis.
+
+ERP harus mampu mengakomodasi kebutuhan tersebut melalui mekanisme konfigurasi yang fleksibel.
+
+---
+
+## 2.3 Current Business Challenges
+
+Hasil identifikasi awal menunjukkan beberapa tantangan utama yang dihadapi organisasi.
+
+### 2.3.1 Organizational Complexity
+
+Pertumbuhan organisasi menyebabkan bertambahnya jumlah perusahaan, unit bisnis, cabang, gudang, maupun lokasi operasional.
+
+Akibatnya:
+
+* Struktur organisasi sering berubah.
+* Hubungan antar organisasi semakin kompleks.
+* Sulit menjaga konsistensi data.
+
+---
+
+### 2.3.2 Disconnected Systems
+
+Berbagai fungsi bisnis masih menggunakan aplikasi yang berdiri sendiri.
+
+Contohnya:
+
+* Finance menggunakan aplikasi A.
+* HR menggunakan aplikasi B.
+* Inventory menggunakan aplikasi C.
+* Procurement menggunakan aplikasi D.
+
+Kondisi tersebut menyebabkan:
+
+* Data tidak sinkron.
+* Terjadi duplikasi informasi.
+* Proses rekonsiliasi membutuhkan waktu yang lama.
+
+---
+
+### 2.3.3 Manual Business Processes
+
+Beberapa proses bisnis masih dilakukan secara manual, seperti:
+
+* Persetujuan dokumen.
+* Rekapitulasi laporan.
+* Konsolidasi data.
+* Distribusi dokumen.
+* Monitoring aktivitas operasional.
+
+Hal ini meningkatkan risiko kesalahan manusia (*human error*) dan memperlambat proses bisnis.
+
+---
+
+### 2.3.4 Limited Scalability
+
+Sebagian besar sistem hanya dirancang untuk satu perusahaan sehingga setiap penambahan:
+
+* Company,
+* Branch,
+* Department,
+* Warehouse,
+* maupun Business Unit,
+
+memerlukan perubahan aplikasi atau konfigurasi yang terbatas.
+
+---
+
+### 2.3.5 Inconsistent Business Rules
+
+Setiap perusahaan atau unit bisnis dapat memiliki aturan operasional yang berbeda, seperti:
+
+* Alur persetujuan.
+* Struktur organisasi.
+* Pengelolaan master data.
+* Kebijakan keuangan.
+* Kebijakan pengadaan.
+
+ERP harus mampu mendukung variasi tersebut tanpa mengurangi standar tata kelola perusahaan.
+
+---
+
+## 2.4 Business Opportunity
+
+Implementasi ERP memberikan peluang strategis untuk:
+
+* Mengintegrasikan seluruh proses bisnis dalam satu platform.
+* Mengurangi duplikasi data.
+* Menyediakan *Single Source of Truth*.
+* Meningkatkan efisiensi operasional.
+* Mempercepat pengambilan keputusan.
+* Menyediakan pelaporan konsolidasi secara real-time.
+* Mendukung ekspansi organisasi tanpa perubahan arsitektur sistem.
+
+---
+
+## 2.5 Strategic Direction
+
+ERP dikembangkan sebagai platform jangka panjang yang mendukung transformasi digital organisasi.
+
+Strategi pengembangan difokuskan pada prinsip-prinsip berikut:
+
+* Configuration over Customization.
+* Modular Architecture.
+* API First.
+* Organization Tree First.
+* Scope-Based Access.
+* Workflow Driven.
+* Security by Design.
+* Cloud Ready.
+* Multi Company Ready.
+* Multi Organization Ready.
+
+---
+
+## 2.6 Business Drivers
+
+Faktor utama yang mendorong pembangunan ERP meliputi:
+
+| Driver                 | Description                                                   |
+| ---------------------- | ------------------------------------------------------------- |
+| Organizational Growth  | Pertumbuhan jumlah perusahaan dan unit bisnis.                |
+| Business Integration   | Integrasi seluruh proses bisnis dalam satu platform.          |
+| Operational Efficiency | Peningkatan efisiensi operasional melalui otomatisasi proses. |
+| Data Consistency       | Menyediakan sumber data tunggal yang konsisten.               |
+| Executive Visibility   | Menyediakan informasi real-time bagi manajemen.               |
+| Regulatory Compliance  | Memenuhi kebutuhan audit, keamanan, dan kepatuhan.            |
+| Digital Transformation | Mendukung strategi transformasi digital organisasi.           |
+
+---
+
+## 2.7 Business Vision
+
+Visi pengembangan ERP adalah membangun platform enterprise yang mampu menjadi fondasi utama operasional organisasi dengan karakteristik:
+
+* Fleksibel terhadap perubahan struktur organisasi.
+* Mudah dikonfigurasi tanpa perubahan source code.
+* Mendukung pertumbuhan bisnis jangka panjang.
+* Mengintegrasikan seluruh proses bisnis.
+* Menyediakan informasi yang akurat, konsisten, dan real-time.
+* Menjadi platform yang dapat dikembangkan secara berkelanjutan.
+
+---
+
+## 2.8 Expected Business Outcomes
+
+Implementasi ERP diharapkan menghasilkan manfaat sebagai berikut.
+
+### Operational Outcomes
+
+* Standarisasi proses bisnis.
+* Otomatisasi workflow.
+* Pengurangan pekerjaan manual.
+* Peningkatan produktivitas pengguna.
+
+### Management Outcomes
+
+* Dashboard manajemen real-time.
+* Monitoring lintas perusahaan.
+* Pengambilan keputusan berbasis data.
+
+### Financial Outcomes
+
+* Efisiensi biaya operasional.
+* Konsolidasi laporan keuangan.
+* Pengurangan biaya pemeliharaan sistem.
+
+### Strategic Outcomes
+
+* Mendukung ekspansi organisasi.
+* Meningkatkan tata kelola perusahaan.
+* Menjadi fondasi pengembangan layanan digital di masa depan.
+
+---
+
+## 2.9 Business Principles
+
+Pengembangan ERP berpedoman pada prinsip-prinsip berikut:
+
+1. Business Driven.
+2. Configuration over Customization.
+3. Organization Tree First.
+4. Scope-Based Everything.
+5. Modular and Extensible.
+6. Security by Design.
+7. Single Source of Truth.
+8. Cloud Ready.
+9. API First.
+10. Auditability and Traceability.
+
+Prinsip-prinsip tersebut menjadi dasar dalam penyusunan seluruh kebutuhan bisnis, desain solusi, implementasi, serta pengembangan sistem ERP di masa mendatang.

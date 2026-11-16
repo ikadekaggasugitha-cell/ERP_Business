@@ -1,0 +1,96 @@
+# BAB 9. Build, Migration, and CI/CD Pipeline
+
+## 9.1 Overview
+
+BAB ini menstandarkan cara membangun, memigrasi, dan mengirim layanan — dari perintah lokal (`Makefile`) hingga gerbang CI per layanan. Pola diambil langsung dari `services/gl-service/Makefile` dan `.github/workflows/gl-service.yml` yang sudah diverifikasi.
+
+## 9.2 The Migration Pipeline (golang-migrate, Expand–Contract)
+
+Skema dikelola **golang-migrate** dari set migrasi repo-wide `db/migrations/<db>` (source of truth, DBDD — bukan `db/schema/schema.sql`). Migrasi dijalankan sebagai **owner** (`erp_migrator`), terpisah dari role app.
+
+```bash
+migrate -path ../../db/migrations/gl_db -database "$DATABASE_URL" up        # apply (expand)
+migrate -path ../../db/migrations/gl_db -database "$DATABASE_URL" version    # versi saat ini
+migrate -path ../../db/migrations/gl_db -database "$DATABASE_URL" down 1     # rollback satu langkah
+```
+
+* **Expand–Contract (SAD 10.4):** perubahan skema yang kompatibel-mundur dulu (*expand*), deploy kode yang memakainya, baru migrasi pembersih (*contract*). Ini memungkinkan rolling update tanpa downtime.
+* **Partisi:** migrasi *down* untuk tabel terpartisi harus `DETACH PARTITION` sebelum `DROP` (dependensi FK komposit masuk) — sudah tertangani di set migrasi DBDD.
+* **Golang-migrate memperbolehkan celah versi** (mis. remediation `000003` untuk DB terpartisi vs `000002` untuk lainnya) — konsisten dengan konvensi DBDD.
+
+> **SDD-060 — Migrasi ≠ tanggung jawab runtime layanan.** Layanan **tidak** menjalankan migrasi saat start-up. Migrasi adalah langkah pipeline terpisah (Job/CI) sebagai `erp_migrator`; layanan hanya konek sebagai `erp_app_rw`. Ini menjaga invarian non-owner (BAB 7.5).
+
+## 9.3 Code Generation Gate (sqlc diff)
+
+Kode `internal/<db>` dihasilkan `sqlc` dari `db/queries/*.sql` + `db/schema/schema.sql`. CI **menggagalkan** build bila kode yang di-commit basi:
+
+```bash
+sqlc generate   # regenerasi (lokal)
+sqlc diff       # gerbang CI: gagal bila internal/<db> tidak sinkron dengan SQL
+```
+
+> **SDD-061 — Generated code di-commit + diverifikasi.** `internal/<db>` di-commit ke repo (bukan di-generate saat build) agar diff mudah ditinjau, tetapi `sqlc diff` di CI memastikan ia selalu cerminan mutakhir dari `db/queries`. Jangan pernah mengedit file `*.sql.go`/`models.go` secara manual.
+
+## 9.4 Makefile Targets and Local Workflow
+
+Target standar (dari `gl-service/Makefile`) yang direplikasi tiap layanan (ganti `MIGRATIONS`, DSN):
+
+| Target           | Perintah inti                                                     | Guna                                   |
+| ---------------- | ----------------------------------------------------------------- | -------------------------------------- |
+| `sqlc`           | `sqlc generate`                                                   | regen query type-safe.                 |
+| `sqlc-verify`    | `sqlc diff`                                                       | gerbang CI (9.3).                      |
+| `migrate-up`     | `migrate -path $(MIGRATIONS) -database … up`                      | apply migrasi.                         |
+| `migrate-down`   | `migrate … down 1`                                                | rollback satu langkah.                 |
+| `migrate-version`| `migrate … version`                                               | cek versi skema.                       |
+| `grants`         | `psql … -f ../../db/ops/apply_grants.sql`                         | least-privilege grants (BAB 7.5).      |
+| `seed`           | `psql … -f ../../db/seeds/<db>/seed.sql`                          | data referensi idempoten.              |
+| `build`/`test`   | `go build ./...` / `go test ./...`                                | kompilasi & uji.                       |
+| `run`            | `DATABASE_URL=$(APP_URL) go run ./cmd/server`                     | jalan sebagai `erp_app_rw` (RLS aktif).|
+
+Catatan: `DATABASE_URL` (owner/superuser untuk migrasi) dan `APP_URL` (role app untuk `run`) sengaja dibedakan.
+
+## 9.5 Per-Service CI Workflow
+
+Workflow GitHub Actions per layanan (dari `.github/workflows/gl-service.yml`) menjalankan pipeline lengkap terhadap PostgreSQL 16 sungguhan:
+
+```yaml
+on:
+  push:        { paths: ["services/gl-service/**", "db/migrations/gl_db/**", ".github/workflows/gl-service.yml"] }
+  pull_request:{ paths: ["services/gl-service/**", "db/migrations/gl_db/**"] }
+jobs:
+  build-test:
+    services: { postgres: { image: postgres:16-alpine, ... } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5   # go-version 1.23
+      - run:  # install sqlc v1.31.1 + golang-migrate v4.18.1
+      - run:  psql ... -c "CREATE DATABASE gl_db"
+      - run:  migrate -path ../../db/migrations/gl_db -database "$DATABASE_URL" up   # migrate up
+      - run:  sqlc diff                                                             # gerbang codegen
+      - run:  go mod tidy && go build ./... && go test ./...                        # build & test
+      - run:  migrate ... down -all                                                 # smoke rollback
+```
+
+Urutan gerbang: **migrate up → sqlc diff → build/test → migrate down-all** (rollback smoke). Untuk layanan dengan kontrak, tambahkan gerbang **OpenAPI lint + breaking-change** (BAB 4.9) dan **validasi skema event Apicurio** (BAB 6.4) sebelum deploy.
+
+> **SDD-062 — CI ter-*scope* per layanan lewat `paths`.** Tiap workflow hanya terpicu oleh perubahan pada layanannya + set migrasi DB-nya, menjaga CI cepat dan independen (selaras database-per-service ADR-001). Salin workflow, ganti nama layanan, path migrasi, dan nama DB.
+
+## 9.6 Bootstrap Order for a Fresh Environment
+
+Urutan menyiapkan sebuah layanan pada environment kosong (README `gl-service`):
+
+```text
+1. roles.sql          (sekali per cluster, sebagai superuser)            → erp_migrator/app_rw/app_ro
+2. CREATE DATABASE <db>  + migrate-up  (sebagai owner/erp_migrator)      → skema + partisi + RLS
+3. make grants        (apply_grants.sql, per DB)                          → least privilege
+4. make seed          (data referensi idempoten)                         → currency/locale/RBAC/tax/…
+5. deploy layanan     (konek sebagai erp_app_rw)                          → RLS aktif
+```
+
+Antar-layanan mengikuti **build order** BAB 1.4 (produsen sebelum konsumen); broker Kafka + Apicurio + Kong disiapkan sebelum layanan yang bergantung padanya.
+
+## 9.7 Summary
+
+Pipeline: golang-migrate (expand–contract, dijalankan sebagai owner terpisah dari runtime) + gerbang `sqlc diff` + `go build/test`, di-*scope* per layanan via `paths`, diuji terhadap PostgreSQL 16 sungguhan dengan smoke rollback. Bootstrap environment mengikuti urutan roles → migrate → grants → seed → deploy, dan antar-layanan mengikuti build order dependensi.
+
+---

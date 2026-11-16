@@ -1,0 +1,175 @@
+# 9.9 Manufacturing Management Requirements
+
+# 9.9.1 Overview
+
+Manufacturing Management merupakan modul yang mengelola seluruh proses produksi, mulai dari perancangan struktur produk, perencanaan produksi, eksekusi produksi di lantai pabrik, hingga perhitungan biaya produksi. Modul ini menjadi jembatan antara proses perencanaan permintaan (demand planning), pengadaan material, pengelolaan inventori, dan akuntansi biaya, sehingga seluruh proses produksi dapat dijalankan secara terintegrasi dan konsisten.
+
+ERP harus mendukung pengelolaan Bill of Material (BOM) multi-level, Routing dan urutan operasi, Work Order, Production Planning, Material Requirement Planning (MRP), Shop Floor Control, serta perhitungan biaya produksi (production costing) yang dapat dikonfigurasi sesuai kebijakan masing-masing organisasi, tanpa bergantung pada perubahan source code. Seluruh entitas manufaktur harus tunduk pada prinsip Scope-Based Everything, sehingga BOM, Routing, Work Order, dan hasil perhitungan biaya dapat dikelola secara terpisah maupun dikonsolidasikan lintas Company, Business Unit, Plant, maupun Project Site sesuai kebutuhan bisnis.
+
+Setiap kebutuhan bisnis pada bagian ini menggunakan **Requirement ID (BR-xxx)** agar dapat ditelusuri ke Business Objectives (BO-xxx), Stakeholder (SH-xxx), Functional Requirements (FR-xxx), dan Test Cases (TC-xxx).
+
+---
+
+# 9.9.2 Business Requirement Catalogue
+
+## BR-716 – Bill of Material (BOM) Management
+
+| Attribute              | Description                                                                                                                                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID         | BR-716                                                                                                                                                                                                              |
+| Requirement Name       | Bill of Material (BOM) Management                                                                                                                                                                                  |
+| Category               | Manufacturing Management                                                                                                                                                                                           |
+| Priority               | Critical                                                                                                                                                                                                            |
+| Business Objective     | BO-003, BO-009                                                                                                                                                                                                      |
+| Stakeholder Owner      | SH-036 (Manufacturing Department)                                                                                                                                                                                  |
+| Description            | Sistem harus menyediakan modul Bill of Material (BOM) yang memungkinkan definisi struktur produk multi-level (parent-child), termasuk komponen, sub-assembly, kuantitas, satuan ukur, scrap factor, dan tanggal efektif, serta mendukung banyak versi BOM per item dengan status Draft, Active, dan Obsolete. |
+| Business Rationale     | Struktur produk yang akurat dan terkini merupakan basis utama bagi seluruh proses produksi, mulai dari perhitungan kebutuhan material, penjadwalan produksi, hingga perhitungan biaya produksi; kesalahan pada BOM akan berdampak langsung pada seluruh rantai proses manufaktur.                                |
+| Business Value         | Akurasi data produk meningkat, proses produksi menjadi konsisten dan terstandarisasi, serta mengurangi risiko kesalahan produksi akibat komponen yang tidak sesuai.                                               |
+| Acceptance Criteria    | Pengguna dapat membuat, merevisi, dan mengaktifkan BOM multi-level dengan riwayat versi tercatat; sistem mencegah penggunaan BOM berstatus Obsolete pada Work Order baru.                                          |
+| Related Modules        | Manufacturing Management, Inventory Management                                                                                                                                                                    |
+| Related Business Rules | BRule-MFG-001, BRule-MFG-002, BRule-MFG-003                                                                                                                                                                        |
+
+---
+
+## BR-717 – Multi-Level BOM & Where-Used Analysis
+
+| Attribute           | Description                                                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-717                                                                                                                                                            |
+| Requirement Name    | Multi-Level BOM & Where-Used Analysis                                                                                                                            |
+| Priority            | High                                                                                                                                                              |
+| Description         | Sistem harus mendukung BOM bertingkat (multi-level) tanpa batas jumlah level, serta menyediakan fitur where-used analysis untuk menelusuri penggunaan suatu komponen pada berbagai produk induk. |
+| Acceptance Criteria | Pengguna dapat menampilkan struktur BOM secara eksplosif (explode) maupun implosif (where-used) hingga level terdalam.                                            |
+
+---
+
+## BR-718 – Routing & Operation Sequence Management
+
+| Attribute        | Description                                                                                                                                                                              |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-718                                                                                                                                                                                    |
+| Requirement Name | Routing & Operation Sequence Management                                                                                                                                                  |
+| Priority         | Critical                                                                                                                                                                                  |
+| Description      | Sistem harus menyediakan modul Routing yang mendefinisikan urutan operasi produksi, work center, waktu setup, waktu proses, dan sumber daya (mesin/tenaga kerja) yang dibutuhkan pada setiap tahapan produksi. |
+| Business Value   | Standarisasi proses produksi dan dasar perhitungan kapasitas produksi serta lead time yang akurat.                                                                                       |
+
+---
+
+## BR-719 – Work Order Management
+
+| Attribute           | Description                                                                                                                                                                             |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-719                                                                                                                                                                                  |
+| Requirement Name    | Work Order Management                                                                                                                                                                   |
+| Priority            | Critical                                                                                                                                                                                |
+| Description         | Sistem harus mendukung pembuatan, penjadwalan, rilis, eksekusi, dan penutupan Work Order berdasarkan BOM dan Routing yang berlaku, baik untuk produksi make-to-stock maupun make-to-order. |
+| Acceptance Criteria | Work Order dapat dibuat otomatis dari sales order/production plan maupun secara manual, dengan status yang dapat dipantau secara real-time.                                            |
+
+---
+
+## BR-720 – Production Planning
+
+| Attribute        | Description                                                                                                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-720                                                                                                                                                                          |
+| Requirement Name | Production Planning                                                                                                                                                            |
+| Priority         | High                                                                                                                                                                            |
+| Description      | Sistem harus menyediakan perencanaan produksi (Master Production Schedule) yang mempertimbangkan kapasitas produksi, permintaan penjualan, dan target inventori pada tiap scope organisasi. |
+| Business Value   | Perencanaan produksi yang optimal mengurangi idle capacity dan keterlambatan pemenuhan permintaan pelanggan.                                                                    |
+
+---
+
+## BR-721 – Material Requirement Planning (MRP)
+
+| Attribute           | Description                                                                                                                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-721                                                                                                                                                                                                          |
+| Requirement Name    | Material Requirement Planning (MRP)                                                                                                                                                                            |
+| Priority            | Critical                                                                                                                                                                                                        |
+| Description         | Sistem harus menjalankan proses MRP untuk menghitung kebutuhan material berdasarkan BOM, stok tersedia, Work Order terbuka, Purchase Order terbuka, dan lead time, serta menghasilkan rekomendasi Purchase Requisition maupun Work Order secara otomatis. |
+| Acceptance Criteria | Sistem dapat menjalankan MRP run terjadwal maupun on-demand, dengan laporan exception (shortage/excess) per scope organisasi.                                                                                  |
+
+---
+
+## BR-722 – Shop Floor Control & Production Tracking
+
+| Attribute        | Description                                                                                                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-722                                                                                                                                                                                              |
+| Requirement Name | Shop Floor Control & Production Tracking                                                                                                                                                           |
+| Priority         | High                                                                                                                                                                                                |
+| Description      | Sistem harus mendukung pelaporan aktivitas produksi secara real-time di lantai produksi (shop floor), termasuk pelaporan kuantitas hasil produksi, konsumsi material, waktu operasi, dan status mesin/operator per Work Order. |
+| Business Value   | Visibilitas progres produksi secara real-time untuk pengambilan keputusan operasional yang lebih cepat dan akurat.                                                                                  |
+
+---
+
+## BR-723 – Production Cost Calculation
+
+| Attribute           | Description                                                                                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-723                                                                                                                                                                                              |
+| Requirement Name    | Production Cost Calculation                                                                                                                                                                        |
+| Priority            | Critical                                                                                                                                                                                            |
+| Description         | Sistem harus menghitung biaya produksi (material, tenaga kerja, overhead) secara otomatis berdasarkan konsumsi aktual maupun standar, mengalokasikan biaya tersebut ke Work Order, serta menghasilkan varian biaya (cost variance). |
+| Acceptance Criteria | Sistem menghasilkan laporan cost variance per Work Order dan mendukung metode costing standard, actual, maupun average yang dapat dikonfigurasi.                                                    |
+
+---
+
+## BR-724 – Scrap, Rework & Quality Feedback Loop
+
+| Attribute        | Description                                                                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-724                                                                                                                                                                                          |
+| Requirement Name | Scrap, Rework & Quality Feedback Loop                                                                                                                                                          |
+| Priority         | Medium                                                                                                                                                                                          |
+| Description      | Sistem harus mencatat scrap, rework, dan hasil quality inspection pada proses produksi, serta mengintegrasikan hasil tersebut ke dalam perhitungan biaya produksi dan laporan efisiensi produksi. |
+| Business Value   | Identifikasi sumber inefisiensi produksi secara terukur guna mendukung perbaikan berkelanjutan (continuous improvement).                                                                        |
+
+---
+
+## BR-725 – Configurable Manufacturing Workflow & Approval
+
+| Attribute           | Description                                                                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-725                                                                                                                                                                            |
+| Requirement Name    | Configurable Manufacturing Workflow & Approval                                                                                                                                    |
+| Priority            | High                                                                                                                                                                              |
+| Description         | Sistem harus mendukung workflow approval yang dapat dikonfigurasi untuk proses rilis Work Order, perubahan BOM/Routing (Engineering Change Order), dan penutupan Work Order sesuai kebijakan tiap organisasi. |
+| Acceptance Criteria | Administrator dapat mengkonfigurasi alur approval multi-level tanpa perubahan source code.                                                                                       |
+
+---
+
+# 9.9.3 Manufacturing Business Rules Reference
+
+| Business Rule ID | Description                                                                                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-MFG-001     | Setiap Work Order harus merujuk pada satu BOM aktif dan satu Routing aktif yang berlaku pada tanggal rilis.                                 |
+| BRule-MFG-002     | BOM tidak dapat dihapus atau diarsipkan (Obsolete) apabila masih digunakan oleh Work Order berstatus aktif.                                 |
+| BRule-MFG-003     | Perubahan versi BOM/Routing tidak memengaruhi Work Order yang telah dirilis, kecuali melalui proses Engineering Change Order (ECO) resmi.   |
+| BRule-MFG-004     | Proses MRP run harus mempertimbangkan stok tersedia, Work Order terbuka, Purchase Order terbuka, dan safety stock pada scope organisasi terkait. |
+| BRule-MFG-005     | Konsumsi material pada Work Order tidak boleh melebihi kuantitas yang direncanakan tanpa otorisasi variance approval.                       |
+| BRule-MFG-006     | Perhitungan biaya produksi harus mengakumulasi biaya material, tenaga kerja, dan overhead sesuai metode costing yang dikonfigurasi.          |
+| BRule-MFG-007     | Work Order hanya dapat ditutup (closed) setelah seluruh operasi pada routing selesai dilaporkan dan varians biaya telah direkonsiliasi.      |
+
+---
+
+# 9.9.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder      | Future Process                          |
+| -------------- | ------------------- | ---------------- | ---------------------------------------- |
+| BR-716         | BO-003, BO-009       | SH-036           | Bill of Material Management              |
+| BR-717         | BO-003               | SH-036           | Multi-Level BOM & Where-Used Analysis    |
+| BR-718         | BO-003, BO-009       | SH-036           | Routing Management                       |
+| BR-719         | BO-009               | SH-036           | Work Order Management                    |
+| BR-720         | BO-003, BO-009       | SH-036, SH-034   | Production Planning                      |
+| BR-721         | BO-003, BO-009       | SH-036, SH-032   | Material Requirement Planning            |
+| BR-722         | BO-009               | SH-036           | Shop Floor Control                       |
+| BR-723         | BO-003               | SH-036, SH-028   | Production Costing                       |
+| BR-724         | BO-003               | SH-036, SH-023   | Quality & Scrap Management               |
+| BR-725         | BO-009               | SH-036           | Manufacturing Workflow Configuration      |
+
+---
+
+# 9.9.5 Summary
+
+Modul **Manufacturing Management** menyediakan kemampuan pengelolaan proses produksi secara menyeluruh, mulai dari definisi struktur produk (BOM) dan urutan operasi (Routing), perencanaan produksi dan MRP, eksekusi Work Order dan pengendalian shop floor, hingga perhitungan biaya produksi. Seluruh requirement pada bagian ini dirancang agar dapat dikonfigurasi sesuai kebutuhan tiap organisasi tanpa perubahan source code, serta terintegrasi penuh dengan modul Inventory, Procurement, dan Finance & Accounting. Requirement pada bagian ini akan diturunkan lebih lanjut menjadi Functional Requirements, desain basis data, spesifikasi API, dan skenario pengujian pada dokumen lanjutan.

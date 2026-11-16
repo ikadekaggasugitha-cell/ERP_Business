@@ -1,0 +1,227 @@
+# BAB 4. Logical and Component View
+
+## 4.1 Overview
+
+Bab ini menyajikan struktur logis sistem menggunakan **C4 Model** pada tiga tingkat: **Context (Level 1)**, **Container (Level 2)**, dan **Component (Level 3)**. Struktur ini merealisasikan keputusan pada BAB 3 — khususnya *Domain-Driven Microservices + database-per-service* (ADR-001) — dan menjadi dasar Service Catalog (§4.5), pemetaan *bounded context* (§4.6), serta kapabilitas lintas-sektoral (§4.7).
+
+Pandangan ini merupakan elaborasi teknis dari **arsitektur berlapis** pada BRD BAB 11.2 dan **dekomposisi layanan** pada BRD BAB 13.9.
+
+---
+
+## 4.2 System Context (C4 Level 1)
+
+Diagram konteks memposisikan platform ERP di antara para aktor dan sistem eksternal.
+
+```mermaid
+C4Context
+  title System Context — Platform ERP Enterprise
+
+  Person(user, "Pengguna Internal", "Staf, Manajer, Eksekutif lintas entitas & negara")
+  Person(admin, "Administrator", "Org/Config/Security Admin")
+
+  System(erp, "Platform ERP Enterprise", "Decoupled SPA, Go Microservices, Kafka KRaft, PostgreSQL 16")
+  System(companion, "Chrome Extension Companion", "Manifest V3: Side Panel, Tax & Bank In-Context Helper")
+
+  System_Ext(bank, "Bank / Payment Gateway", "Host-to-host, pembayaran & rekonsiliasi")
+  System_Ext(pajak, "e-Faktur / DJP / Tax Authority", "Faktur pajak elektronik nasional/internasional")
+  System_Ext(bpjs, "BPJS / Jamsostek", "Kepesertaan & iuran tenaga kerja")
+  System_Ext(idp, "Identity Provider", "Azure AD / Google Workspace / OIDC (SSO)")
+  System_Ext(notif, "SMS / WhatsApp / Email", "Notifikasi transaksional")
+  System_Ext(sap, "Sistem SAP (ECC/S4) & Legacy", "Koeksistensi data & replikasi DDIC via Cortex V7")
+
+  Rel(user, erp, "Menggunakan Web SPA", "HTTPS")
+  Rel(user, companion, "Menggunakan Side Panel & Helper", "Chrome API")
+  Rel(companion, erp, "Persetujuan Cepat & Sinkronisasi", "HTTPS/REST via Kong")
+  Rel(companion, pajak, "Injeksi & Validasi Faktur", "In-Context DOM")
+  Rel(companion, bank, "Ekstraksi e-Statement", "In-Context DOM")
+  Rel(admin, erp, "Mengonfigurasi", "HTTPS")
+  Rel(erp, bank, "Pembayaran & rekonsiliasi", "API/host-to-host")
+  Rel(erp, pajak, "Terbit & lapor faktur", "API")
+  Rel(erp, bpjs, "Pertukaran data iuran", "API/file")
+  Rel(erp, idp, "Autentikasi SSO (PKCE)", "OIDC")
+  Rel(erp, notif, "Kirim notifikasi", "API")
+  Rel(erp, sap, "Replikasi Dataform & CDC", "BigQuery / Cortex V7")
+```
+
+Referensi kebutuhan: INT-005 (bank), INT-006 (e-Faktur), INT-007 (BPJS), INT-012 (IdP/SSO), INT-009/010/011 (notifikasi), INT-008 & CONS-006 (SAP/legacy), ADR-011 (SPA), ADR-012 (Chrome Extension), ADR-013 (Cortex V7).
+
+---
+
+## 4.3 Container View (C4 Level 2)
+
+Diagram *container* memperlihatkan unit-unit yang dapat di-*deploy*: aplikasi frontend SPA, Chrome Extension Companion, gateway Kong, kelompok layanan Go, platform *event* Kafka, basis data PostgreSQL, dan lakehouse analitik Cortex V7.
+
+```mermaid
+C4Container
+  title Container View — Platform ERP Enterprise
+
+  Person(user, "Pengguna Transaksional", "Web browser / Cabang / Gudang")
+  Person(exec, "Manajer & Eksekutif", "Approval & Dashboard")
+
+  Container_Boundary(erp, "Platform ERP Enterprise") {
+    Container(spa, "Backoffice SPA", "React 19 SPA (Vite)", "TanStack Router, Query v5, Zustand, Virtual Grid")
+    Container(chrome_ext, "Chrome Companion", "Chrome Extension (MV3)", "Side Panel, e-Faktur/Bank Helper, Web Serial Bridge")
+    Container(kong, "API Gateway", "Kong", "OAuth2/OIDC, routing, rate limiting, versioning, SSE push")
+
+    Container(core, "Core-Platform Services", "Go (SVC-001..005)", "Org, User, Security, Workflow, Master Data")
+    Container(fin, "Financial Services", "Go (SVC-006..011)", "GL, AP, AR, Tax, Treasury, Currency Triangulation")
+    Container(ops, "Operational Services", "Go (SVC-012..017)", "Procurement, Inventory, Manufacturing, Sales, HR, Payroll")
+    Container(report, "Reporting Service", "Go (SVC-019)", "CQRS read model untuk dashboard instan")
+    Container(audit, "Audit Service", "Go (SVC-018)", "Pencatatan jejak audit forensik immutable")
+
+    ContainerQueue(kafka, "Event Backbone", "Apache Kafka (KRaft)", "17 Topics, DLQ, Partitioned by org_id; Apicurio")
+    ContainerDb(pg, "PostgreSQL 16", "29 DBs (database-per-service)", "System of record, Composite Partitioning, RLS, PgBouncer")
+    Container(cortex, "Analytic Lakehouse (Cortex V7)", "BigQuery + Dataform", "Star Schema, SAP DDIC Replicated Tables, Holding Consolidation")
+    Container(apicurio, "Schema Registry", "Apicurio", "Tata kelola skema event Avro/Protobuf")
+  }
+
+  System_Ext(ext, "Sistem Eksternal", "Bank, e-Faktur DJP, BPJS, IdP, Notifikasi, SAP ECC/S4")
+
+  Rel(user, spa, "Input transaksi & jurnal", "HTTPS")
+  Rel(exec, chrome_ext, "Quick Approval di Side Panel", "Chrome MV3")
+  Rel(spa, kong, "API Commands & Queries", "HTTPS/REST & SSE")
+  Rel(chrome_ext, kong, "Submit Approval & Data Sync", "HTTPS/REST (OAuth PKCE)")
+  Rel(kong, core, "Route", "REST/mTLS")
+  Rel(kong, fin, "Route", "REST/mTLS")
+  Rel(kong, ops, "Route", "REST/mTLS")
+  Rel(kong, report, "Route", "REST/mTLS")
+  Rel(kong, audit, "Route", "REST/mTLS")
+
+  Rel(core, pg, "Baca/Tulis (Primary/Replica)", "SQL / PgBouncer")
+  Rel(fin, pg, "Baca/Tulis (Primary/Replica)", "SQL / PgBouncer")
+  Rel(ops, pg, "Baca/Tulis (Primary/Replica)", "SQL / PgBouncer")
+  Rel(report, pg, "Baca/Tulis Read Model", "SQL / PgBouncer")
+  Rel(audit, pg, "Tulis Append-Only Log", "SQL / PgBouncer")
+
+  Rel(core, kafka, "Publish (Outbox)", "event")
+  Rel(fin, kafka, "Publish (Outbox EOS)", "event")
+  Rel(ops, kafka, "Publish (Outbox)", "event")
+  Rel(audit, kafka, "Subscribe (17 topics)", "event")
+  Rel(report, kafka, "Subscribe (gl.journal.posted)", "event")
+  Rel(cortex, kafka, "Sinkronisasi Event ke Lakehouse", "CDC / Kafka Connector")
+
+  Rel(kafka, apicurio, "Validasi skema", "Avro/Protobuf")
+  Rel(ops, ext, "Integrasi", "API/file")
+  Rel(fin, ext, "Integrasi", "API")
+  Rel(cortex, ext, "Replikasi Tabel SAP DDIC (BKPF/ACDOCA)", "Batch / Connector")
+```
+
+**Prinsip container:**
+1. **Decoupled SPA**: Frontend backoffice murni disajikan dari CDN Edge, berkomunikasi dengan backend Go hanya melalui Kong API Gateway (ADR-011).
+2. **Enterprise Chrome Extension**: Berjalan dalam sandbox aman Manifest V3 dengan otentikasi PKCE, melayani quick approval dan interaksi in-context portal eksternal (ADR-012).
+3. **Database Isolation & Connection Pooling**: Setiap layanan Go mengakses basis data tersendiri via PgBouncer transaction pooling. Mutasi tulis ke Primary, query pelaporan ke Read Replicas (ADR-015).
+4. **Isolasi Transaksional vs Analitik (Cortex V7)**: Laporan agregasi multi-tahun dan data mining diarahkan ke Cortex Data Products di BigQuery, melindungi basis data transaksional PostgreSQL dari kelebihan beban (ADR-013).
+5. **Real-time Event Streaming**: Komunikasi asinkron via Kafka dengan partition key `organization_id` menjamin urutan kronologis per entitas di bawah beban jutaan transaksi harian (ADR-005, ADR-015).
+
+---
+
+## 4.4 Component View (C4 Level 3)
+
+Diagram komponen memperlihatkan struktur internal sebuah layanan Go yang representatif (menerapkan Clean/Hexagonal Architecture — BRD 13.9.2).
+
+```mermaid
+C4Component
+  title Component View — Struktur Internal Layanan Go (representatif)
+
+  Container_Boundary(svc, "Contoh: ar-service (Go)") {
+    Component(rest, "REST Handler", "Go + chi/gin", "Endpoint publik via Kong")
+    Component(grpc, "gRPC Handler", "Go", "Antarmuka sinkron internal")
+    Component(uc, "Use Case / App Service", "Go", "Orkestrasi logika bisnis")
+    Component(dom, "Domain Model", "Go", "Entity, value object, business rule")
+    Component(repo, "Repository", "Go + pgx/sqlc", "Akses PostgreSQL")
+    Component(outbox, "Event Publisher", "Go", "Transactional Outbox → Kafka")
+    Component(consumer, "Event Consumer", "Go", "Idempotent handler + retry/DLQ")
+    Component(mw, "Middleware", "Go", "AuthN/AuthZ, scope, tracing, logging")
+  }
+
+  ContainerDb(db, "ar_db", "PostgreSQL", "")
+  ContainerQueue(k, "Kafka", "", "")
+
+  Rel(rest, mw, "melalui")
+  Rel(grpc, mw, "melalui")
+  Rel(mw, uc, "memanggil")
+  Rel(uc, dom, "menggunakan")
+  Rel(uc, repo, "menggunakan")
+  Rel(repo, db, "SQL (tx)")
+  Rel(uc, outbox, "menulis event (tx yang sama)")
+  Rel(outbox, k, "publish")
+  Rel(consumer, k, "subscribe")
+  Rel(consumer, uc, "memanggil")
+```
+
+Pola ini seragam di seluruh layanan sehingga menurunkan beban kognitif dan meningkatkan *maintainability* (ARC-010, NFR-013/015). Penulisan *event* dilakukan dalam transaksi yang sama dengan perubahan data (ADR-008).
+
+---
+
+## 4.5 Service Catalog
+
+Katalog berikut memperinci layanan (SVC-xxx) dari **BRD BAB 13.9.1**, dilengkapi ketergantungan sinkron dan *event* asinkron. Semantik *delivery* mengikuti ADR-005 (kolom EOS menandai layanan dengan proses berkonsistensi absolut).
+
+| SVC ID  | Layanan (Go)               | Bounded Context / Modul           | Basis Data       | Ketergantungan Sinkron (gRPC/REST) | Event Diterbitkan (contoh)                       | EOS |
+| ------- | -------------------------- | --------------------------------- | ---------------- | ---------------------------------- | ------------------------------------------------- | --- |
+| SVC-001 | `org-service`              | Organization Management (9.1)     | `org_db`         | —                                  | `org.unit.upserted`                               | —   |
+| SVC-002 | `user-service`             | User Management (9.2)             | `user_db`        | org-service                        | `user.account.upserted`                           | —   |
+| SVC-003 | `security-service`         | Security Management (9.4)         | `security_db`    | user-service                       | `security.access.denied`                          | —   |
+| SVC-004 | `workflow-service`         | Workflow Management (9.3)         | `workflow_db`    | org-service                        | `workflow.approval.requested/completed`           | —   |
+| SVC-005 | `masterdata-service`       | Master Data Management (9.18)     | `masterdata_db`  | org-service                        | `masterdata.{customer,vendor,item}.upserted`      | —   |
+| SVC-006 | `coa-service`              | Chart of Accounts (9.6)           | `coa_db`         | org-service                        | `coa.account.upserted`, `coa.posting_rule.upserted` | — |
+| SVC-007 | `gl-service`               | General Ledger (9.5.4)            | `gl_db`          | coa-service                        | `gl.journal.posted`                               | ✔   |
+| SVC-008 | `ap-service`               | Accounts Payable (9.5.5)          | `ap_db`          | coa-service                        | `ap.invoice.recorded`                             | ✔   |
+| SVC-009 | `ar-service`               | Accounts Receivable (9.5.6)       | `ar_db`          | coa-service                        | `ar.invoice.issued`                               | ✔   |
+| SVC-010 | `tax-service`              | Tax Management (9.5.13)           | `tax_db`         | coa-service                        | `tax.invoice.issued`                              | —   |
+| SVC-011 | `treasury-cashbank-service`| Treasury, Cash & Bank (9.5.8–9)   | `treasury_db`    | gl-service                         | `cashbank.payment.settled`                        | ✔   |
+| SVC-012 | `procurement-service`      | Procurement (9.7)                 | `procurement_db` | masterdata, workflow               | `procurement.po.approved`, `procurement.goods.received` | — |
+| SVC-013 | `inventory-service`        | Inventory (9.8)                   | `inventory_db`   | masterdata                         | `inventory.stock.reserved`, `inventory.goods.issued/received` | ✔ |
+| SVC-014 | `manufacturing-service`    | Manufacturing (9.9)               | `manufacturing_db`| inventory                         | `manufacturing.workorder.completed`               | —   |
+| SVC-015 | `sales-service`            | Sales Management (9.14)           | `sales_db`       | masterdata, inventory              | `sales.order.confirmed`                           | —   |
+| SVC-016 | `hr-service`               | Human Resource Management (9.12)  | `hr_db`          | org-service                        | `hr.employee.updated`                             | —   |
+| SVC-017 | `payroll-service`          | Payroll Management (9.17)         | `payroll_db`     | hr-service                         | `payroll.run.completed`                           | ✔   |
+| SVC-018 | `audit-service`            | Audit Trail (9.20)                | `audit_db`       | —                                  | — (konsumen *wildcard*)                           | —   |
+| SVC-019 | `reporting-service`        | Dashboard & Reporting (9.13)      | `reporting_db`   | — (read model)                     | — (konsumen lintas domain, CQRS)                  | —   |
+
+**Catatan cakupan:** modul lain (Fixed Asset, Cost/Profit Center, Budget, Financial Close, Consolidation, Currency, Project, Asset, Maintenance, CRM, Localization) mengikuti pola SVC yang sama dan akan ditambahkan pada revisi Service Catalog beserta Database Design. Penetapan batas layanan final dapat menggabungkan beberapa *bounded context* kecil ke dalam satu layanan bila terbukti lebih efisien, sepanjang tetap mematuhi ADR-001.
+
+---
+
+## 4.6 Bounded Contexts and Domain Mapping
+
+Layanan dikelompokkan ke dalam tiga *subdomain* strategis (DDD) untuk memperjelas prioritas dan kepemilikan:
+
+| Subdomain           | Sifat (DDD)       | Bounded Contexts (contoh)                                        | Prioritas Arsitektur |
+| ------------------- | ----------------- | ---------------------------------------------------------------- | -------------------- |
+| Financial Core      | *Core Domain*     | GL, AP, AR, Tax, Treasury/Cash-Bank, CoA, Payroll (posting)      | Konsistensi absolut (EOS) |
+| Operational         | *Supporting*      | Procurement, Inventory, Sales, Manufacturing, HR, Project, Maintenance, CRM | Availability & throughput |
+| Platform/Generic    | *Generic*         | Org, User, Security, Workflow, Master Data, Audit, Reporting, Localization | Reusability & governance |
+
+Pemetaan ini menegaskan bahwa **Financial Core** menjadi domain paling ketat konsistensinya (menjadi muara seluruh alur ke `gl-service`), sementara domain **Operational** mengutamakan ketersediaan dan *throughput* melalui *event-driven* + *eventual consistency*.
+
+**Context mapping (relasi antar-context):**
+
+* `masterdata-service` → seluruh konsumen: pola *Published Language* (event master data terstandarisasi).
+* Integrasi eksternal (bank, e-Faktur, BPJS, legacy): pola **Anti-Corruption Layer (ACL)** pada layanan terkait untuk mengisolasi model eksternal (dielaborasi pada BAB 5.8).
+* `org-service` (Organization Tree) & `security-service` (Scope): *Shared Kernel* konseptual yang dipropagasikan sebagai *context* pada request & event.
+
+---
+
+## 4.7 Cross-Cutting Capabilities
+
+Kapabilitas berikut bersifat *cross-cutting* — dikonsumsi oleh seluruh layanan dan tidak menjadi milik satu domain:
+
+| Kapabilitas                | Realisasi Teknis                                                                              | Referensi        |
+| -------------------------- | --------------------------------------------------------------------------------------------- | ---------------- |
+| Organization Tree context  | `organization_id` & path scope dipropagasikan pada header REST/gRPC dan header event Kafka.    | Org Tree First   |
+| Scope-Based Access Control | Ditegakkan berlapis: Kong (coarse) → middleware layanan (fine) → RLS PostgreSQL (data).        | ARC-008, BR-031  |
+| Workflow / Approval        | `workflow-service` sebagai orkestrator lintas modul via event (approval requested/completed). | INT-004          |
+| Audit Trail                | `audit-service` mengonsumsi seluruh event (`erp.audit.event.recorded`) sebagai jejak forensik. | BRD 9.20, NFR-018|
+| Idempotency & Correlation  | `event_id`/`correlation_id` standar pada seluruh event untuk deduplikasi & tracing.            | ADR-005, ADR-010 |
+| Localization               | React i18n + tabel locale; konten & format regional per pengguna/organisasi.                   | NFR-022–024      |
+
+Penerapan kapabilitas ini secara seragam memastikan konsistensi keamanan, keterlacakan, dan pengalaman lintas seluruh modul tanpa duplikasi logika.
+
+---
+
+## 4.8 Summary
+
+Bab ini menyajikan struktur logis sistem melalui C4 Model (Context, Container, Component), Service Catalog (**SVC-001 s.d. SVC-019** sebagai baseline), pemetaan *bounded context* ke tiga subdomain (Financial Core, Operational, Platform/Generic), serta kapabilitas lintas-sektoral. Struktur ini merealisasikan ADR-001 (microservices + database-per-service) dan ADR-009 (CQRS untuk reporting), serta menegakkan Organization Tree First dan Scope-Based Access sebagai fondasi horizontal. Detail interaksi integrasi dan *event* dijabarkan pada BAB 5.
+
+---

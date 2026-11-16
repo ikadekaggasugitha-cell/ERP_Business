@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ERP Companion Side Panel</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="panel-container">
+    <!-- Header -->
+    <header class="panel-header">
+      <div class="header-brand">
+        <div class="logo-box">ERP</div>
+        <div>
+          <h1 class="header-title">Enterprise Companion</h1>
+          <p class="header-subtitle">PT Sinergi Investasi Properti</p>
+        </div>
+      </div>
+      <button id="refreshBtn" class="icon-btn" title="Sinkronisasi Data" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs" aria-label="Menu utama">
+      <button class="tab-btn active" data-tab="approvals" type="button">
+        Persetujuan <span class="badge" id="approvalBadge">0</span>
+      </button>
+      <button class="tab-btn" data-tab="tax" type="button">Pajak &amp; Bank</button>
+      <button class="tab-btn" data-tab="status" type="button">Sesi &amp; Status</button>
+    </nav>
+
+    <!-- Content Sections -->
+    <main class="panel-content">
+      <!-- Approvals Tab -->
+      <section id="tab-approvals" class="tab-pane active">
+        <div class="section-title">Antrean Persetujuan Dokumen</div>
+        <div id="approvalsList" class="cards-list"></div>
+      </section>
+
+      <!-- Tax & Bank Helper Tab -->
+      <section id="tab-tax" class="tab-pane">
+        <div class="section-title">Asisten e-Faktur &amp; DJP Online</div>
+        <div class="card">
+          <div class="card-status status-info">Portal Pajak Resmi (pajak.go.id)</div>
+          <p class="card-desc">Buka halaman penerbitan faktur di DJP Online, lalu injeksikan data faktur ERP ke formulir aktif.</p>
+          <div class="form-group">
+            <label for="invoiceSelect">Pilih Faktur Penjualan:</label>
+            <select id="invoiceSelect" class="select-input">
+              <option value="INV-2026-0089">INV-2026-0089 (PT Maju Bersama) — Rp 165.000.000</option>
+              <option value="INV-2026-0090">INV-2026-0090 (CV Mandiri Jaya) — Rp 42.500.000</option>
+            </select>
+          </div>
+          <div class="btn-stack">
+            <button id="injectTaxBtn" class="primary-btn" type="button">
+              Injeksi Data ke Halaman Aktif
+            </button>
+            <button id="scanFieldsBtn" class="secondary-btn" type="button">
+              Pindai Kolom Formulir DJP
+            </button>
+          </div>
+        </div>
+
+        <div class="section-title section-spacing">Ekstraktor Rekening Koran (Treasury)</div>
+        <div class="card">
+          <div class="card-status status-treasury">BCA · BNI · Bank Mandiri</div>
+          <p class="card-desc">Ekstrak mutasi transaksi dari tab internet banking aktif atau uji tabel HTML secara terisolasi di Sandbox.</p>
+          <div class="btn-stack">
+            <button id="extractBankBtn" class="primary-btn" type="button">
+              Ekstrak Mutasi dari Tab Bank Aktif
+            </button>
+          </div>
+          <div id="bankSummaryBox" class="bank-summary" hidden>
+            <div class="bank-summary-header">
+              <span id="bankSummaryTitle">Hasil Ekstraksi</span>
+              <span id="bankSummaryCount" class="badge">0 baris</span>
+            </div>
+            <div id="bankSummaryMeta" class="bank-summary-meta"></div>
+            <ul id="bankPreviewList" class="bank-preview-list"></ul>
+          </div>
+
+          <details class="sandbox-details">
+            <summary>Parser HTML Rekening Koran (Sandbox Terisolasi)</summary>
+            <textarea id="rawBankHtmlInput" class="textarea-input" rows="4" placeholder="Tempel cuplikan HTML &lt;table&gt; mutasi bank untuk diparsing aman..."></textarea>
+            <button id="parseSandboxBtn" class="secondary-btn" type="button">
+              Parse di Sandbox Aman
+            </button>
+          </details>
+        </div>
+      </section>
+
+      <!-- Status Tab -->
+      <section id="tab-status" class="tab-pane">
+        <div class="section-title">Status Koneksi &amp; Kepatuhan</div>
+        <div class="status-box">
+          <div class="status-row">
+            <span>Gateway API:</span>
+            <span class="status-value green">Terhubung (Kong)</span>
+          </div>
+          <div class="status-row">
+            <span>Sesi OIDC:</span>
+            <span class="status-value green">Aktif (PKCE)</span>
+          </div>
+          <div class="status-row">
+            <span>Entitas Cabang:</span>
+            <span class="status-value">PT Sinergi Investasi Properti</span>
+          </div>
+          <div class="status-row">
+            <span>Audit Trail:</span>
+            <span class="status-value green">Tagged (chrome-extension)</span>
+          </div>
+          <div class="status-row">
+            <span>Sinkronisasi Terakhir:</span>
+            <span id="lastSyncLabel" class="status-value">-</span>
+          </div>
+        </div>
+
+        <div class="section-title section-spacing">Konfigurasi Gateway</div>
+        <div class="card">
+          <div class="form-group">
+            <label for="apiUrlInput">URL Kong API Gateway:</label>
+            <input id="apiUrlInput" type="url" class="text-input" placeholder="http://localhost:8000/api/v1">
+          </div>
+          <div class="form-group">
+            <label for="orgIdInput">Organization Scope ID (RLS):</label>
+            <input id="orgIdInput" type="text" class="text-input" placeholder="11111111-1111-1111-1111-111111111111">
+          </div>
+          <button id="saveSettingsBtn" class="primary-btn" type="button">Simpan Konfigurasi</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Isolated MV3 Sandbox for Untrusted HTML Parsing -->
+    <iframe id="parserSandbox" src="../sandbox/sandbox.html" title="ERP HTML Sandbox" hidden></iframe>
+
+    <!-- Toast Feedback Container -->
+    <div id="toastContainer" class="toast-container"></div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

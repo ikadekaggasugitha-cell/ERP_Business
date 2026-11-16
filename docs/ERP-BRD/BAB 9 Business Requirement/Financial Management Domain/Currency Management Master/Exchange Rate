@@ -1,0 +1,215 @@
+# 9.5.3.6 Exchange Rate Requirements
+
+---
+
+# 9.5.3.6.1 Overview
+
+Exchange Rate merupakan master transaksi referensi yang menyimpan nilai tukar mata uang yang digunakan oleh seluruh proses bisnis dalam Enterprise Resource Planning (ERP).
+
+Setiap Exchange Rate merepresentasikan nilai konversi untuk suatu Currency Pair berdasarkan Exchange Rate Type, Exchange Rate Provider, periode efektif, serta kebijakan organisasi.
+
+Exchange Rate digunakan oleh modul General Ledger, Accounts Payable, Accounts Receivable, Cash Management, Treasury, Procurement, Sales, Inventory, Payroll, Project Management, Budgeting, Financial Consolidation, dan Business Intelligence.
+
+Seluruh proses konversi mata uang wajib menggunakan Exchange Rate yang telah disetujui dan masih berlaku sesuai kebijakan organisasi.
+
+---
+
+# 9.5.3.6.2 Business Capability
+
+Exchange Rate menyediakan kapabilitas berikut:
+
+* Pengelolaan nilai tukar mata uang.
+* Dukungan multi-provider.
+* Dukungan multi-rate type.
+* Effective dating.
+* Time-based exchange rate.
+* Approval workflow.
+* Versioning.
+* Exchange rate locking.
+* Historical exchange rate.
+* Scheduled exchange rate import.
+* Manual exchange rate maintenance.
+* Audit trail.
+* Integrasi dengan Currency Conversion Policy.
+
+---
+
+# 9.5.3.6.3 Business Requirement Catalogue
+
+## BR-131 – Exchange Rate Repository
+
+| Attribute           | Description                                                                                               |
+| ------------------- | --------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-131                                                                                                    |
+| Requirement Name    | Exchange Rate Repository                                                                                  |
+| Category            | Exchange Rate                                                                                             |
+| Priority            | Critical                                                                                                  |
+| Business Objective  | BO-009                                                                                                    |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                          |
+| Description         | Sistem harus menyediakan repositori terpusat untuk seluruh nilai tukar mata uang yang digunakan oleh ERP. |
+| Business Value      | Menjamin konsistensi nilai tukar pada seluruh proses bisnis.                                              |
+| Acceptance Criteria | Seluruh proses konversi mata uang hanya menggunakan Exchange Rate yang aktif dan valid.                   |
+
+---
+
+## BR-132 – Multi Provider Exchange Rate
+
+| Attribute        | Description                                                                                                                        |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-132                                                                                                                             |
+| Requirement Name | Multi Provider Exchange Rate                                                                                                       |
+| Priority         | Critical                                                                                                                           |
+| Description      | Sistem harus mendukung penyimpanan lebih dari satu Exchange Rate untuk Currency Pair yang sama berdasarkan Exchange Rate Provider. |
+
+---
+
+## BR-133 – Multi Rate Type
+
+| Attribute        | Description                                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-133                                                                                                                  |
+| Requirement Name | Multi Rate Type                                                                                                         |
+| Priority         | Critical                                                                                                                |
+| Description      | Sistem harus mendukung lebih dari satu Exchange Rate Type untuk Currency Pair yang sama pada tanggal efektif yang sama. |
+
+---
+
+## BR-134 – Effective Dating
+
+| Attribute        | Description                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-134                                                                                                   |
+| Requirement Name | Effective Dating                                                                                         |
+| Priority         | Critical                                                                                                 |
+| Description      | Setiap Exchange Rate harus memiliki Effective From dan Effective To sehingga histori kurs tetap terjaga. |
+
+---
+
+## BR-135 – Time-based Exchange Rate
+
+| Attribute        | Description                                                                                                                                   |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-135                                                                                                                                        |
+| Requirement Name | Time-based Exchange Rate                                                                                                                      |
+| Priority         | High                                                                                                                                          |
+| Description      | Sistem harus mendukung penyimpanan nilai tukar berdasarkan tanggal dan waktu efektif apabila diperlukan oleh aktivitas treasury atau trading. |
+
+---
+
+## BR-136 – Approval Workflow
+
+| Attribute        | Description                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-136                                                                                                                    |
+| Requirement Name | Exchange Rate Approval Workflow                                                                                           |
+| Priority         | Critical                                                                                                                  |
+| Description      | Nilai tukar yang dimasukkan secara manual harus melalui proses persetujuan sebelum dapat digunakan oleh transaksi bisnis. |
+
+---
+
+## BR-137 – Scheduled Import
+
+| Attribute        | Description                                                                                                                             |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-137                                                                                                                                  |
+| Requirement Name | Scheduled Exchange Rate Import                                                                                                          |
+| Priority         | High                                                                                                                                    |
+| Description      | Sistem harus mendukung pengambilan nilai tukar secara otomatis berdasarkan jadwal dari Exchange Rate Provider yang telah dikonfigurasi. |
+
+---
+
+## BR-138 – Historical Exchange Rate
+
+| Attribute        | Description                                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-138                                                                                                                  |
+| Requirement Name | Historical Exchange Rate                                                                                                |
+| Priority         | Critical                                                                                                                |
+| Description      | Sistem harus mempertahankan seluruh histori Exchange Rate sehingga transaksi historis dapat direproduksi secara akurat. |
+
+---
+
+## BR-139 – Exchange Rate Versioning
+
+| Attribute        | Description                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-139                                                                                                          |
+| Requirement Name | Exchange Rate Versioning                                                                                        |
+| Priority         | High                                                                                                            |
+| Description      | Sistem harus mendukung versioning terhadap Exchange Rate tanpa mengubah histori transaksi yang telah diposting. |
+
+---
+
+## BR-140 – Exchange Rate Auditability
+
+| Attribute        | Description                                                                                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-140                                                                                                                                                                         |
+| Requirement Name | Exchange Rate Auditability                                                                                                                                                     |
+| Priority         | Critical                                                                                                                                                                       |
+| Description      | Seluruh perubahan nilai tukar harus dicatat dalam Audit Trail lengkap dengan identitas pengguna, waktu perubahan, alasan perubahan, serta nilai sebelum dan sesudah perubahan. |
+
+---
+
+# 9.5.3.6.4 Business Rules
+
+| Business Rule ID | Description                                                                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-ER-001     | Setiap Exchange Rate harus mengacu pada tepat satu Currency Pair, satu Exchange Rate Type, dan satu Exchange Rate Provider.                  |
+| BRule-ER-002     | Kombinasi Currency Pair, Exchange Rate Type, Exchange Rate Provider, Effective From, dan Version harus unik.                                 |
+| BRule-ER-003     | Exchange Rate yang telah digunakan pada transaksi yang diposting tidak boleh diubah secara langsung. Perubahan dilakukan melalui versi baru. |
+| BRule-ER-004     | Exchange Rate dengan status Draft atau Pending Approval tidak dapat digunakan untuk transaksi bisnis.                                        |
+| BRule-ER-005     | Hanya Exchange Rate dengan status Approved dan Active yang dapat digunakan untuk posting transaksi.                                          |
+| BRule-ER-006     | Exchange Rate yang telah kedaluwarsa tidak dapat digunakan untuk transaksi baru, kecuali diizinkan oleh Currency Conversion Policy.          |
+| BRule-ER-007     | Seluruh perubahan nilai tukar wajib tercatat pada Audit Trail beserta alasan bisnisnya.                                                      |
+
+---
+
+# 9.5.3.6.5 Data Attributes
+
+| Attribute                 | Description                                             |
+| ------------------------- | ------------------------------------------------------- |
+| Exchange Rate ID          | Identitas unik sistem.                                  |
+| Currency Pair             | Referensi ke Currency Pair.                             |
+| Exchange Rate Type        | Referensi ke Exchange Rate Type.                        |
+| Exchange Rate Provider    | Referensi ke Exchange Rate Provider.                    |
+| Buy Rate                  | Kurs beli.                                              |
+| Sell Rate                 | Kurs jual.                                              |
+| Mid Rate                  | Kurs tengah.                                            |
+| Exchange Rate Value       | Nilai kurs utama yang digunakan untuk konversi.         |
+| Effective From            | Tanggal dan waktu mulai berlaku.                        |
+| Effective To              | Tanggal dan waktu akhir berlaku.                        |
+| Approval Status           | Draft, Pending Approval, Approved, Rejected, Cancelled. |
+| Approval Date             | Tanggal persetujuan.                                    |
+| Approved By               | Pengguna yang menyetujui.                               |
+| Version                   | Nomor versi.                                            |
+| Status                    | Active, Suspended, Inactive, Archived.                  |
+| Source Reference          | Nomor referensi dari provider atau dokumen sumber.      |
+| Remarks                   | Catatan bisnis.                                         |
+| Created By / Created Date | Informasi pembuatan data.                               |
+| Updated By / Updated Date | Informasi perubahan terakhir.                           |
+
+---
+
+# 9.5.3.6.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                 |
+| -------------- | ------------------ | ----------- | ------------------------------ |
+| BR-131         | BO-009             | SH-003      | Exchange Rate Administration   |
+| BR-132         | BO-009             | SH-003      | Multi-Provider Rate Management |
+| BR-133         | BO-010             | SH-003      | Rate Type Selection            |
+| BR-134         | BO-011             | SH-003      | Effective Date Management      |
+| BR-135         | BO-010             | SH-003      | Intraday Exchange Rate         |
+| BR-136         | BO-029             | SH-010      | Approval Workflow              |
+| BR-137         | BO-027             | SH-007      | Automated Exchange Rate Import |
+| BR-138         | BO-011             | SH-003      | Historical Reporting           |
+| BR-139         | BO-029             | SH-010      | Version Management             |
+| BR-140         | BO-029             | SH-010      | Audit & Compliance             |
+
+---
+
+# 9.5.3.6.7 Summary
+
+Exchange Rate merupakan sumber resmi nilai tukar yang digunakan oleh seluruh modul ERP untuk melakukan konversi mata uang. Dengan dukungan multi-provider, multi-rate type, effective dating, approval workflow, versioning, dan audit trail, sistem mampu menjaga konsistensi, integritas, serta keterlacakan setiap nilai tukar yang digunakan dalam transaksi operasional maupun pelaporan keuangan.
+
+Requirement pada bagian ini menjadi dasar bagi implementasi **Currency Conversion Policy**, **Foreign Currency Revaluation**, **Currency Translation**, **Financial Consolidation**, serta seluruh modul yang memerlukan konversi mata uang.

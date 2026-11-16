@@ -1,0 +1,18 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc", "s4"],
+  description: "SAP Currency Decimal Shifts staging view"
+}
+
+SELECT
+  TRIM(CURRKEY) AS currency_key,
+  TRIM(CURRKEY) AS CURRKEY,
+  CAST(CURRDEC AS INT64) AS decimal_places,
+  CAST(CURRDEC AS INT64) AS CURRDEC,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "tcurx")}
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY CURRKEY
+  ORDER BY recordstamp DESC
+) = 1

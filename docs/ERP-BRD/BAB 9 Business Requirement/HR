@@ -1,0 +1,175 @@
+# 9.12 Human Resource Management Requirements
+
+## 9.12.1 Overview
+
+Human Resource Management (HRM) merupakan modul yang mengelola seluruh siklus data kepegawaian, mulai dari data induk karyawan (Employee Master), struktur jabatan, riwayat karir, cuti dan absensi, evaluasi kinerja, hingga dokumen kepegawaian. Modul ini menjadi fondasi data bagi modul **Payroll** serta berintegrasi secara langsung dengan modul **User Management** untuk penyediaan hak akses sistem.
+
+Sejalan dengan prinsip *Configuration over Customization* dan *Organization Tree First*, seluruh data kepegawaian harus dapat ditempatkan pada struktur organisasi apa pun—Holding, Sub Holding, Company, Business Unit, Branch, Department, Warehouse, maupun Project Site—tanpa batasan level dan tanpa perubahan source code. Setiap kebijakan kepegawaian (cuti, jam kerja, evaluasi kinerja) harus dapat dikonfigurasi berbeda per organisasi sesuai kebutuhan bisnis maupun regulasi ketenagakerjaan setempat.
+
+Prinsip *Scope-Based Everything* juga berlaku penuh pada modul ini: akses terhadap data kepegawaian dibatasi sesuai scope organisasi pengguna yang login, sehingga data karyawan lintas Company atau Business Unit tetap terjaga kerahasiaannya sekaligus dapat dikonsolidasikan bila diperlukan oleh pihak yang berwenang.
+
+Setiap kebutuhan bisnis pada bagian ini menggunakan **Requirement ID (BR-xxx)** agar dapat ditelusuri ke Business Objectives (BO-xxx), Stakeholder (SH-xxx), Functional Requirements (FR-xxx), dan Test Cases (TC-xxx) pada dokumen lanjutan.
+
+---
+
+# 9.12.2 Business Requirement Catalogue
+
+## BR-746 – Employee Master Data Management
+
+| Attribute              | Description                                                                                                                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID         | BR-746                                                                                                                                                                                          |
+| Requirement Name       | Employee Master Data Management                                                                                                                                                                |
+| Category               | Employee Master Data Management                                                                                                                                                                |
+| Priority               | Critical                                                                                                                                                                                        |
+| Business Objective     | BO-005, BO-009                                                                                                                                                                                  |
+| Stakeholder Owner      | SH-005 (CHRO), SH-029 (Human Resource Department)                                                                                                                                              |
+| Description            | Sistem harus menyediakan Employee Master sebagai basis data kepegawaian tunggal yang mencakup data pribadi, data kepegawaian (nomor induk, status karyawan, tanggal bergabung), penempatan organisasi (Company, Business Unit, Branch, Department), jabatan, dan data kontrak kerja, yang dapat digunakan oleh seluruh modul terkait sesuai scope masing-masing. |
+| Business Rationale     | Data karyawan merupakan master data inti yang digunakan lintas modul; duplikasi atau inkonsistensi data karyawan berdampak langsung pada akurasi penggajian, hak akses sistem, dan pelaporan organisasi. |
+| Business Value         | Mengurangi duplikasi data, meningkatkan akurasi data kepegawaian, serta mempercepat proses onboarding karyawan baru di seluruh entitas organisasi.                                             |
+| Acceptance Criteria    | Administrator dapat membuat, mengubah, dan menonaktifkan Employee Master melalui satu antarmuka terpusat; Employee Master dapat ditempatkan pada organisasi mana pun dalam struktur tanpa perubahan source code; data karyawan non-aktif tidak dapat dihapus permanen, hanya diarsipkan. |
+
+---
+
+## BR-747 – Position, Job Title & Organizational Structure Mapping
+
+| Attribute           | Description                                                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-747                                                                                                                                                                               |
+| Requirement Name    | Position, Job Title & Organizational Structure Mapping                                                                                                                              |
+| Priority            | Critical                                                                                                                                                                             |
+| Description         | Sistem harus mendukung pengelolaan struktur jabatan (Job Title, Job Grade, Job Level) yang terhubung langsung dengan struktur organisasi sehingga setiap posisi memiliki peta jabatan (reporting line) yang jelas dan dapat dikonfigurasi ulang mengikuti perubahan struktur organisasi. |
+| Acceptance Criteria | Administrator dapat mendefinisikan Job Title, Job Grade, dan reporting line pada struktur organisasi mana pun tanpa perubahan aplikasi.                                             |
+
+---
+
+## BR-748 – Employee Career History & Mutation Tracking
+
+| Attribute        | Description                                                                                                                                                                                          |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-748                                                                                                                                                                                               |
+| Requirement Name | Employee Career History & Mutation Tracking                                                                                                                                                          |
+| Priority         | High                                                                                                                                                                                                 |
+| Description      | Sistem harus mencatat seluruh riwayat karir karyawan (promosi, mutasi, rotasi, perpindahan Business Unit/Branch, perubahan status kepegawaian) beserta tanggal efektif dan alasan perubahan, sehingga histori karir dapat ditelusuri kapan saja. |
+| Business Value   | Menyediakan jejak audit karir karyawan yang lengkap untuk kebutuhan evaluasi, promosi, dan pelaporan kepatuhan.                                                                                     |
+
+---
+
+## BR-749 – Leave Management & Entitlement Configuration
+
+| Attribute           | Description                                                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-749                                                                                                                                                                               |
+| Requirement Name    | Leave Management & Entitlement Configuration                                                                                                                                        |
+| Priority            | Critical                                                                                                                                                                             |
+| Description         | Sistem harus mengelola jenis cuti (cuti tahunan, cuti sakit, cuti khusus, dan lainnya), saldo cuti, serta kebijakan cuti yang dapat dikonfigurasi berbeda per organisasi (Company/Branch) sesuai peraturan ketenagakerjaan setempat. |
+| Acceptance Criteria | Administrator dapat mengkonfigurasi kebijakan cuti berbeda untuk setiap Company/Branch tanpa perubahan source code.                                                                 |
+
+---
+
+## BR-750 – Attendance & Time Tracking Management
+
+| Attribute           | Description                                                                                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-750                                                                                                                                                                         |
+| Requirement Name    | Attendance & Time Tracking Management                                                                                                                                         |
+| Priority            | Critical                                                                                                                                                                       |
+| Description         | Sistem harus mencatat kehadiran karyawan (jam masuk, jam keluar, keterlambatan, lembur) yang dapat diintegrasikan dengan perangkat presensi (biometric/mobile) dan digunakan sebagai dasar perhitungan Payroll. |
+| Acceptance Criteria | Data kehadiran dapat direkonsiliasi dengan pengajuan cuti/izin dan disetujui melalui workflow approval berjenjang.                                                            |
+
+---
+
+## BR-751 – Performance Evaluation & Appraisal Management
+
+| Attribute        | Description                                                                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-751                                                                                                                                                                                         |
+| Requirement Name | Performance Evaluation & Appraisal Management                                                                                                                                                 |
+| Priority         | High                                                                                                                                                                                           |
+| Description      | Sistem harus menyediakan modul evaluasi kinerja karyawan dengan periode penilaian, template KPI/kompetensi yang dapat dikonfigurasi, serta workflow approval penilaian berjenjang sesuai struktur organisasi. |
+| Business Value   | Mendukung pengambilan keputusan promosi, kenaikan gaji, dan pengembangan karyawan berbasis data kinerja yang objektif.                                                                        |
+
+---
+
+## BR-752 – Employee Document & Compliance Management
+
+| Attribute           | Description                                                                                                                                                                     |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-752                                                                                                                                                                         |
+| Requirement Name    | Employee Document & Compliance Management                                                                                                                                     |
+| Priority            | High                                                                                                                                                                           |
+| Description         | Sistem harus menyediakan repositori dokumen kepegawaian (kontrak kerja, ijazah, sertifikat, dokumen legal) dengan kontrol masa berlaku (expiry reminder) dan hak akses berbasis scope organisasi. |
+| Acceptance Criteria | Sistem mengirimkan notifikasi otomatis sebelum dokumen kepegawaian yang bersifat wajib (compliance) memasuki masa kedaluwarsa.                                                |
+
+---
+
+## BR-753 – Integration with User Account Provisioning
+
+| Attribute        | Description                                                                                                                                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-753                                                                                                                                                                                                    |
+| Requirement Name | Integration with User Account Provisioning                                                                                                                                                                |
+| Priority         | Critical                                                                                                                                                                                                  |
+| Description      | Sistem harus terintegrasi dengan modul User Management sehingga setiap Employee Master baru dapat secara otomatis memicu pembuatan atau penonaktifan akun pengguna sesuai status kepegawaian dan scope organisasi. |
+| Business Value   | Mengotomatiskan proses onboarding/offboarding lintas modul serta mengurangi risiko akun aktif milik karyawan yang telah non-aktif.                                                                        |
+
+---
+
+## BR-754 – Employee Data as Payroll Foundation
+
+| Attribute           | Description                                                                                                                                       |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-754                                                                                                                                            |
+| Requirement Name    | Employee Data as Payroll Foundation                                                                                                               |
+| Priority            | Critical                                                                                                                                          |
+| Description         | Sistem harus menyediakan data kepegawaian (jabatan, status, riwayat karir, kehadiran, cuti) sebagai basis perhitungan bagi modul Payroll tanpa duplikasi input data di kedua modul. |
+| Acceptance Criteria | Perubahan data Employee Master (jabatan, status, penempatan) tercermin secara otomatis pada modul Payroll sesuai periode berlaku.                |
+
+---
+
+## BR-755 – Cross-Organization Employee Assignment & Scope-Based Access
+
+| Attribute        | Description                                                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-755                                                                                                                                                                        |
+| Requirement Name | Cross-Organization Employee Assignment & Scope-Based Access                                                                                                                  |
+| Priority         | High                                                                                                                                                                          |
+| Description      | Sistem harus mendukung penugasan karyawan pada lebih dari satu unit organisasi (multi-assignment/dual reporting) serta membatasi akses data kepegawaian berdasarkan scope organisasi pengguna yang login. |
+| Business Value   | Mendukung fleksibilitas struktur organisasi kompleks (shared service, proyek lintas Business Unit) tanpa mengorbankan kontrol akses data.                                    |
+
+---
+
+# 9.12.3 Human Resource Business Rules Reference
+
+| Business Rule ID | Description                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| BRule-HR-001      | Setiap karyawan memiliki satu Employee ID unik yang berlaku di seluruh entitas organisasi dalam group.                        |
+| BRule-HR-002      | Setiap perubahan jabatan, penempatan, atau status kepegawaian wajib dicatat sebagai riwayat karir dengan tanggal efektif.       |
+| BRule-HR-003      | Pengajuan cuti tidak dapat melebihi saldo cuti yang tersedia sesuai kebijakan organisasi terkait.                              |
+| BRule-HR-004      | Persetujuan cuti dan koreksi kehadiran mengikuti alur hierarki organisasi (atasan langsung/reporting line).                    |
+| BRule-HR-005      | Dokumen kepegawaian yang bersifat legal/compliance wajib memiliki tanggal masa berlaku dan menghasilkan notifikasi sebelum kedaluwarsa. |
+| BRule-HR-006      | Data karyawan berstatus non-aktif (resign/terminasi) tidak dapat dihapus permanen, hanya diarsipkan untuk kebutuhan audit.      |
+| BRule-HR-007      | Setiap Employee Master wajib terhubung dengan tepat satu akun pada modul User Management selama status kepegawaian aktif.      |
+
+---
+
+# 9.12.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder     | Future Process                         |
+| -------------- | ------------------- | ---------------- | --------------------------------------- |
+| BR-746         | BO-005, BO-009      | SH-005, SH-029   | Employee Master Data Management        |
+| BR-747         | BO-005              | SH-029           | Position & Job Structure Management     |
+| BR-748         | BO-009              | SH-029           | Career History Management               |
+| BR-749         | BO-009              | SH-005, SH-029   | Leave Management                        |
+| BR-750         | BO-009              | SH-029           | Attendance Management                   |
+| BR-751         | BO-009              | SH-005, SH-029   | Performance Evaluation Management       |
+| BR-752         | BO-005              | SH-029           | Employee Document Management            |
+| BR-753         | BO-009              | SH-005           | User Account Provisioning Integration   |
+| BR-754         | BO-009              | SH-005           | Payroll Management                      |
+| BR-755         | BO-005              | SH-029           | Multi-Organization Employee Management  |
+
+---
+
+# 9.12.5 Summary
+
+Modul **Human Resource Management** menjadi fondasi utama bagi pengelolaan data kepegawaian di seluruh entitas organisasi, mulai dari Employee Master, struktur jabatan, riwayat karir, cuti dan absensi, evaluasi kinerja, hingga dokumen kepegawaian. Sepuluh kebutuhan bisnis (BR-746 sampai BR-755) yang tercantum pada bagian ini memastikan bahwa data kepegawaian bersifat konsisten, dapat dikonfigurasi sesuai kebutuhan tiap organisasi, serta menjadi dasar yang andal bagi modul **Payroll** dan terintegrasi penuh dengan modul **User Management**. Seluruh requirement pada bagian ini akan diturunkan lebih lanjut menjadi Functional Requirements, desain basis data, spesifikasi API, dan skenario pengujian pada dokumen lanjutan.

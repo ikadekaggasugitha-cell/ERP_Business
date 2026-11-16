@@ -1,0 +1,22 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc", "s4"],
+  description: "SAP Exchange Rates staging view with CDC deduplication"
+}
+
+SELECT
+  MANDT AS mandt,
+  KURST AS rate_type,
+  FCURR AS from_currency,
+  TCURR AS to_currency,
+  GDATU AS effective_date_raw,
+  UKURS AS exchange_rate,
+  COALESCE(SAFE_CAST(FFACT AS NUMERIC), NUMERIC '1') AS from_ratio,
+  COALESCE(SAFE_CAST(TFACT AS NUMERIC), NUMERIC '1') AS to_ratio,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "tcurr")}
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY MANDT, KURST, FCURR, TCURR, GDATU
+  ORDER BY recordstamp DESC
+) = 1

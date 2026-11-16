@@ -1,0 +1,139 @@
+# 9.5.16 Financial Reporting Requirements
+
+---
+
+# 9.5.16.1 Overview
+
+Financial Reporting merupakan proses penyajian informasi keuangan yang dihasilkan dari transaksi yang telah dicatat dan diposting pada General Ledger, dalam bentuk laporan keuangan standar maupun laporan manajerial internal. Financial Reporting menjadi titik akhir dari seluruh rangkaian proses akuntansi dan menjadi dasar pengambilan keputusan bagi manajemen, pemegang saham, regulator, maupun pihak eksternal lainnya.
+
+Sistem harus mampu menghasilkan laporan keuangan standar (Neraca, Laporan Laba Rugi, Laporan Arus Kas, dan Laporan Perubahan Ekuitas) secara otomatis, akurat, dan konsisten untuk setiap Financial Organization maupun konsolidasi lintas entitas. Selain itu, sistem harus mendukung berbagai standar akuntansi (PSAK, IFRS, US GAAP, atau standar lokal lain) serta format pelaporan regulasi yang berlaku, tanpa memerlukan perubahan source code.
+
+Financial Reporting juga mencakup penyediaan laporan manajerial yang bersifat fleksibel untuk memenuhi kebutuhan analisis internal, seperti laporan profitabilitas per segmen, analisis varians anggaran, dan laporan komparatif antar periode. Laporan dapat disusun pada berbagai level scope organisasi, mulai dari Branch, Company, Business Unit, hingga level konsolidasi Group, sejalan dengan prinsip Organization Tree First dan Scope-Based Everything.
+
+---
+
+# 9.5.16.2 Business Requirement Catalogue
+
+## BR-676 – Standard Financial Statement Generation
+
+| Attribute           | Description                                                                                                                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-676                                                                                                                                                                                                          |
+| Requirement Name    | Standard Financial Statement Generation                                                                                                                                                                        |
+| Category            | Financial Reporting                                                                                                                                                                                            |
+| Priority            | Critical                                                                                                                                                                                                        |
+| Business Objective  | BO-022                                                                                                                                                                                                          |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                                                                                                               |
+| Description         | Sistem harus menyediakan mesin pelaporan keuangan yang mampu menghasilkan laporan keuangan standar (Neraca, Laporan Laba Rugi, Laporan Arus Kas, dan Laporan Perubahan Ekuitas) secara otomatis berdasarkan data transaksi General Ledger yang telah diposting, tanpa memerlukan input manual atau rekonsiliasi offline. |
+| Business Rationale  | Laporan keuangan yang disusun secara manual rentan terhadap kesalahan input, keterlambatan penyajian, dan inkonsistensi angka antar periode maupun antar entitas.                                             |
+| Business Value      | Meningkatkan akurasi, kecepatan, dan konsistensi penyajian laporan keuangan bagi manajemen, pemegang saham, dan regulator.                                                                                     |
+| Acceptance Criteria | Sistem dapat menghasilkan keempat laporan keuangan standar untuk periode dan Financial Organization tertentu secara otomatis, dengan angka yang konsisten dan dapat ditelusuri (traceable) ke jurnal sumber.  |
+
+---
+
+## BR-677 – Balance Sheet (Neraca) Report
+
+| Requirement ID | Requirement Name              | Priority | Description                                                                                                                                                                        | Acceptance Criteria                                                                                                       |
+| -------------- | ------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| BR-677         | Balance Sheet (Neraca) Report  | Critical | Sistem harus menyediakan laporan Neraca yang menyajikan posisi Aset, Liabilitas, dan Ekuitas pada suatu tanggal tertentu, dikelompokkan sesuai format standar (lancar/tidak lancar) maupun format kustom sesuai konfigurasi Chart of Accounts. | Neraca dapat dihasilkan per Financial Organization, per periode, dan menunjukkan saldo yang seimbang (Aset = Liabilitas + Ekuitas). |
+
+---
+
+## BR-678 – Income Statement (Laporan Laba Rugi)
+
+| Requirement ID | Requirement Name                     | Priority | Description                                                                                                                                                       | Acceptance Criteria                                                                                                    |
+| -------------- | -------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| BR-678         | Income Statement (Laporan Laba Rugi)   | Critical | Sistem harus menyediakan Laporan Laba Rugi yang menyajikan pendapatan, beban pokok, beban operasional, serta laba/rugi bersih untuk suatu periode, dengan dukungan format single-step maupun multi-step. | Laporan Laba Rugi dapat dibandingkan antar periode (month-to-date, year-to-date) sesuai konfigurasi pengguna.           |
+
+---
+
+## BR-679 – Cash Flow Statement (Laporan Arus Kas)
+
+| Requirement ID | Requirement Name                       | Priority | Description                                                                                                                                                              | Acceptance Criteria                                                                                  |
+| -------------- | --------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| BR-679         | Cash Flow Statement (Laporan Arus Kas)  | High     | Sistem harus menyediakan Laporan Arus Kas yang menyajikan arus kas dari aktivitas operasi, investasi, dan pendanaan, dengan dukungan metode langsung (direct) dan tidak langsung (indirect). | Pengguna dapat memilih metode penyusunan Laporan Arus Kas sesuai kebijakan akuntansi perusahaan.       |
+
+---
+
+## BR-680 – Statement of Changes in Equity (Laporan Perubahan Ekuitas)
+
+| Requirement ID | Requirement Name                                         | Priority | Description                                                                                                                                                 | Acceptance Criteria                                                                                          |
+| -------------- | ----------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| BR-680         | Statement of Changes in Equity (Laporan Perubahan Ekuitas)  | High     | Sistem harus menyediakan Laporan Perubahan Ekuitas yang menyajikan mutasi komponen ekuitas (modal disetor, laba ditahan, cadangan, dll.) selama suatu periode pelaporan. | Laporan menampilkan saldo awal, penambahan/pengurangan, dan saldo akhir untuk setiap komponen ekuitas.       |
+
+---
+
+## BR-681 – Multi-Accounting Standard Support
+
+| Requirement ID | Requirement Name                  | Priority | Description                                                                                                                                                                                                     | Acceptance Criteria                                                                                                                                    |
+| -------------- | ----------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BR-681         | Multi-Accounting Standard Support  | Critical | Sistem harus mendukung penyusunan laporan keuangan berdasarkan berbagai standar akuntansi (PSAK, IFRS, US GAAP, atau standar lokal lain) secara paralel melalui konfigurasi pemetaan akun dan kebijakan pengakuan tanpa mengubah source code. | Organisasi dapat mengaktifkan lebih dari satu standar pelaporan untuk Financial Organization yang sama, dan sistem menghasilkan laporan berbeda sesuai standar yang dipilih. |
+
+---
+
+## BR-682 – Consolidated Financial Statement
+
+| Requirement ID | Requirement Name                    | Priority | Description                                                                                                                                                                                                               | Business Value                                                                        |
+| -------------- | ------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| BR-682         | Consolidated Financial Statement      | Critical | Sistem harus mampu mengonsolidasikan laporan keuangan dari beberapa Financial Organization/entitas anak ke dalam satu laporan keuangan konsolidasi, termasuk eliminasi transaksi antar entitas (intercompany elimination) dan penyesuaian kepemilikan minoritas. | Mendukung pelaporan grup usaha yang akurat bagi Holding dan Sub Holding.                |
+
+---
+
+## BR-683 – Managerial & Internal Reporting
+
+| Requirement ID | Requirement Name               | Priority | Description                                                                                                                                                                                               | Business Value                                                                                          |
+| -------------- | --------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| BR-683         | Managerial & Internal Reporting   | High     | Sistem harus menyediakan laporan manajerial yang dapat dikustomisasi (custom financial report builder) untuk kebutuhan internal seperti laporan segmen, laporan profitabilitas per Business Unit/Project, dan analisis varians anggaran vs realisasi. | Meningkatkan kualitas pengambilan keputusan manajemen melalui informasi keuangan yang relevan dan tepat waktu. |
+
+---
+
+## BR-684 – Comparative & Multi-Period Reporting
+
+| Requirement ID | Requirement Name                     | Priority | Description                                                                                                                                                                                          | Acceptance Criteria                                                                                    |
+| -------------- | --------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| BR-684         | Comparative & Multi-Period Reporting    | Medium   | Sistem harus mendukung penyajian laporan keuangan secara komparatif antar periode (bulan, kuartal, tahun) maupun antar entitas, termasuk analisis tren dan persentase perubahan (variance analysis). | Laporan dapat ditampilkan dalam format perbandingan minimal 3 periode berjalan secara berdampingan.       |
+
+---
+
+## BR-685 – Regulatory Reporting Format & Export
+
+| Requirement ID | Requirement Name                      | Priority | Description                                                                                                                                                                                                    | Acceptance Criteria                                                                                                    |
+| -------------- | ----------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| BR-685         | Regulatory Reporting Format & Export      | High     | Sistem harus mendukung penyusunan dan ekspor laporan keuangan sesuai format regulasi yang berlaku (misalnya format OJK, pajak, XBRL, atau format elektronik lain), termasuk kemampuan mapping akun ke taksonomi pelaporan regulator. | Sistem dapat mengekspor laporan keuangan ke format yang dipersyaratkan regulator tanpa memerlukan penyusunan ulang secara manual. |
+
+---
+
+# 9.5.16.3 Financial Reporting Business Rules
+
+| Business Rule ID | Description                                                                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-FREP-001    | Seluruh laporan keuangan standar harus dihasilkan berdasarkan data General Ledger yang telah melalui proses posting dan closing period, bukan data transaksi yang belum final. |
+| BRule-FREP-002    | Setiap angka pada laporan keuangan harus dapat ditelusuri (drill-down) hingga ke jurnal dan dokumen transaksi sumber.                                            |
+| BRule-FREP-003    | Format dan struktur laporan keuangan (chart of accounts mapping, grouping, subtotal) dikonfigurasi melalui report template tanpa perubahan source code.          |
+| BRule-FREP-004    | Laporan konsolidasi wajib melakukan eliminasi transaksi intercompany berdasarkan aturan konsolidasi yang telah dikonfigurasi sebelum laporan difinalisasi.       |
+| BRule-FREP-005    | Satu Financial Organization dapat memiliki lebih dari satu output laporan sesuai standar akuntansi yang diaktifkan, namun seluruh output tetap bersumber dari satu ledger yang sama (single source of truth). |
+| BRule-FREP-006    | Laporan keuangan yang telah difinalisasi (locked/published) tidak dapat diubah kecuali melalui mekanisme adjusting entry dengan jejak audit (audit trail) yang tercatat. |
+| BRule-FREP-007    | Mata uang penyajian laporan keuangan mengikuti mata uang pelaporan (reporting currency) yang ditetapkan pada Financial Organization, dengan translasi nilai tukar sesuai kebijakan yang berlaku. |
+
+---
+
+# 9.5.16.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                              |
+| -------------- | ------------------- | ----------- | -------------------------------------------- |
+| BR-676         | BO-022              | SH-003      | Financial Statement Generation Engine         |
+| BR-677         | BO-022              | SH-028      | Balance Sheet Reporting                       |
+| BR-678         | BO-022              | SH-028      | Income Statement Reporting                    |
+| BR-679         | BO-022              | SH-027      | Cash Flow Reporting                           |
+| BR-680         | BO-022              | SH-028      | Equity Movement Reporting                     |
+| BR-681         | BO-022              | SH-011      | Multi-Standard Accounting Configuration       |
+| BR-682         | BO-020              | SH-003      | Group Consolidation Reporting                 |
+| BR-683         | BO-008              | SH-007      | Managerial Report Builder                     |
+| BR-684         | BO-031              | SH-003      | Comparative Analysis Reporting                |
+| BR-685         | BO-022              | SH-011      | Regulatory Report Export                      |
+
+---
+
+# 9.5.16.5 Summary
+
+Financial Reporting Requirements menetapkan fondasi bagi penyediaan laporan keuangan yang akurat, konsisten, dan dapat dipertanggungjawabkan, baik untuk kebutuhan standar (Neraca, Laba Rugi, Arus Kas, Perubahan Ekuitas) maupun kebutuhan manajerial internal. Dukungan terhadap berbagai standar akuntansi, konsolidasi lintas entitas, serta format pelaporan regulasi memastikan sistem dapat memenuhi kebutuhan pelaporan pada berbagai tingkat organisasi tanpa memerlukan perubahan source code. Seluruh requirement pada bagian ini menjadi acuan bagi desain teknis modul Financial Reporting pada dokumen berikutnya.

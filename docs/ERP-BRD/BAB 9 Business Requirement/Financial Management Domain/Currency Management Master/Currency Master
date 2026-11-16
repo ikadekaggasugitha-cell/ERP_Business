@@ -1,0 +1,208 @@
+# 9.5.3.1 Currency Master Requirements
+
+---
+
+# 9.5.3.1.1 Overview
+
+Currency Master merupakan sumber data utama (*Enterprise Reference Data*) yang mendefinisikan seluruh mata uang yang dapat digunakan di dalam Enterprise Resource Planning (ERP).
+
+Currency Master menyediakan identitas standar setiap mata uang beserta atribut bisnis dan teknis yang diperlukan oleh seluruh modul ERP, termasuk Financial Management, Procurement, Sales, Inventory, Treasury, Payroll, Project Management, hingga Business Intelligence.
+
+Seluruh transaksi yang melibatkan nilai moneter wajib mengacu pada Currency Master sebagai **Single Source of Truth** untuk memastikan konsistensi data, interoperabilitas, dan kepatuhan terhadap standar internasional.
+
+---
+
+# 9.5.3.1.2 Business Capability
+
+Currency Master menyediakan kapabilitas berikut:
+
+* Pengelolaan master data mata uang global.
+* Dukungan standar ISO 4217.
+* Konfigurasi simbol dan format mata uang.
+* Pengaturan jumlah digit desimal (precision).
+* Pengaturan aturan pembulatan (rounding).
+* Pengelolaan status aktif/nonaktif.
+* Pengelolaan masa berlaku (effective dating).
+* Dukungan multi-bahasa untuk nama mata uang.
+* Integrasi dengan Exchange Rate Management.
+* Audit dan versioning konfigurasi.
+
+---
+
+# 9.5.3.1.3 Business Requirement Catalogue
+
+## BR-081 – Currency Master Repository
+
+| Attribute           | Description                                                                                           |
+| ------------------- | ----------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-081                                                                                                |
+| Requirement Name    | Currency Master Repository                                                                            |
+| Category            | Currency Master                                                                                       |
+| Priority            | Critical                                                                                              |
+| Business Objective  | BO-009                                                                                                |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                      |
+| Description         | Sistem harus menyediakan repositori terpusat untuk seluruh master mata uang yang digunakan dalam ERP. |
+| Business Value      | Menjamin konsistensi referensi mata uang di seluruh modul.                                            |
+| Acceptance Criteria | Seluruh modul ERP hanya dapat menggunakan mata uang yang terdaftar pada Currency Master.              |
+
+---
+
+## BR-082 – ISO 4217 Compliance
+
+| Attribute           | Description                                                                                                                               |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-082                                                                                                                                    |
+| Requirement Name    | ISO 4217 Compliance                                                                                                                       |
+| Priority            | Critical                                                                                                                                  |
+| Description         | Sistem harus mendukung kode alfabetik dan numerik sesuai standar ISO 4217 serta memungkinkan penambahan mata uang kustom bila diperlukan. |
+| Acceptance Criteria | Setiap mata uang memiliki Currency Code, Numeric Code, dan Currency Name yang unik.                                                       |
+
+---
+
+## BR-083 – Currency Symbol Management
+
+| Attribute        | Description                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-083                                                                                                       |
+| Requirement Name | Currency Symbol Management                                                                                   |
+| Priority         | High                                                                                                         |
+| Description      | Sistem harus mengelola simbol mata uang yang digunakan pada tampilan transaksi, laporan, dan dokumen bisnis. |
+
+---
+
+## BR-084 – Currency Precision Configuration
+
+| Attribute        | Description                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-084                                                                                                        |
+| Requirement Name | Currency Precision Configuration                                                                              |
+| Priority         | Critical                                                                                                      |
+| Description      | Sistem harus mendukung konfigurasi jumlah digit desimal (precision) untuk setiap mata uang secara independen. |
+
+---
+
+## BR-085 – Currency Rounding Rule
+
+| Attribute        | Description                                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-085                                                                                                         |
+| Requirement Name | Currency Rounding Rule                                                                                         |
+| Priority         | High                                                                                                           |
+| Description      | Sistem harus mendukung aturan pembulatan yang dapat dikonfigurasi untuk setiap mata uang atau jenis transaksi. |
+
+---
+
+## BR-086 – Effective Dating
+
+| Attribute        | Description                                                                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-086                                                                                                                              |
+| Requirement Name | Effective Dating                                                                                                                    |
+| Priority         | High                                                                                                                                |
+| Description      | Setiap Currency Master harus memiliki tanggal mulai berlaku (Effective From) dan, bila diperlukan, tanggal berakhir (Effective To). |
+
+---
+
+## BR-087 – Currency Status Lifecycle
+
+| Attribute        | Description                                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-087                                                                                                                   |
+| Requirement Name | Currency Status Lifecycle                                                                                                |
+| Priority         | High                                                                                                                     |
+| Description      | Sistem harus mendukung status Draft, Active, Suspended, Deprecated, Inactive, dan Archived untuk setiap Currency Master. |
+
+---
+
+## BR-088 – Localization Support
+
+| Attribute        | Description                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-088                                                                                           |
+| Requirement Name | Localization Support                                                                             |
+| Priority         | Medium                                                                                           |
+| Description      | Sistem harus mendukung nama mata uang dalam berbagai bahasa sesuai konfigurasi lokal organisasi. |
+
+---
+
+## BR-089 – Currency Dependency Validation
+
+| Attribute        | Description                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-089                                                                                                                                                 |
+| Requirement Name | Currency Dependency Validation                                                                                                                         |
+| Priority         | Critical                                                                                                                                               |
+| Description      | Sistem harus mencegah penghapusan Currency Master yang masih digunakan oleh transaksi, Financial Organization, Ledger, Exchange Rate, atau modul lain. |
+
+---
+
+## BR-090 – Currency Master Auditability
+
+| Attribute        | Description                                                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-090                                                                                                                       |
+| Requirement Name | Currency Master Auditability                                                                                                 |
+| Priority         | Critical                                                                                                                     |
+| Description      | Seluruh perubahan pada Currency Master harus dicatat dalam Audit Trail, termasuk perubahan atribut, status, dan konfigurasi. |
+
+---
+
+# 9.5.3.1.4 Business Rules
+
+| Business Rule ID | Description                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| BRule-CM-001     | Setiap Currency Code harus unik dalam seluruh ERP.                                           |
+| BRule-CM-002     | Currency Code tidak boleh diubah setelah digunakan dalam transaksi keuangan.                 |
+| BRule-CM-003     | Currency Master hanya dapat diaktifkan jika memiliki kode ISO atau kode internal yang valid. |
+| BRule-CM-004     | Mata uang yang sudah digunakan dalam transaksi tidak boleh dihapus secara permanen.          |
+| BRule-CM-005     | Perubahan Precision atau Rounding Rule tidak boleh memengaruhi transaksi historis.           |
+| BRule-CM-006     | Mata uang dengan status Inactive atau Archived tidak dapat digunakan untuk transaksi baru.   |
+| BRule-CM-007     | Seluruh perubahan Currency Master wajib tercatat pada Audit Trail.                           |
+
+---
+
+# 9.5.3.1.5 Data Attributes
+
+| Attribute                 | Description                                        |
+| ------------------------- | -------------------------------------------------- |
+| Currency ID               | Identitas unik sistem.                             |
+| Currency Code             | Kode alfabetik ISO 4217 (misalnya IDR, USD, EUR).  |
+| Numeric Code              | Kode numerik ISO 4217.                             |
+| Currency Name             | Nama resmi mata uang.                              |
+| Local Currency Name       | Nama lokal mata uang.                              |
+| Symbol                    | Simbol mata uang.                                  |
+| Decimal Precision         | Jumlah digit desimal.                              |
+| Minor Unit                | Satuan pecahan terkecil.                           |
+| Rounding Method           | Aturan pembulatan.                                 |
+| Effective From            | Tanggal mulai berlaku.                             |
+| Effective To              | Tanggal akhir berlaku.                             |
+| Status                    | Status siklus hidup mata uang.                     |
+| Is System Currency        | Menandakan mata uang bawaan sistem.                |
+| Is Custom Currency        | Menandakan mata uang hasil konfigurasi organisasi. |
+| Created By / Created Date | Informasi pembuatan data.                          |
+| Updated By / Updated Date | Informasi perubahan terakhir.                      |
+
+---
+
+# 9.5.3.1.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process            |
+| -------------- | ------------------ | ----------- | ------------------------- |
+| BR-081         | BO-009             | SH-003      | Currency Administration   |
+| BR-082         | BO-009             | SH-003      | ISO Compliance            |
+| BR-083         | BO-009             | SH-003      | Currency Presentation     |
+| BR-084         | BO-010             | SH-003      | Financial Calculation     |
+| BR-085         | BO-010             | SH-003      | Rounding Configuration    |
+| BR-086         | BO-011             | SH-003      | Effective Date Management |
+| BR-087         | BO-011             | SH-003      | Currency Lifecycle        |
+| BR-088         | BO-027             | SH-007      | Localization              |
+| BR-089         | BO-029             | SH-010      | Data Integrity            |
+| BR-090         | BO-029             | SH-010      | Audit & Compliance        |
+
+---
+
+# 9.5.3.1.7 Summary
+
+Currency Master merupakan fondasi utama seluruh layanan Currency Management dan berfungsi sebagai **Enterprise Reference Data** untuk seluruh aplikasi ERP. Dengan dukungan standar internasional, konfigurasi precision, lifecycle management, effective dating, localization, serta audit trail, Currency Master memastikan bahwa seluruh transaksi moneter menggunakan referensi mata uang yang konsisten, aman, dan dapat diaudit.
+
+Seluruh requirement pada bagian ini akan menjadi dasar bagi sub-domain **Currency Pair**, **Exchange Rate Type**, **Exchange Rate Provider**, **Exchange Rate**, serta seluruh mekanisme konversi, translasi, dan revaluasi mata uang pada Financial Management Domain.

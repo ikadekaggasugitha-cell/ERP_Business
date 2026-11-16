@@ -1,0 +1,116 @@
+# BAB 1. Introduction
+
+## 1.1 Purpose
+
+Software Detailed Design (SDD) — Backend ini mendefinisikan **cara mengimplementasikan setiap layanan (service) backend** platform ERP multi-organisasi ke dalam kode **Go**. SDD menjembatani tiga artefak yang sudah ada menjadi kode yang dapat dieksekusi:
+
+* **SAD** (arsitektur: microservices, event-driven, CQRS) → *bentuk sistem*.
+* **DBDD** (skema fisik PostgreSQL, RLS, partisi, outbox) → *bentuk data*.
+* **API Specification** (kontrak REST via Kong + event via Kafka) → *bentuk antarmuka*.
+
+Tujuan dokumen:
+
+* Menetapkan **blueprint layanan tunggal** — anatomi, layer, dan pola — yang direplikasi seragam untuk seluruh Service Catalog (BAB 2).
+* Menstandarkan **layout proyek, tech stack, dan konvensi kode** lintas layanan (BAB 3).
+* Menstandarkan implementasi **layer API** (BAB 4), **domain/repository** (BAB 5), **event/outbox** (BAB 6), **keamanan & RLS** (BAB 7), **observability & runtime** (BAB 8), serta **build/migrasi/CI-CD** (BAB 9).
+* Menyediakan **matriks implementasi per layanan** untuk baseline SVC-001…019 (BAB 10) beserta urutan pembangunan (*build order*).
+* Menjaga keterlacakan dari kode ke SVC-xxx (SAD), API-xxx (API Spec), tabel DBDD, dan BR-xxx (BRD).
+
+SDD **tidak** menciptakan skema, kontrak, atau aturan bisnis baru; ia menstandarkan *cara membangun*. Aturan bisnis level-field tetap mengacu **BRD BAB 9 (BR-xxx)** dan **BAB 10 (Business Rules)**; skema mengacu **DBDD**; kontrak mengacu **API Specification**.
+
+## 1.2 Scope
+
+### In Scope
+
+* Blueprint implementasi backend Go per layanan: layout modul, wiring, layer HTTP, layer repository, outbox relay, dan penegakan RLS.
+* Pemetaan kontrak API (API-xxx) dan katalog event ke struktur kode konkret.
+* Konvensi lintas layanan: penanganan error, logging/tracing, konfigurasi, uang/waktu/UUID, idempotency, optimistic locking.
+* Pipeline build/migrasi/CI-CD (golang-migrate *expand–contract*, gerbang `sqlc diff`, workflow CI per layanan).
+* Matriks implementasi baseline **SVC-001 s.d. SVC-019** (SAD BAB 4.5) dan urutan pembangunan.
+
+### Out of Scope
+
+* Definisi skema fisik basis data — pada **DBDD** (mis. DDL, RLS policy, partisi, trigger).
+* Definisi kontrak REST/event final (OpenAPI 3.1 / Avro-Protobuf per layanan) — pada **API Specification** dan registry **Apicurio**.
+* Domain lanjutan **SVC-020…029** (Fixed Asset, Cost/Profit Center, Budget, Financial Close, Consolidation, Project, Asset, Maintenance, CRM, Localization) — mengikuti pola yang sama, diimplementasikan pada fase berikut.
+* Konfigurasi operasional runtime (HA cluster, tuning, backup/PITR) — pada artefak **Operations** (arsitekturnya di SAD BAB 8–9; skrip di `db/backup`, `db/ops`).
+* UI/frontend dan orkestrasi gateway (konfigurasi Kong/route) di luar kontrak — pada artefak masing-masing.
+
+## 1.3 Relationship to SAD, DBDD, API Spec, and BRD
+
+```text
+BRD BAB 9 (BR-xxx) ─► SAD (SVC-xxx, ADR, event) ─► DBDD (skema fisik) ─► API Spec (API-xxx)
+                                   │                        │                    │
+                                   └────────────┬───────────┴──────────┬─────────┘
+                                                ▼                      ▼
+                              ►►  SOFTWARE DETAILED DESIGN — BACKEND (dokumen ini)  ◄◄
+                                                │
+                                                ▼
+                          Kode layanan Go (services/<name>-service/) + CI/CD
+```
+
+| Sumber                          | Kontribusi ke SDD                                                         |
+| ------------------------------- | ------------------------------------------------------------------------- |
+| BRD BAB 9/10 (BR-xxx)           | Aturan bisnis yang di-*enforce* di layer domain/repository (BAB 5.5).      |
+| SAD BAB 3 (ADR-xxx)             | Keputusan arsitektur yang mengikat pilihan implementasi (stack, outbox, RLS, CQRS). |
+| SAD BAB 4.5 (SVC-xxx)           | Batas layanan, kepemilikan DB, dependensi antar-layanan (BAB 10).         |
+| SAD BAB 5 (Event/Integration)   | Pola outbox, envelope event, topic naming, exactly-once (BAB 6).          |
+| SAD BAB 7 (Security)            | AuthN/Z, propagasi scope, model peran DB (BAB 7).                          |
+| SAD BAB 9/11 (Observability, Cross-Cutting) | Standar log/trace/metrik, correlation id, health check (BAB 8). |
+| DBDD BAB 2 (Standards)          | Common columns, RLS via `app.org_scope`, optimistic locking, outbox — dikonsumsi kode. |
+| DBDD BAB 3–9 (Skema per domain) | Tabel/kolom yang menjadi input `sqlc` per layanan.                        |
+| API Spec BAB 2 (Standards)      | Envelope, error model, pagination, idempotency, header standar (BAB 4).   |
+| API Spec BAB 3–7 (API-xxx, Event) | Resource & event per domain yang dipetakan ke handler & outbox (BAB 10). |
+
+## 1.4 Service Topology and Build Order
+
+Sesuai **ADR-001**, tiap layanan memiliki basis data sendiri (database-per-service) dan berkomunikasi lintas layanan **hanya** melalui REST sinkron (via Kong) atau **event** asinkron (Kafka) — tidak ada *foreign key* lintas basis data. Baseline Service Catalog (SAD BAB 4.5):
+
+| SVC     | Layanan                      | Basis Data        | Depend. Utama        | Event Kunci (sumber `outbox`)                          | Outbox |
+| ------- | ---------------------------- | ----------------- | -------------------- | ------------------------------------------------------ | :----: |
+| SVC-001 | `org-service`                | `org_db`          | —                    | `org.unit.upserted`                                    |   —    |
+| SVC-002 | `user-service`               | `user_db`         | org                  | `user.account.upserted`                                |   —    |
+| SVC-003 | `security-service`           | `security_db`     | user                 | `security.access.denied`                               |   —    |
+| SVC-004 | `workflow-service`           | `workflow_db`     | org                  | `workflow.approval.requested/completed`                |   —    |
+| SVC-005 | `masterdata-service`         | `masterdata_db`   | org                  | `masterdata.{customer,vendor,item}.upserted`           |   —    |
+| SVC-006 | `coa-service`                | `coa_db`          | org                  | `coa.account.upserted`, `coa.posting_rule.upserted`    |   —    |
+| SVC-007 | `gl-service` *(referensi)*   | `gl_db`           | coa                  | `gl.journal.posted`                                    |   ✔    |
+| SVC-008 | `ap-service`                 | `ap_db`           | coa                  | `ap.invoice.recorded`                                  |   ✔    |
+| SVC-009 | `ar-service`                 | `ar_db`           | coa                  | `ar.invoice.issued`                                    |   ✔    |
+| SVC-010 | `tax-service`                | `tax_db`          | coa                  | `tax.invoice.issued`                                   |   —    |
+| SVC-011 | `treasury-cashbank-service`  | `treasury_db`     | gl                   | `cashbank.payment.settled`                             |   ✔    |
+| SVC-012 | `procurement-service`        | `procurement_db`  | masterdata, workflow | `procurement.po.approved`, `procurement.goods.received`|   —    |
+| SVC-013 | `inventory-service`          | `inventory_db`    | masterdata           | `inventory.stock.reserved`, `inventory.goods.issued/received` | ✔ |
+| SVC-014 | `manufacturing-service`      | `manufacturing_db`| inventory            | `manufacturing.workorder.completed`                    |   —    |
+| SVC-015 | `sales-service`              | `sales_db`        | masterdata, inventory| `sales.order.confirmed`                                |   —    |
+| SVC-016 | `hr-service`                 | `hr_db`           | org                  | `hr.employee.updated`                                  |   —    |
+| SVC-017 | `payroll-service`            | `payroll_db`      | hr                   | `payroll.run.completed`                                |   ✔    |
+| SVC-018 | `audit-service`              | `audit_db`        | — (konsumen wildcard)| —                                                      |   —    |
+| SVC-019 | `reporting-service`          | `reporting_db`    | — (read model, CQRS) | — (konsumen lintas domain)                             |   —    |
+
+**Build order** mengikuti arah dependensi (produsen sebelum konsumen). Ringkasnya: `org` → `user`/`security`/`workflow`/`masterdata` → `coa` → `gl`/`ap`/`ar`/`tax` → `treasury` → `procurement`/`inventory` → `sales`/`manufacturing` → `hr` → `payroll`; `audit` dan `reporting` bersifat konsumen dan dapat dibangun paralel setelah broker event siap. Rincian pada **BAB 10.1**.
+
+## 1.5 Identifier and Notation Conventions
+
+| Prefix / Notasi   | Makna                                                                    |
+| ----------------- | ------------------------------------------------------------------------ |
+| SDD-xxx           | Keputusan/standar implementasi backend (di-register pada BAB 11.1).      |
+| SVC-xxx           | Layanan pada Service Catalog SAD BAB 4.5.                                |
+| API-xxx           | Resource pada API Specification.                                         |
+| ADR-xxx           | Architecture Decision Record (SAD BAB 3).                                |
+| BR-xxx / DBS-xxx  | Business Rule (BRD) / Database Standard (DBDD BAB 2).                     |
+| INT-xxx / NFR-xxx | Integration / Non-Functional Requirement (BRD/SAD).                      |
+| `db.table`        | Tabel fisik (mis. `gl.journal_entry`), sesuai DBDD.                      |
+| `service/path`    | Path kode relatif ke root repo (mis. `services/gl-service/cmd/server`).  |
+
+Contoh kode disajikan sebagai blok Go/SQL/YAML. Diagram alur menggunakan **Mermaid**. Nama role, GUC, dan fungsi database (`erp_app_rw`, `app.org_scope`, `public.current_org_scope()`) dikutip verbatim sesuai DBDD dan `db/ops`.
+
+## 1.6 How to Read This Document
+
+* **BAB 2 wajib dibaca lebih dulu** — memuat blueprint layanan acuan (`gl-service`) yang menjadi cetak biru seluruh layanan; BAB berikutnya memperluas tiap layer-nya.
+* **BAB 3–9** memuat standar lintas layanan per-layer (layout, API, domain, event, security, observability, CI/CD). Standar di sini **tidak diulang** pada BAB 10.
+* **BAB 10** memuat matriks *delta* per layanan (SVC-001…019): DB, skema, resource & event kunci, dependensi, dan catatan khusus — mengasumsikan seluruh standar BAB 2–9 berlaku kecuali dinyatakan lain.
+* **BAB 11** memuat register keputusan (SDD-xxx), matriks keterlacakan, open items, dan checklist scaffolding sebuah layanan baru.
+* Praktik terbaik: untuk membuat layanan baru, ikuti **checklist BAB 11.4**, salin pola `gl-service` (BAB 2), lalu isi *delta* domain dari **BAB 10**.
+
+---

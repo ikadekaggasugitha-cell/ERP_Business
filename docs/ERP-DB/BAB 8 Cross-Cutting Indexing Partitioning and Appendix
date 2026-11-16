@@ -1,0 +1,167 @@
+# BAB 8. Cross-Cutting, Indexing, Partitioning, and Appendix
+
+## 8.1 Overview
+
+Bab ini melengkapi desain basis data dengan **tabel teknis lintas layanan** (read model, konfigurasi), **strategi indeks & partisi konsolidasi**, kebijakan **retensi/arsip fisik**, serta **matriks traceability** dan lampiran. Tabel `outbox` dan `processed_event` telah ditetapkan sebagai pola standar pada BAB 2.10 dan berlaku di setiap basis data layanan terkait.
+
+---
+
+## 8.2 Reporting Read Model (`reporting_db`, CQRS)
+
+Merealisasikan ADR-009 (CQRS) dan NFR-003: `reporting-service` (SVC-019) membangun model baca terdenormalisasi dari *event* lintas domain. Tabel bersifat *derived* (bukan *system of record*).
+
+### `rpt.gl_balance_snapshot` (agregasi saldo untuk dashboard)
+
+| Column          | Type          | Null | Key | Description                                    |
+| --------------- | ------------- | ---- | --- | ---------------------------------------------- |
+| `organization_id`| UUID         | No   | IDX | Scope.                                         |
+| `fiscal_period_id`| UUID        | No   | IDX | Periode.                                       |
+| `account_code`  | VARCHAR(50)   | No   | IDX | Akun (denormalized).                           |
+| `closing_balance`| NUMERIC(20,4)| No   |     | Saldo akhir agregat.                           |
+| `refreshed_at`  | TIMESTAMPTZ   | No   |     | Waktu pembaruan read model (eventual).         |
+
+### `rpt.sales_summary`, `rpt.inventory_position` — pola serupa (materialized view / tabel proyeksi yang diperbarui dari event, idempoten).
+
+> Read model boleh dibangun ulang (*rebuildable*) dari *event*; kehilangan read model tidak menghilangkan sumber kebenaran (ada di basis data domain).
+
+---
+
+## 8.3 Configuration Data
+
+Merealisasikan **Configuration over Customization** (SAD BAB 11.2). Konfigurasi bisnis disimpan sebagai data (per organisasi), bukan kode.
+
+### `cfg.system_parameter` (generik, per basis data yang memerlukan)
+
+| Column          | Type         | Null | Key | Description                                    |
+| --------------- | ------------ | ---- | --- | ---------------------------------------------- |
+| `organization_id`| UUID        | No   | IDX | Scope (NULL = global default).                 |
+| `param_key`     | VARCHAR(100) | No   | U   | Kunci parameter.                               |
+| `param_value`   | JSONB        | No   |     | Nilai (fleksibel).                             |
+| `effective_from`| DATE         | Yes  |     | Efektivitas (opsional).                        |
+
+**Unique:** `uq_system_parameter (organization_id, param_key)`.
+
+---
+
+## 8.4 Consolidated Indexing Strategy
+
+Ringkasan penerapan DBS-015 lintas domain:
+
+| Pola Indeks                          | Contoh Tabel                          | Tujuan                                   |
+| ------------------------------------ | ------------------------------------- | ---------------------------------------- |
+| `(organization_id, code)` UNIQUE     | organization, party, item, account    | Keunikan kode ber-scope.                 |
+| `(organization_id, fiscal_period_id)`| journal_entry, account_balance        | Query periodik ber-scope.                |
+| FK index                             | seluruh `*_id` join columns           | Kinerja join intra-layanan.              |
+| Partial `WHERE deleted_at IS NULL`   | master & transaksi ber-soft-delete    | Efisiensi query data aktif.              |
+| BRIN pada kolom waktu                 | stock_movement, audit_log, journal    | Time-series besar berpartisi.            |
+| GIN pada JSONB                        | posting_rule, workflow_step, param    | Query atribut fleksibel.                 |
+| Unique dokumen                        | journal_no, invoice_no, po_no, so_no  | Keunikan nomor dokumen.                  |
+
+---
+
+## 8.5 Consolidated Partitioning Strategy
+
+Penerapan DBS-013 pada tabel bervolume tinggi:
+
+| Tabel                     | Basis Data        | Metode | Kunci Partisi      | Granularitas |
+| ------------------------- | ----------------- | ------ | ------------------ | ------------ |
+| `gl.journal_entry`        | `gl_db`           | RANGE  | `posting_date`     | Bulanan      |
+| `gl.journal_line`*        | `gl_db`           | RANGE  | (ikut induk)       | Bulanan      |
+| `inv.stock_movement`      | `inventory_db`    | RANGE  | `movement_date`    | Bulanan      |
+| `audit.audit_log`         | `audit_db`        | RANGE  | `occurred_at`      | Bulanan      |
+| `ar.ar_invoice`/`ap.ap_invoice` | `ar_db`/`ap_db` | RANGE | `invoice_date`    | Bulanan/Tahunan |
+
+\* Partisi baris jurnal dapat mengikuti pola induk atau menyimpan `posting_date` denormalized untuk *partition pruning*. Partisi masa depan dibuat otomatis (mis. `pg_partman`) sebelum periode berjalan; partisi lama diarsipkan/di-*detach* (BAB 8.6).
+
+---
+
+## 8.6 Data Retention and Archiving (Physical)
+
+Merealisasikan SAD BAB 6.8:
+
+| Kategori             | Kebijakan Fisik                                                            |
+| -------------------- | -------------------------------------------------------------------------- |
+| Transaksi aktif      | Partisi *hot* pada penyimpanan cepat; query operasional.                   |
+| Transaksi historis   | Partisi lama di-*detach* ke *cold storage*/tabel arsip.                    |
+| Audit log            | Retensi panjang (immutable), partisi bulanan; arsip sesuai kepatuhan.      |
+| Event (outbox)       | Baris `published_at IS NOT NULL` dibersihkan berkala (housekeeping).       |
+| PII                  | Penghapusan/anonymization sesuai *right to erasure* (BAB 7.4, UU PDP).      |
+
+Backup, PITR, dan replikasi DR mengikuti arsitektur SAD BAB 6.9 & 8.8 (NFR-028/029).
+
+---
+
+## 8.7 Traceability Matrix (Table ↔ Service ↔ BR)
+
+| Basis Data (SVC)              | Tabel Utama                                              | BRD Requirement (contoh)        |
+| ----------------------------- | -------------------------------------------------------- | ------------------------------- |
+| `org_db` (SVC-001)            | organization, organization_type, organization_closure   | BR-001–006 (9.1)                |
+| `user_db` (SVC-002)           | app_user, user_identity, user_org_assignment            | 9.2, INT-012                    |
+| `security_db` (SVC-003)       | role, permission, role_permission, role_scope           | BR-031–040 (9.4)                |
+| `workflow_db` (SVC-004)       | workflow_definition/step/instance/task                  | 9.3, INT-004                    |
+| `masterdata_db` (SVC-005)     | party, item, item_uom, party_address                    | 9.18, BO-010                    |
+| `coa_db` (SVC-006)            | chart_of_accounts, account, account_segment, posting_rule| 9.6 (25 sub-domain)            |
+| `currency_db`                 | currency, exchange_rate, exchange_rate_type             | 9.5.3 (17 sub-domain)          |
+| `gl_db` (SVC-007)             | journal_entry, journal_line, account_balance            | BR-556–562 (9.5.4)             |
+| `ap_db` (SVC-008)             | ap_invoice, ap_invoice_line                             | 9.5.5, INT-002                  |
+| `ar_db` (SVC-009)             | ar_invoice, ar_invoice_line                             | 9.5.6, INT-001                  |
+| `tax_db` (SVC-010)            | tax_code, tax_transaction                               | 9.5.13, INT-006                 |
+| `treasury_db` (SVC-011)       | bank_account, payment, bank_statement_line              | 9.5.8/9, INT-005                |
+| `procurement_db` (SVC-012)    | purchase_requisition, purchase_order, goods_receipt     | 9.7, INT-002                    |
+| `inventory_db` (SVC-013)      | warehouse, stock_balance, stock_movement, stock_reservation | 9.8, INT-001                |
+| `manufacturing_db` (SVC-014)  | bill_of_material, work_order                            | 9.9                             |
+| `sales_db` (SVC-015)          | sales_order, so_line, delivery                          | 9.14, INT-001                   |
+| `hr_db` (SVC-016)             | employee, position, employment, employee_compensation   | 9.12, INT-003                   |
+| `payroll_db` (SVC-017)        | payroll_run, payroll_result, statutory_contribution     | 9.17, INT-003/007               |
+| `audit_db` (SVC-018)          | audit_log                                               | BR-826–835 (9.20)              |
+| `reporting_db` (SVC-019)      | gl_balance_snapshot, sales_summary                      | 9.13, NFR-003 (ADR-009)         |
+
+Seluruh basis data juga memuat tabel teknis `outbox`/`processed_event` (DBS-014) sesuai peran produsen/konsumen event.
+
+---
+
+## 8.8 Appendix A — Enumerations and Reference Values
+
+Nilai enumerasi status yang konsisten lintas domain (implementasi via `CHECK` atau tabel referensi, DBS-003):
+
+| Domain            | Kolom `status` — Nilai                                                    |
+| ----------------- | ------------------------------------------------------------------------- |
+| Organization      | Draft, Active, Inactive, Merge, Split, Archived                           |
+| Fiscal Period     | Open, Closed, Locked                                                       |
+| Journal Entry     | Draft, Posted, Reversed                                                    |
+| AP/AR Invoice     | Draft/Issued, Recorded, PartiallyPaid, Paid, Overdue, Cancelled           |
+| Payment           | Draft, Settled, Reconciled, Failed                                        |
+| Purchase Order    | Draft, Approved, PartiallyReceived, Received, Closed                      |
+| Sales Order       | Draft, Confirmed, PartiallyDelivered, Delivered, Invoiced, Cancelled      |
+| Work Order        | Planned, Released, InProgress, Completed, Closed                          |
+| Payroll Run       | Draft, Calculated, Approved, Posted, Paid                                 |
+
+---
+
+## 8.9 Appendix B — Open Items and Link to API Specification
+
+| Item                                                              | Tindak Lanjut                              |
+| ---------------------------------------------------------------- | ------------------------------------------ |
+| Basis data domain tersisa (Fixed Asset, Cost/Profit Center, Budget, Financial Close, Consolidation, Project, Asset, Maintenance, CRM, Localization) | **Selesai** — didesain penuh pada **BAB 9 (Extended Domain Schema)**, SVC-020…029. |
+| Skrip migrasi DDL final (`golang-migrate`)                        | Diturunkan dari DBDD ini (SAD BAB 10.4).   |
+| Definisi kolom ekshaustif per tabel turunan                       | Dilengkapi mengikuti Common Columns + pola domain. |
+| Kontrak API/event yang membaca/menulis tabel ini                  | **API Specification** (`API-xxx`) — artefak berikutnya. |
+
+DBDD ini menjadi masukan langsung bagi **API Specification**: setiap *resource* API dipetakan ke tabel/entitas di sini, dan setiap *event* dipetakan ke tabel `outbox` sumbernya.
+
+---
+
+## 8.10 Revision History
+
+| Version | Date       | Author             | Description                                                              | Status |
+| ------- | ---------- | ------------------ | ------------------------------------------------------------------------ | ------ |
+| 0.1     | 2026-08-05 | Data/Solution Architect | Rilis awal DBDD — BAB 1–8 (standar, core/platform, finansial, operasional, HR/payroll, cross-cutting). | Draft  |
+| 0.2     | 2026-08-05 | Data/Solution Architect | Penambahan **BAB 9 (Extended Domain Schema)** — Fixed Asset, Cost/Profit Center, Budget, Financial Close, Consolidation, Project, Asset, Maintenance, CRM, Localization (SVC-020…029). Menutup Open Items BAB 8.9. Topologi menjadi 30 basis data. | Draft  |
+
+---
+
+## 8.11 Summary
+
+Bab penutup ini menetapkan tabel teknis lintas layanan (**read model CQRS**, **konfigurasi**), mengonsolidasikan **strategi indeks** (unik ber-scope, FK, partial, BRIN, GIN) dan **partisi** (RANGE per periode pada jurnal, pergerakan stok, audit, invoice), kebijakan **retensi/arsip fisik**, serta **matriks traceability** yang memetakan setiap basis data & tabel ke layanan (SVC) dan kebutuhan bisnis (BR). Bersama BAB 1–7, dokumen ini menyediakan desain fisik basis data yang lengkap dan terlacak sebagai dasar penulisan migrasi dan penyusunan **API Specification** berikutnya.
+
+---

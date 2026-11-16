@@ -1,0 +1,202 @@
+# BAB 20. Requirement Traceability Matrix
+
+## 20.1 Overview
+
+Requirement Traceability Matrix (RTM) merupakan bab konsolidasi yang memastikan setiap Business Requirement (BR-xxx) yang telah didokumentasikan pada **BAB 9. Business Requirement** dapat ditelusuri (*traced*) secara jelas ke:
+
+1. **Business Objective (BO-xxx)** yang didefinisikan pada BAB 4, sehingga setiap requirement memiliki justifikasi strategis yang jelas.
+2. **Stakeholder (SH-xxx)** yang didefinisikan pada BAB 5, sehingga setiap requirement memiliki pemilik (*requirement owner*) yang bertanggung jawab.
+3. **Status dokumentasi dan tahapan berikutnya** dalam siklus hidup requirement, mulai dari Business Requirement menuju Functional Requirement (FR), Technical Design, hingga Test Case (TC).
+
+Bab ini **tidak mengulang detail** dari 41 dokumen Business Requirement yang telah disusun pada BAB 9 (BR-001 s.d. BR-835). Sebagai gantinya, bab ini menyajikan **rangkuman keterlacakan per modul/domain** dalam bentuk matrix, sehingga dapat digunakan sebagai:
+
+- Alat kontrol kelengkapan (*completeness check*) atas seluruh requirement yang telah didefinisikan.
+- Acuan tunggal (*single reference*) bagi tim Business Analyst, Solution Architect, dan QA Engineer dalam menyusun Functional Requirement Specification (FRS) dan Test Case pada tahap berikutnya.
+- Dasar audit keterlacakan bagi Internal Audit dan Steering Committee bahwa tidak ada kebutuhan bisnis yang tidak memiliki tujuan bisnis maupun pemilik yang jelas.
+
+Traceability pada dokumen ini bersifat **bidirectional**: dari Business Objective ke Business Requirement (forward traceability) maupun dari Business Requirement kembali ke Business Objective dan Stakeholder (backward traceability).
+
+---
+
+## 20.2 Requirement Mapping
+
+Tabel berikut memetakan seluruh modul/domain yang telah didokumentasikan pada BAB 9 terhadap Business Objective dan Stakeholder yang paling representatif. Pemetaan Primary Business Objective dan Primary Stakeholder tidak menutup kemungkinan adanya relasi sekunder terhadap BO/SH lain, sebagaimana dijelaskan lebih lanjut pada Sub-bab 20.3.
+
+| No | Module/Domain | Section | BR Range | Primary Business Objective | Primary Stakeholder |
+| -- | --------------------------------------- | ------------- | --------------- | ------------------------------------------------------ | ---------------------------------- |
+| 1 | Organization Management | 9.1 | BR-001–010 | BO-002 – Struktur organisasi bertingkat tanpa batas | SH-007 – Business Owner |
+| 2 | User Management | 9.2 | BR-011–020 | BO-028 – Keamanan, audit trail, integritas data | SH-006 – Chief Information Officer |
+| 3 | Workflow Management | 9.3 | BR-021–030 | BO-011 – Workflow yang dapat dikonfigurasi | SH-004 – Chief Operating Officer |
+| 4 | Security Management | 9.4 | BR-031–040 | BO-018 – Scope-Based Access Control | SH-026 – Security Engineer |
+| 5 | Financial Organization | 9.5.1 | BR-051–060 | BO-021 – Multi Currency dan konsolidasi keuangan | SH-003 – Chief Financial Officer |
+| 6 | Fiscal Calendar | 9.5.2 | BR-061–070 | BO-022 – Akurasi laporan keuangan | SH-003 – Chief Financial Officer |
+| 7 | Currency Management Master | 9.5.3.1-17 | BR-081–250 | BO-021 – Multi Currency dan konsolidasi keuangan | SH-003 – Chief Financial Officer |
+| 8 | General Ledger | 9.5.4 | BR-556–565 | BO-022 – Akurasi laporan keuangan | SH-003 – Chief Financial Officer |
+| 9 | Accounts Payable | 9.5.5 | BR-566–575 | BO-009 – Otomatisasi proses lintas departemen | SH-028 – Accounting Department |
+| 10 | Accounts Receivable | 9.5.6 | BR-576–585 | BO-022 – Akurasi laporan keuangan | SH-027 – Finance Department |
+| 11 | Fixed Asset | 9.5.7 | BR-586–595 | BO-022 – Akurasi laporan keuangan | SH-038 – Asset Management Department |
+| 12 | Treasury | 9.5.8 | BR-596–605 | BO-021 – Multi Currency dan konsolidasi keuangan | SH-003 – Chief Financial Officer |
+| 13 | Cash & Bank | 9.5.9 | BR-606–615 | BO-022 – Akurasi laporan keuangan | SH-027 – Finance Department |
+| 14 | Cost Center | 9.5.10 | BR-616–625 | BO-022 – Akurasi laporan keuangan | SH-003 – Chief Financial Officer |
+| 15 | Profit Center | 9.5.11 | BR-626–635 | BO-022 – Akurasi laporan keuangan | SH-003 – Chief Financial Officer |
+| 16 | Budget Management | 9.5.12 | BR-636–645 | BO-031 – Kualitas pengambilan keputusan | SH-003 – Chief Financial Officer |
+| 17 | Tax Management | 9.5.13 | BR-646–655 | BO-022 – Akurasi laporan keuangan | SH-011 – Compliance Officer |
+| 18 | Financial Close | 9.5.14 | BR-656–665 | BO-022 – Akurasi laporan keuangan | SH-003 – Chief Financial Officer |
+| 19 | Financial Consolidation | 9.5.15 | BR-666–675 | BO-020 – Konsolidasi laporan keuangan lintas perusahaan | SH-003 – Chief Financial Officer |
+| 20 | Financial Reporting | 9.5.16 | BR-676–685 | BO-022 – Akurasi laporan keuangan | SH-003 – Chief Financial Officer |
+| 21 | Financial Analytics | 9.5.17 | BR-686–695 | BO-008 – Pengambilan keputusan berbasis data real-time | SH-003 – Chief Financial Officer |
+| 22 | Chart of Accounts | 9.6.3.1-25 | BR-301–555 | BO-004 – Single Source of Truth data perusahaan | SH-003 – Chief Financial Officer |
+| 23 | Procurement | 9.7 | BR-696–705 | BO-009 – Otomatisasi proses lintas departemen | SH-030 – Procurement Department |
+| 24 | Inventory | 9.8 | BR-706–715 | BO-014 – Konsistensi data antar modul | SH-032 – Inventory Department |
+| 25 | Manufacturing | 9.9 | BR-716–725 | BO-009 – Otomatisasi proses lintas departemen | SH-036 – Manufacturing Department |
+| 26 | Project Management | 9.10 | BR-726–735 | BO-013 – Dashboard operasional real-time | SH-037 – Project Management Office |
+| 27 | Asset Management | 9.11 | BR-736–745 | BO-022 – Akurasi laporan keuangan | SH-038 – Asset Management Department |
+| 28 | Human Resource Management | 9.12 | BR-746–755 | BO-005 – Ekspansi organisasi tanpa perubahan source code | SH-005 – Chief Human Resources Officer |
+| 29 | Dashboard and Executive Reporting | 9.13 | BR-756–765 | BO-008 – Pengambilan keputusan berbasis data real-time | SH-002 – Chief Executive Officer |
+| 30 | Sales Management | 9.14 | BR-766–775 | BO-009 – Otomatisasi proses lintas departemen | SH-034 – Sales Department |
+| 31 | Customer Relationship Management (CRM) | 9.15 | BR-776–785 | BO-032 – Transparansi proses bisnis | SH-035 – Customer Service |
+| 32 | Maintenance Management | 9.16 | BR-786–795 | BO-009 – Otomatisasi proses lintas departemen | SH-038 – Asset Management Department |
+| 33 | Payroll Management | 9.17 | BR-796–805 | BO-005 – Ekspansi organisasi tanpa perubahan source code | SH-005 – Chief Human Resources Officer |
+| 34 | Master Data Management | 9.18 | BR-806–815 | BO-010 – Master Data terpusat dan terstandarisasi | SH-017 – Enterprise Architect |
+| 35 | Localization and Multi Language | 9.19 | BR-816–825 | BO-033 – Pertumbuhan organisasi secara berkelanjutan | SH-006 – Chief Information Officer |
+| 36 | Audit Trail | 9.20 | BR-826–835 | BO-028 – Keamanan, audit trail, integritas data | SH-010 – Internal Audit |
+
+---
+
+## 20.3 Requirement Coverage
+
+Tabel berikut mengelompokkan seluruh Business Objective (BO-001 s.d. BO-034) berdasarkan modul/domain yang menjadi kontributor utama pemenuhannya. Business Objective yang bersifat strategis, arsitektural, atau lintas domain — yang tidak dapat diatribusikan secara eksklusif ke satu modul — ditandai sebagai **Indirect/Cross-cutting**, karena dipenuhi secara kolektif oleh keseluruhan platform ERP.
+
+| Objective ID | Business Objective (Ringkas) | Covered By (Module/Section) |
+| ------------ | ----------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| BO-001 | Platform ERP terintegrasi seluruh entitas | Organization Management (9.1) — *Indirect/Cross-cutting* |
+| BO-002 | Struktur organisasi bertingkat tanpa batas | Organization Management (9.1) |
+| BO-003 | Integrasi seluruh proses bisnis dalam satu platform | Procurement (9.7) — *Indirect/Cross-cutting* |
+| BO-004 | Single Source of Truth data perusahaan | Chart of Accounts (9.6.3), Master Data Management (9.18) |
+| BO-005 | Ekspansi organisasi tanpa perubahan source code | Human Resource Management (9.12), Payroll Management (9.17), Organization Management (9.1) |
+| BO-006 | Arsitektur modular yang mudah dikembangkan | *Indirect/Cross-cutting* (aspek arsitektur teknis, lihat BAB 13 Integration Requirements) |
+| BO-007 | Tata kelola dan transparansi organisasi | Audit Trail (9.20), Security Management (9.4) |
+| BO-008 | Pengambilan keputusan berbasis data real-time | Dashboard and Executive Reporting (9.13), Financial Analytics (9.5.17) |
+| BO-009 | Otomatisasi proses bisnis lintas departemen | Workflow Management (9.3), Procurement (9.7), Manufacturing (9.9), Sales (9.14), Maintenance (9.16) |
+| BO-010 | Master Data terpusat dan terstandarisasi | Master Data Management (9.18) |
+| BO-011 | Workflow dapat dikonfigurasi | Workflow Management (9.3) |
+| BO-012 | Kecepatan proses approval melalui workflow digital | Workflow Management (9.3) |
+| BO-013 | Dashboard operasional real-time | Dashboard and Executive Reporting (9.13), Project Management (9.10) |
+| BO-014 | Konsistensi data antar modul | Inventory (9.8), Master Data Management (9.18) — *Indirect/Cross-cutting* |
+| BO-015 | Organisasi dengan level tidak terbatas | Organization Management (9.1) |
+| BO-016 | Struktur Holding/Sub Holding/Company/dst | Organization Management (9.1) |
+| BO-017 | Perubahan struktur organisasi tanpa ubah aplikasi | Organization Management (9.1) |
+| BO-018 | Scope-Based Access Control | Security Management (9.4) |
+| BO-019 | Shared dan Isolated Master Data | Master Data Management (9.18), Organization Management (9.1) |
+| BO-020 | Konsolidasi laporan keuangan lintas perusahaan | Financial Consolidation (9.5.15) |
+| BO-021 | Multi Currency dan konsolidasi keuangan | Currency Management Master (9.5.3), Financial Organization (9.5.1), Treasury (9.5.8) |
+| BO-022 | Akurasi laporan keuangan melalui integrasi data | General Ledger (9.5.4), Accounts Receivable (9.5.6), Fixed Asset (9.5.7), Cash & Bank (9.5.9), Cost Center (9.5.10), Profit Center (9.5.11), Tax Management (9.5.13), Financial Close (9.5.14), Financial Reporting (9.5.16), Asset Management (9.11) |
+| BO-023 | Mengurangi biaya operasional aplikasi terpisah | *Indirect/Cross-cutting* (nilai konsolidasi platform ERP secara keseluruhan) |
+| BO-024 | Arsitektur modular dan independen | *Indirect/Cross-cutting* (aspek arsitektur teknis) |
+| BO-025 | API sebagai mekanisme integrasi utama | *Indirect/Cross-cutting* (lihat BAB 13 Integration Requirements) |
+| BO-026 | Deployment cloud maupun on-premises | *Indirect/Cross-cutting* (aspek infrastruktur/non-fungsional) |
+| BO-027 | Platform mudah diperluas dengan modul baru | *Indirect/Cross-cutting* (aspek arsitektur teknis) |
+| BO-028 | Keamanan, audit trail, dan integritas data | Security Management (9.4), User Management (9.2), Audit Trail (9.20) |
+| BO-029 | Efisiensi operasional organisasi | *Indirect/Cross-cutting* (kontribusi kolektif seluruh modul) |
+| BO-030 | Mengurangi waktu pemrosesan transaksi bisnis | Procurement (9.7), Sales Management (9.14), Accounts Payable (9.5.5) |
+| BO-031 | Meningkatkan kualitas pengambilan keputusan | Budget Management (9.5.12), Financial Analytics (9.5.17), Dashboard and Executive Reporting (9.13) |
+| BO-032 | Meningkatkan transparansi proses bisnis | Workflow Management (9.3), Customer Relationship Management (9.15), Audit Trail (9.20) |
+| BO-033 | Mendukung pertumbuhan organisasi berkelanjutan | Organization Management (9.1), Localization and Multi Language (9.19) |
+| BO-034 | Meningkatkan kepuasan pengguna sistem terintegrasi | *Indirect/Cross-cutting* (kontribusi kolektif seluruh modul yang berorientasi pengguna) |
+
+Dari 34 Business Objective, **25 objective** memiliki keterkaitan langsung terhadap satu atau lebih modul spesifik, sedangkan **9 objective** (BO-001, BO-003, BO-006, BO-014, BO-023, BO-024, BO-025, BO-026, BO-027, BO-029, BO-034) bersifat strategis/arsitektural dan dipenuhi secara *cross-cutting* oleh keseluruhan platform ERP, bukan oleh satu modul tertentu.
+
+---
+
+## 20.4 Requirement Status
+
+Seluruh Business Requirement pada 36 modul/domain di bawah ini telah **terdokumentasi lengkap (Documented)** pada BAB 9, dengan total 765 Business Requirement ID aktif (di luar rentang *reserved/gap* BR-041–050, BR-071–080, dan BR-251–300 yang sengaja dicadangkan untuk kebutuhan tambahan di masa mendatang).
+
+| No | Module/Domain | Total BR Count | Status | Next Stage |
+| -- | --------------------------------------- | --------------- | ----------- | -------------------------------------------- |
+| 1 | Organization Management | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 2 | User Management | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 3 | Workflow Management | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 4 | Security Management | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 5 | Financial Organization | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 6 | Fiscal Calendar | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 7 | Currency Management Master | 170 | Documented | Functional Requirement (FR) & Technical Design |
+| 8 | General Ledger | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 9 | Accounts Payable | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 10 | Accounts Receivable | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 11 | Fixed Asset | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 12 | Treasury | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 13 | Cash & Bank | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 14 | Cost Center | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 15 | Profit Center | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 16 | Budget Management | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 17 | Tax Management | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 18 | Financial Close | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 19 | Financial Consolidation | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 20 | Financial Reporting | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 21 | Financial Analytics | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 22 | Chart of Accounts | 255 | Documented | Functional Requirement (FR) & Technical Design |
+| 23 | Procurement | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 24 | Inventory | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 25 | Manufacturing | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 26 | Project Management | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 27 | Asset Management | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 28 | Human Resource Management | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 29 | Dashboard and Executive Reporting | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 30 | Sales Management | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 31 | Customer Relationship Management (CRM) | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 32 | Maintenance Management | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 33 | Payroll Management | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 34 | Master Data Management | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 35 | Localization and Multi Language | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| 36 | Audit Trail | 10 | Documented | Functional Requirement (FR) & Technical Design |
+| | **Total** | **765** | | |
+
+Seluruh 765 Business Requirement dinyatakan **100% Documented** dan siap memasuki tahap **Functional Requirement (FR) & Technical Design**, yang akan disusun oleh Solution Architect dan Technical Lead berdasarkan validasi Business Analyst pada dokumen SRS (Software Requirement Specification) berikutnya.
+
+---
+
+## 20.5 Cross-Domain Dependencies
+
+Meskipun setiap Business Requirement dikelompokkan per modul, ERP yang dibangun bersifat **terintegrasi**, sehingga banyak modul memiliki ketergantungan fungsional dan data terhadap modul lain. Kegagalan mengidentifikasi dependency ini dapat menyebabkan gap pada tahap Functional Requirement maupun implementasi. Dependency utama antar domain dirangkum sebagai berikut.
+
+| Dependent Module | Depends On | Sifat Dependency |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Sales Management | Inventory, Customer Relationship Management (CRM), Accounts Receivable | Ketersediaan stok, data pelanggan, dan proses penagihan piutang. |
+| Procurement | Master Data Management, Accounts Payable | Data vendor/item terstandarisasi dan proses pembayaran ke pemasok. |
+| Payroll Management | Human Resource Management, General Ledger | Data kepegawaian sebagai basis kalkulasi payroll dan posting jurnal ke buku besar. |
+| Financial Consolidation | Seluruh sub-domain Financial Management Domain (General Ledger, AP, AR, Fixed Asset, Treasury, Cash & Bank, Cost Center, Profit Center, Budget Management, Tax Management, Financial Close, Currency Management Master) | Agregasi data keuangan dari seluruh sub-domain untuk menghasilkan laporan konsolidasi. |
+| Manufacturing | Inventory, Procurement, Cost Center | Ketersediaan bahan baku, pengadaan komponen, dan pembebanan biaya produksi. |
+| Project Management | Cost Center, Budget Management, Procurement | Pengendalian biaya proyek, alokasi anggaran, dan pengadaan kebutuhan proyek. |
+| Fixed Asset | Chart of Accounts, General Ledger | Klasifikasi akun aset dan posting penyusutan ke buku besar. |
+| Maintenance Management | Asset Management, Inventory | Data aset yang dipelihara dan ketersediaan spare part. |
+| Dashboard and Executive Reporting | Financial Reporting, Financial Analytics, Sales Management, Human Resource Management | Agregasi data lintas modul untuk visualisasi eksekutif secara real-time. |
+| Audit Trail | Seluruh modul (Cross-cutting) | Pencatatan jejak aktivitas (log) dari setiap transaksi di seluruh modul ERP. |
+| Security Management | Organization Management, User Management | Scope-Based Access Control mengacu pada struktur organisasi dan peran pengguna. |
+| Workflow Management | Organization Management, User Management | Perutean approval mengikuti hierarki organisasi dan peran/jabatan pengguna. |
+
+Dependency di atas menjadi masukan penting bagi tim Solution Architect dalam menentukan **urutan implementasi (implementation sequencing)** dan bagi tim QA dalam menyusun **skenario pengujian integrasi (integration test scenario)** pada tahap berikutnya.
+
+---
+
+## 20.6 Traceability Governance
+
+Untuk menjaga validitas dan keandalan Requirement Traceability Matrix sepanjang siklus hidup proyek, ditetapkan tata kelola sebagai berikut.
+
+- Requirement Traceability Matrix **wajib diperbarui** setiap kali terdapat Business Requirement baru, perubahan scope, maupun perubahan Business Objective atau Stakeholder yang berdampak pada requirement yang telah ada.
+- Setiap pembaruan matrix **direview dan disetujui oleh Lead Business Analyst (SH-015)** sebelum dipublikasikan sebagai baseline resmi.
+- Perubahan pada matrix dicatat melalui mekanisme *version control* dokumen dan tercermin pada Revision History BRD.
+- Matrix ini menjadi **acuan wajib (mandatory reference)** dalam penyusunan Software Requirement Specification (SRS), Functional Requirement (FR-xxx), Technical Design, dan Test Case (TC-xxx) pada dokumen-dokumen lanjutan.
+- Setiap Functional Requirement yang disusun pada tahap berikutnya **wajib mencantumkan referensi BR-xxx** agar keterlacakan tetap terjaga dari Business Requirement hingga hasil pengujian (*end-to-end traceability*).
+- Internal Audit (SH-010) berhak melakukan audit periodik terhadap kelengkapan dan konsistensi traceability matrix sebagai bagian dari tata kelola proyek.
+- Steering Committee (SH-009) menggunakan matrix ini sebagai salah satu indikator kesiapan (*readiness indicator*) sebelum proyek berpindah ke fase desain teknis dan pengembangan.
+
+---
+
+## 20.7 Summary
+
+Requirement Traceability Matrix pada bab ini mengonsolidasikan keterlacakan 765 Business Requirement yang tersebar pada 36 modul/domain, mulai dari Organization Management (9.1) hingga Audit Trail (9.20), terhadap Business Objective (BO-001 s.d. BO-034) dan Stakeholder (SH-001 s.d. SH-040) yang telah didefinisikan pada BAB 4 dan BAB 5.
+
+Seluruh Business Requirement dinyatakan **100% terdokumentasi (Documented)** dan memiliki keterkaitan yang jelas terhadap tujuan bisnis serta pemilik yang bertanggung jawab, baik secara langsung maupun secara *cross-cutting* untuk Business Objective yang bersifat strategis dan arsitektural. Dependency lintas domain juga telah diidentifikasi untuk memastikan integrasi antar modul tetap konsisten pada tahap desain dan implementasi.
+
+Dengan tersedianya matrix ini, proyek dinyatakan **siap untuk memasuki tahap Functional Requirement (FR) & Technical Design**, dengan keterlacakan penuh (*full traceability*) yang akan terus dipelihara hingga tahap pengujian dan implementasi sistem secara menyeluruh.

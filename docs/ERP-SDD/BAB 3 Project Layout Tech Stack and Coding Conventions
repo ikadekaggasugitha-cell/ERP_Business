@@ -1,0 +1,94 @@
+# BAB 3. Project Layout, Tech Stack, and Coding Conventions
+
+## 3.1 Overview
+
+BAB ini menstandarkan hal-hal yang seragam untuk **semua** layanan sebelum masuk ke layer spesifik: layout repo & modul, tech stack (ADR-006), konfigurasi, penanganan error/log, serta konvensi uang/waktu/UUID. Standar di sini tidak diulang pada BAB 10.
+
+## 3.2 Repository and Module Layout
+
+Monorepo tunggal; setiap layanan adalah modul Go mandiri di bawah `services/`:
+
+```text
+erp.business/
+├── db/                                # DBDD: migrations/ · seeds/ · ops/ · backup/ · benchmark/ · tests/
+│   ├── migrations/<db>/               # golang-migrate (source of truth skema) — per DB
+│   ├── ops/{roles.sql,apply_grants.sql,partition_maintenance.md}
+│   └── seeds/<db>/seed.sql
+├── docs/                              # BRD · SAD · DBDD (ERP-DB) · API Spec (ERP-API) · SDD (dokumen ini)
+├── services/
+│   ├── gl-service/                    # SVC-007 (referensi)
+│   ├── ap-service/  ar-service/  ...  # SVC-001…019 (mengikuti blueprint)
+│   └── <shared modules bila ada>
+└── .github/workflows/<svc>.yml        # CI per layanan
+```
+
+* **Module path:** `github.com/sinergiinvestasiproperti/erp/services/<name>-service` (mengikuti `gl-service`).
+* **Migrasi tidak diduplikasi** ke dalam layanan — layanan mereferensikan `../../db/migrations/<db>` (lihat `Makefile`), menjaga DBDD sebagai satu-satunya sumber DDL.
+* **`internal/`** dipakai agar paket domain tidak dapat diimpor lintas layanan (batas *bounded context* ADR-001 ditegakkan compiler).
+
+> **SDD-004 — Standard package layout.** `cmd/server` (entrypoint), `internal/platform` (shared), `internal/<db>` (generated), `internal/repository` (domain), dan (BAB 4) `internal/httpapi` (handler). Tidak ada SQL string di luar `db/queries`; tidak ada logika domain di `cmd/`.
+
+## 3.3 Technology Stack and Rationale
+
+Sesuai **ADR-006** (baseline stack) dan keputusan implementasi data layer:
+
+| Lapisan            | Pilihan                                   | Referensi        | Catatan                                             |
+| ------------------ | ----------------------------------------- | ---------------- | --------------------------------------------------- |
+| Bahasa             | **Go 1.22+** (referensi memakai 1.23)     | ADR-006          | Polyglot-per-team ditolak; satu bahasa backend.     |
+| HTTP               | **`net/http` stdlib** (`http.ServeMux`)   | `gl-service`     | Tidak ada framework wajib; middleware ringan sendiri. |
+| Driver DB          | **pgx v5** (`pgxpool`)                     | `go.mod`         | Native PostgreSQL, tanpa `database/sql` overhead.   |
+| Query codegen      | **sqlc** (v1.31.x)                          | `sqlc.yaml`, CI  | Query type-safe dari SQL; nol refleksi runtime.     |
+| Migrasi            | **golang-migrate** (v4.18.x)               | `Makefile`, CI   | Expand–contract (BAB 9.2).                          |
+| RDBMS              | **PostgreSQL 15+** (diverifikasi di 16)    | ADR-006, DBDD    | System of record (CONS-014).                        |
+| Event broker       | **Apache Kafka 3.x (KRaft)**               | ADR-004/006      | RF≥3, `min.insync.replicas=2` (BAB 6).              |
+| Schema registry    | **Apicurio** (Avro/Protobuf, BACKWARD)     | ADR-003          | Validasi skema event di CI (BAB 6.4).               |
+| API Gateway        | **Kong**                                   | ADR-003          | OAuth2/OIDC, rate limit, versioning (BAB 4/7).      |
+| Observability      | **OpenTelemetry + Prometheus/Grafana**     | ADR-010          | Trace/metrik/log terkorelasi `correlation_id` (BAB 8). |
+| Internal RPC       | **gRPC (Protobuf)** bila diperlukan        | ADR-007          | Sinkron antar-layanan; REST hanya untuk eksternal.  |
+
+Ketergantungan Go inti (dari `go.mod` referensi): `github.com/jackc/pgx/v5`, `github.com/google/uuid`. Penambahan dependensi mengikuti prinsip minimalis — utamakan stdlib.
+
+## 3.4 Configuration and Environment
+
+Mengikuti **SAD BAB 11.2 (Configuration over Customization)**: pisahkan config teknis (lingkungan) dari config bisnis (data).
+
+* **Config teknis** dibaca dari **environment variable** (dari K8s `ConfigMap`/`Secret`), bukan file dalam image. Variabel standar minimal:
+
+| Env Var          | Contoh                                                        | Makna                                  |
+| ---------------- | ------------------------------------------------------------- | -------------------------------------- |
+| `DATABASE_URL`   | `postgres://erp_app_rw@host:5432/gl_db?sslmode=require`       | DSN role **app** (non-owner).          |
+| `HTTP_ADDR`      | `:8080`                                                       | Alamat listen HTTP.                    |
+| `KAFKA_BROKERS`  | `kafka-0:9092,kafka-1:9092,kafka-2:9092`                      | Bootstrap broker (BAB 6).              |
+| `APICURIO_URL`   | `http://apicurio:8080/apis/registry/v2`                      | Endpoint schema registry.              |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4317`                    | Ekspor trace/metrik (BAB 8).           |
+| `LOG_LEVEL`      | `info`                                                        | Level log terstruktur.                 |
+
+* **Config bisnis** (posting rule, approval matrix, format regional) **tidak** di env — disimpan sebagai **data per-organisasi di PostgreSQL** sehingga perubahannya tidak perlu redeploy (SAD BAB 11.2).
+* **Secret** (kredensial DB, API key pihak-3) via secret manager (Vault / sealed-secrets), tidak pernah di kode/image (BAB 7.6).
+
+> **SDD-005 — 12-Factor config.** Kode membaca env dengan *default* aman untuk dev (lihat `main.go`: `DATABASE_URL` default lokal), tetapi produksi **wajib** menyuntik lewat `Secret`. `sslmode=require` di non-dev.
+
+## 3.5 Error Handling and Logging Conventions
+
+* **Error dibungkus berlapis** dengan `fmt.Errorf("...: %w", err)` (seperti `platform.New`/`WithOrgScope`) agar rantai `errors.Is/As` utuh.
+* **Batas layer error:** repository mengembalikan error domain/DB apa adanya; **handler** (BAB 4.6) yang memetakan ke kode error API + status HTTP. Repository **tidak** menulis respons HTTP.
+* **Resilience (SAD BAB 11.5):** setiap panggilan sinkron keluar (ke layanan lain via gRPC/REST) memakai *timeout* + *retry* (exponential backoff) + *circuit breaker*; kegagalan konsumen event → `.retry` → `.dlq` (BAB 6).
+* **Logging (SAD BAB 9.4):** JSON terstruktur dengan field standar `correlation_id`, `organization_id`, `service`, `level`. **PII tidak di-log** dalam plaintext (BAB 7.6). Log dialirkan ke storage terpusat (Loki/ELK) via pipeline (BAB 8.3).
+
+## 3.6 Money, Time, and UUID Conventions
+
+Menyatukan konvensi tipe agar konsisten dari DB → kode → API:
+
+| Konsep | Di PostgreSQL (DBDD)       | Di Go (`sqlc`)              | Di API (JSON, API Spec 2.7)                          |
+| ------ | -------------------------- | --------------------------- | ---------------------------------------------------- |
+| Uang   | `numeric(20,4)`            | `pgtype.Numeric`            | objek `{ "amount": "1000.0000", "currency": "IDR" }` (desimal sebagai string) |
+| Waktu  | `timestamptz` (UTC)        | `time.Time`                 | ISO 8601 / RFC 3339 UTC, mis. `2026-08-05T10:00:00Z` |
+| ID     | `uuid`                     | `github.com/google/uuid.UUID` (override `sqlc`) | string UUID pada field `id`             |
+
+> **SDD-006 — Money boundary.** `pgtype.Numeric` **tidak** dipakai langsung untuk aritmetika bisnis; di batas repository/handler dibungkus tipe desimal (mis. `shopspring/decimal` atau wrapper internal) dan diserialkan sebagai **string** pada JSON untuk menjaga presisi (API Spec 2.7). Waktu selalu disimpan & dipertukarkan dalam **UTC**; konversi zona di frontend. `uuid` di-*override* di `sqlc.yaml` ke `google/uuid` (nullable → pointer).
+
+## 3.7 Summary
+
+Semua layanan memakai stack ADR-006 (Go + pgx + sqlc + golang-migrate + PostgreSQL 15+/Kafka/Kong/Apicurio), layout modul seragam di bawah `services/`, config 12-factor via env + config bisnis sebagai data, error berlapis dengan pemetaan di handler, dan konvensi uang/waktu/UUID yang konsisten lintas lapisan. BAB berikut memperinci tiap layer.
+
+---

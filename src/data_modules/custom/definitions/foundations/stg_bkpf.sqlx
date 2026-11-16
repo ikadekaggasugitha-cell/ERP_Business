@@ -1,0 +1,26 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc", "s4"],
+  description: "SAP Accounting Document Header staging view with CDC deduplication"
+}
+
+SELECT
+  MANDT AS mandt,
+  BUKRS AS company_code,
+  BELNR AS document_number,
+  GJAHR AS fiscal_year,
+  BLART AS document_type,
+  BLDAT AS document_date,
+  BUDAT AS posting_date,
+  CPUDT AS entry_date,
+  WAERS AS currency_key,
+  KURSF AS exchange_rate,
+  BSTAT AS document_status,
+  XBLNR AS reference_document_number,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "bkpf")}
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY MANDT, BUKRS, BELNR, GJAHR
+  ORDER BY recordstamp DESC
+) = 1

@@ -1,0 +1,68 @@
+{
+  "manifest_version": 3,
+  "name": "ERP Enterprise Companion",
+  "version": "1.0.0",
+  "minimum_chrome_version": "116",
+  "description": "Asisten resmi ERP Enterprise untuk persetujuan workflow instan di Side Panel, otomasi e-Faktur, dan rekonsiliasi kas/bank.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Buka ERP Enterprise Companion"
+  },
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "alarms",
+    "identity",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://api.erp.example/*",
+    "https://*.erp.example/*",
+    "https://*.pajak.go.id/*",
+    "https://*.klikbca.com/*",
+    "https://*.bni.co.id/*",
+    "https://*.bankmandiri.co.id/*",
+    "http://localhost:8000/*",
+    "http://localhost:3000/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://*.pajak.go.id/*"],
+      "js": ["content/tax-helper.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.klikbca.com/*",
+        "https://*.bni.co.id/*",
+        "https://*.bankmandiri.co.id/*"
+      ],
+      "js": ["content/bank-extractor.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.erp.example/*",
+        "http://localhost:3000/*"
+      ],
+      "js": ["content/hardware-bridge.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
+  "sandbox": {
+    "pages": ["sandbox/sandbox.html"]
+  }
+}

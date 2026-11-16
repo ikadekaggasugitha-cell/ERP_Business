@@ -1,0 +1,182 @@
+# 9.4 Security Management Requirements
+
+## 9.4.1 Overview
+
+Security Management merupakan lapisan pengendalian keamanan menyeluruh (*end-to-end security control*) yang melengkapi User Management dengan mekanisme otentikasi, otorisasi granular, enkripsi data, manajemen sesi, kebijakan keamanan (*security policy*), perlindungan terhadap ancaman (*threat protection*), serta audit keamanan pada seluruh modul Enterprise Resource Planning (ERP).
+
+Jika User Management berfokus pada identitas pengguna (*who you are*), maka Security Management berfokus pada kontrol atas apa yang boleh dilakukan pengguna tersebut (*what you can do*) dan di mana batas kewenangannya berlaku (*where it applies*), melalui kombinasi **Role-Based Access Control (RBAC)** dan **Scope-Based Access Control** yang selaras dengan struktur organisasi (Holding, Sub Holding, Company, Business Unit, Branch, Department, Warehouse, Project Site).
+
+ERP harus dirancang agar seluruh kebijakan keamanan bersifat **configurable**, dapat diaudit sepenuhnya, dan selaras dengan praktik tata kelola keamanan informasi sebagaimana diatur dalam **ISO/IEC 27001**, tanpa memerlukan perubahan source code untuk penyesuaian kebijakan.
+
+Setiap kebutuhan bisnis pada bagian ini menggunakan **Requirement ID (BR-xxx)** agar dapat ditelusuri ke Business Objectives (BO-xxx), Stakeholder (SH-xxx), Functional Requirements (FR-xxx), dan Test Cases (TC-xxx).
+
+---
+
+# 9.4.2 Business Requirement Catalogue
+
+## BR-031 – Role-Based and Scope-Based Access Control
+
+| Attribute              | Description                                                                                                                                                          |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID         | BR-031                                                                                                                                                               |
+| Requirement Name       | Role-Based and Scope-Based Access Control                                                                                                                          |
+| Category               | Security Management                                                                                                                                                |
+| Priority               | Critical                                                                                                                                                            |
+| Business Objective     | BO-018, BO-028                                                                                                                                                      |
+| Stakeholder Owner      | SH-026 (Security Engineer), SH-006 (CIO)                                                                                                                            |
+| Description            | Sistem harus menyediakan mekanisme otorisasi granular yang menggabungkan Role, Permission, dan Organization Scope, sehingga hak akses pengguna dibatasi bukan hanya oleh peran yang dimiliki, tetapi juga oleh cakupan organisasi (Holding, Company, Business Unit, Branch, Department, Warehouse, Project Site) tempat peran tersebut berlaku. |
+| Business Rationale     | Organisasi multi-entitas memerlukan pengendalian akses yang presisi agar pengguna hanya dapat mengakses data dan fungsi sesuai lingkup tanggung jawabnya, tanpa membatasi fleksibilitas struktur organisasi yang dapat berubah sewaktu-waktu.                                                                                                    |
+| Business Value         | Mengurangi risiko akses tidak sah, mendukung segregation of duties, dan memastikan kepatuhan terhadap kebijakan keamanan informasi perusahaan.                                                                                                                                                                                                    |
+| Acceptance Criteria    | (1) Administrator dapat menetapkan satu atau lebih Role kepada pengguna beserta cakupan organisasi spesifik; (2) Sistem menolak permintaan akses ke data/fungsi di luar scope organisasi yang diotorisasi; (3) Perubahan definisi Role/Permission/Scope dilakukan melalui konfigurasi tanpa perubahan source code.                               |
+| Related Modules        | Security Management, Organization Management, User Management                                                                                                                                                                                                                                                                                      |
+| Related Business Rules | BRule-SEC-001, BRule-SEC-002                                                                                                                                                                                                                                                                                                                        |
+
+---
+
+## BR-032 – Multi-Factor Authentication (MFA)
+
+| Attribute           | Description                                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-032                                                                                                                                                |
+| Requirement Name    | Multi-Factor Authentication (MFA)                                                                                                                   |
+| Priority            | Critical                                                                                                                                             |
+| Description         | Sistem harus mendukung otentikasi berlapis (Multi-Factor Authentication) yang dapat diaktifkan secara konfigurasi per organisasi, per role, atau untuk seluruh pengguna, sebagai lapisan tambahan setelah otentikasi kredensial dasar. |
+| Acceptance Criteria | Administrator dapat mewajibkan MFA untuk role atau organisasi tertentu; pengguna tidak dapat login tanpa memenuhi faktor otentikasi tambahan apabila MFA diaktifkan. |
+
+---
+
+## BR-033 – Data Encryption at Rest and in Transit
+
+| Attribute           | Description                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-033                                                                                                                                                 |
+| Requirement Name    | Data Encryption at Rest and in Transit                                                                                                                |
+| Priority            | Critical                                                                                                                                              |
+| Description         | Seluruh data sensitif, termasuk kredensial, data finansial, dan data pribadi, harus dienkripsi baik pada saat disimpan (*at rest*) maupun pada saat ditransmisikan (*in transit*) menggunakan standar enkripsi industri. |
+| Business Value      | Melindungi integritas dan kerahasiaan data perusahaan serta memenuhi persyaratan kepatuhan keamanan informasi.                                                                                                        |
+| Acceptance Criteria | Data pada basis data dan media penyimpanan terenkripsi; seluruh komunikasi API dan antarmuka pengguna menggunakan protokol terenkripsi (TLS).                                                                          |
+
+---
+
+## BR-034 – Session Management and Timeout Policy
+
+| Attribute           | Description                                                                                                                       |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-034                                                                                                                                |
+| Requirement Name    | Session Management and Timeout Policy                                                                                               |
+| Priority            | High                                                                                                                                 |
+| Description         | Sistem harus mengelola sesi pengguna secara aman, termasuk batas waktu sesi tidak aktif (*idle timeout*), pembatasan sesi ganda (*concurrent session*), dan kemampuan mengakhiri sesi secara paksa oleh administrator. |
+| Acceptance Criteria | Sesi otomatis berakhir setelah periode tidak aktif sesuai konfigurasi; administrator dapat mengakhiri sesi pengguna tertentu secara real-time.                                                                          |
+
+---
+
+## BR-035 – Configurable Password and Credential Policy
+
+| Attribute           | Description                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-035                                                                                                                           |
+| Requirement Name    | Configurable Password and Credential Policy                                                                                    |
+| Priority            | High                                                                                                                            |
+| Description         | Sistem harus memungkinkan administrator mendefinisikan kebijakan kredensial, termasuk kompleksitas kata sandi, masa berlaku, riwayat penggunaan ulang, dan penguncian akun (*account lockout*) setelah percobaan gagal berulang. |
+| Acceptance Criteria | Kebijakan kata sandi dapat dikonfigurasi per organisasi tanpa perubahan aplikasi; akun terkunci otomatis sesuai ambang batas percobaan gagal yang ditetapkan.                                                              |
+
+---
+
+## BR-036 – Comprehensive Security Audit Trail
+
+| Attribute           | Description                                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-036                                                                                                                                       |
+| Requirement Name    | Comprehensive Security Audit Trail                                                                                                          |
+| Priority            | Critical                                                                                                                                    |
+| Description         | Sistem harus mencatat seluruh aktivitas terkait keamanan, termasuk login, logout, percobaan akses ditolak, perubahan hak akses, dan perubahan konfigurasi keamanan, secara tidak dapat diubah (*immutable*) dan dapat ditelusuri. |
+| Business Value      | Mendukung investigasi insiden keamanan, kepatuhan audit internal/eksternal, dan akuntabilitas pengguna.                                                                                                                     |
+| Acceptance Criteria | Setiap aktivitas keamanan tercatat dengan stempel waktu, identitas pengguna, dan detail aksi; log tidak dapat dihapus atau diubah oleh pengguna biasa.                                                                       |
+
+---
+
+## BR-037 – Anomaly Detection and Access Monitoring
+
+| Attribute           | Description                                                                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-037                                                                                                                                 |
+| Requirement Name    | Anomaly Detection and Access Monitoring                                                                                              |
+| Priority            | High                                                                                                                                  |
+| Description         | Sistem harus mampu mendeteksi pola akses yang tidak wajar, seperti login dari lokasi/perangkat baru, percobaan akses berulang di luar scope, atau aktivitas di luar jam kerja normal, serta memberikan peringatan kepada administrator keamanan. |
+| Acceptance Criteria | Sistem menghasilkan notifikasi/alert otomatis atas pola akses anomali sesuai ambang batas yang dikonfigurasi.                                                                                                                       |
+
+---
+
+## BR-038 – Threat Protection Against Common Attack Vectors
+
+| Attribute           | Description                                                                                                                            |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-038                                                                                                                                   |
+| Requirement Name    | Threat Protection Against Common Attack Vectors                                                                                        |
+| Priority            | Critical                                                                                                                                |
+| Description         | Sistem harus memiliki perlindungan terhadap ancaman keamanan umum, termasuk brute-force login, SQL injection, cross-site scripting (XSS), cross-site request forgery (CSRF), dan rate-limiting terhadap API. |
+| Acceptance Criteria | Sistem menolak/menahan pola serangan umum sesuai pengujian keamanan; mekanisme rate-limiting aktif pada endpoint autentikasi dan API publik.                                                                    |
+
+---
+
+## BR-039 – Data Masking and Sensitive Field Protection
+
+| Attribute           | Description                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-039                                                                                                                              |
+| Requirement Name    | Data Masking and Sensitive Field Protection                                                                                       |
+| Priority            | High                                                                                                                               |
+| Description         | Sistem harus mendukung penyamaran (*masking*) data sensitif seperti nomor rekening, gaji, dan data pribadi karyawan berdasarkan role dan scope pengguna yang mengakses data tersebut. |
+| Acceptance Criteria | Field sensitif ditampilkan dalam bentuk tersamar bagi pengguna tanpa hak akses penuh; administrator dapat menentukan field yang wajib dimasking per role.                              |
+
+---
+
+## BR-040 – ISO/IEC 27001 Compliance and Security Governance
+
+| Attribute           | Description                                                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-040                                                                                                                                   |
+| Requirement Name    | ISO/IEC 27001 Compliance and Security Governance                                                                                        |
+| Priority            | Critical                                                                                                                                |
+| Description         | Sistem harus mendukung penerapan kontrol keamanan informasi yang selaras dengan kerangka kerja ISO/IEC 27001, termasuk klasifikasi data, manajemen risiko, kebijakan retensi, serta pelaporan kepatuhan keamanan secara berkala. |
+| Business Value      | Meningkatkan kepercayaan pemangku kepentingan dan mendukung sertifikasi/kepatuhan terhadap standar keamanan informasi internasional.                                                                                 |
+| Acceptance Criteria | Sistem menyediakan laporan kepatuhan keamanan yang dapat diaudit; kebijakan retensi dan klasifikasi data dapat dikonfigurasi sesuai kebutuhan organisasi.                                                            |
+
+---
+
+# 9.4.3 Security Business Rules Reference
+
+| Business Rule ID | Description                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| BRule-SEC-001     | Hak akses pengguna ditentukan oleh kombinasi Role, Permission, dan Organization Scope; scope yang lebih rendah tidak dapat melebihi hak akses scope induknya.                     |
+| BRule-SEC-002     | Setiap permintaan akses ke data/fungsi harus melewati validasi otorisasi berbasis scope sebelum diproses oleh sistem.             |
+| BRule-SEC-003     | Kata sandi harus memenuhi kebijakan kompleksitas minimum dan tidak dapat menggunakan kembali kata sandi dalam riwayat yang ditentukan. |
+| BRule-SEC-004     | Sesi pengguna yang tidak aktif melebihi batas waktu yang ditentukan harus diakhiri secara otomatis oleh sistem.                    |
+| BRule-SEC-005     | Seluruh aktivitas terkait keamanan wajib dicatat dalam log audit yang bersifat immutable dan tidak dapat dihapus oleh pengguna biasa. |
+| BRule-SEC-006     | Data sensitif wajib dienkripsi pada saat disimpan maupun pada saat ditransmisikan menggunakan standar enkripsi yang berlaku.       |
+| BRule-SEC-007     | Percobaan login gagal yang melebihi ambang batas yang ditentukan akan mengakibatkan penguncian akun sementara secara otomatis.     |
+
+---
+
+# 9.4.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder            | Future Process              |
+| -------------- | ------------------- | ----------------------- | ---------------------------- |
+| BR-031          | BO-018, BO-028      | SH-026, SH-006          | Access Control Management    |
+| BR-032          | BO-028              | SH-026                  | Authentication Management     |
+| BR-033          | BO-028              | SH-026                  | Data Protection               |
+| BR-034          | BO-028              | SH-026                  | Session Management            |
+| BR-035          | BO-028              | SH-026, SH-011          | Credential Policy Management  |
+| BR-036          | BO-028              | SH-010, SH-011          | Security Audit Management     |
+| BR-037          | BO-028              | SH-026                  | Access Monitoring              |
+| BR-038          | BO-028              | SH-026                  | Threat Protection              |
+| BR-039          | BO-018, BO-028      | SH-026, SH-011          | Data Privacy Management        |
+| BR-040          | BO-028              | SH-011, SH-006          | Security Compliance Governance |
+
+---
+
+# 9.4.5 Summary
+
+Modul **Security Management** berperan sebagai lapisan pengendalian yang melengkapi User Management dengan otorisasi granular berbasis Role, Permission, dan Organization Scope, sekaligus menyediakan perlindungan menyeluruh terhadap ancaman keamanan, enkripsi data, manajemen sesi, dan audit keamanan yang selaras dengan ISO/IEC 27001.
+
+Seluruh requirement pada bagian ini bersifat **configuration-driven**, sehingga kebijakan keamanan dapat disesuaikan dengan kebutuhan masing-masing organisasi tanpa perubahan source code. Requirement ini akan diturunkan lebih lanjut menjadi Functional Requirements, desain arsitektur keamanan, spesifikasi API, dan skenario pengujian keamanan pada dokumen lanjutan.

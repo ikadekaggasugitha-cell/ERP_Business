@@ -1,0 +1,167 @@
+# 9.20 Audit Trail Requirements
+
+## 9.20.1 Overview
+
+Audit Trail menyediakan layanan pencatatan aktivitas terpusat (*centralized logging service*) yang merekam seluruh aksi pengguna, perubahan data, dan peristiwa penting pada seluruh modul Enterprise Resource Planning (ERP).
+
+Sebagaimana ditetapkan pada Analisis Kebutuhan Bisnis ERP, setiap pencatatan Audit Trail harus memuat informasi pengguna, organisasi, waktu, jenis aksi, nilai sebelum dan sesudah perubahan (*before/after value*), serta alasan perubahan (*reason/remarks*) apabila diperlukan.
+
+Layanan ini menjadi fondasi bagi kebutuhan investigasi, kepatuhan regulasi (*compliance*), dan forensik data di seluruh ERP, serta digunakan bersama oleh seluruh modul termasuk Organization, User, Security, Workflow, dan Financial Management Domain.
+
+---
+
+# 9.20.2 Business Requirement Catalogue
+
+## BR-826 – Centralized Audit Logging Service
+
+| Attribute           | Description                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-826                                                                                                                 |
+| Requirement Name    | Centralized Audit Logging Service                                                                                       |
+| Category            | Audit Trail                                                                                                            |
+| Priority            | Critical                                                                                                               |
+| Business Objective  | BO-028                                                                                                                 |
+| Stakeholder Owner   | SH-010 (Internal Audit)                                                                                                |
+| Description         | Sistem harus menyediakan layanan audit trail terpusat yang dapat digunakan oleh seluruh modul ERP untuk mencatat aktivitas pengguna dan perubahan data. |
+| Business Rationale  | Pencatatan audit yang terfragmentasi antar modul menyulitkan investigasi dan pemenuhan kepatuhan regulasi.             |
+| Business Value      | Menyediakan jejak audit yang konsisten dan dapat diandalkan di seluruh sistem.                                         |
+| Acceptance Criteria | Setiap modul ERP mengirimkan catatan aktivitas ke layanan Audit Trail terpusat menggunakan format standar.             |
+
+---
+
+## BR-827 – Before/After Value Capture
+
+| Attribute        | Description                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-827                                                                                          |
+| Requirement Name | Before/After Value Capture                                                                       |
+| Priority         | Critical                                                                                        |
+| Description      | Sistem harus mencatat nilai data sebelum dan sesudah perubahan (*before/after value*) untuk setiap aksi ubah (update) pada data kritikal. |
+
+---
+
+## BR-828 – User and Organization Context Logging
+
+| Attribute        | Description                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-828                                                                                        |
+| Requirement Name | User and Organization Context Logging                                                          |
+| Priority         | Critical                                                                                      |
+| Description      | Setiap catatan audit harus menyertakan identitas pengguna, organisasi terkait, serta waktu terjadinya aktivitas. |
+
+---
+
+## BR-829 – Change Reason and Remarks Capture
+
+| Attribute        | Description                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-829                                                                                          |
+| Requirement Name | Change Reason and Remarks Capture                                                                  |
+| Priority         | High                                                                                             |
+| Description      | Untuk perubahan pada data kritikal tertentu, sistem harus mewajibkan pengguna mengisi alasan perubahan (reason/remarks). |
+
+---
+
+## BR-830 – Audit Log Retention Policy
+
+| Attribute        | Description                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-830                                                                                        |
+| Requirement Name | Audit Log Retention Policy                                                                      |
+| Priority         | High                                                                                          |
+| Description      | Sistem harus mendukung kebijakan retensi log audit yang dapat dikonfigurasi sesuai kebutuhan regulasi dan kebijakan organisasi. |
+
+---
+
+## BR-831 – Audit Log Search and Investigation Tool
+
+| Attribute        | Description                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-831                                                                                            |
+| Requirement Name | Audit Log Search and Investigation Tool                                                             |
+| Priority         | High                                                                                              |
+| Description      | Sistem harus menyediakan alat pencarian dan penelusuran log audit berdasarkan pengguna, organisasi, modul, periode, atau jenis aksi. |
+
+---
+
+## BR-832 – Audit Log Immutability
+
+| Attribute           | Description                                                                                    |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-832                                                                                        |
+| Requirement Name    | Audit Log Immutability                                                                          |
+| Priority            | Critical                                                                                       |
+| Description         | Catatan audit trail yang telah tersimpan tidak boleh dapat diubah atau dihapus oleh pengguna manapun, termasuk administrator sistem. |
+| Acceptance Criteria | Tidak ada mekanisme dalam sistem yang memungkinkan modifikasi langsung terhadap catatan audit yang sudah tersimpan. |
+
+---
+
+## BR-833 – Login/Logout and Access Audit
+
+| Attribute        | Description                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-833                                                                                        |
+| Requirement Name | Login/Logout and Access Audit                                                                  |
+| Priority         | Critical                                                                                      |
+| Description      | Sistem harus mencatat seluruh aktivitas login, logout, dan percobaan akses yang gagal beserta informasi perangkat dan lokasi jika tersedia. |
+
+---
+
+## BR-834 – Cross-Module Audit Trail Consistency
+
+| Attribute        | Description                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-834                                                                                        |
+| Requirement Name | Cross-Module Audit Trail Consistency                                                            |
+| Priority         | High                                                                                          |
+| Description      | Format dan struktur pencatatan audit trail harus konsisten di seluruh modul ERP agar dapat dikorelasikan lintas modul. |
+
+---
+
+## BR-835 – Audit Trail Reporting and Compliance Export
+
+| Attribute        | Description                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-835                                                                                       |
+| Requirement Name | Audit Trail Reporting and Compliance Export                                                    |
+| Priority         | Medium                                                                                        |
+| Description      | Sistem harus mendukung ekspor laporan audit trail dalam format yang sesuai untuk kebutuhan audit internal, eksternal, maupun regulasi. |
+
+---
+
+# 9.20.3 Audit Trail Business Rules Reference
+
+| Business Rule ID | Description                                                                                             |
+| ----------------- | --------------------------------------------------------------------------------------------------------- |
+| BRule-AUD-001     | Catatan audit trail bersifat immutable dan tidak dapat diubah atau dihapus setelah tersimpan.              |
+| BRule-AUD-002     | Setiap catatan audit wajib memuat pengguna, organisasi, waktu, jenis aksi, dan modul asal.                  |
+| BRule-AUD-003     | Perubahan pada data kritikal wajib menyertakan nilai before/after dan alasan perubahan bila dikonfigurasi. |
+| BRule-AUD-004     | Log audit hanya dapat dihapus melalui kebijakan retensi resmi setelah periode retensi terlampaui.           |
+| BRule-AUD-005     | Akses terhadap fitur pencarian dan investigasi audit trail dibatasi berdasarkan Role dan Organization Scope. |
+| BRule-AUD-006     | Kegagalan pencatatan audit trail pada suatu transaksi harus terdeteksi dan dieskalasi, bukan diabaikan.     |
+| BRule-AUD-007     | Format pencatatan audit trail harus konsisten dan terstandarisasi di seluruh modul ERP.                     |
+
+---
+
+# 9.20.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                    |
+| -------------- | ------------------ | ----------- | ------------------------------------ |
+| BR-826         | BO-028              | SH-010      | Audit Logging Infrastructure         |
+| BR-827         | BO-028              | SH-010      | Change Tracking                       |
+| BR-828         | BO-028              | SH-010      | Audit Context Logging                 |
+| BR-829         | BO-028              | SH-011      | Change Justification                   |
+| BR-830         | BO-007              | SH-011      | Retention Governance                   |
+| BR-831         | BO-028              | SH-010      | Audit Investigation                    |
+| BR-832         | BO-028              | SH-010      | Data Integrity Assurance               |
+| BR-833         | BO-028              | SH-026      | Access & Security Audit                |
+| BR-834         | BO-014              | SH-010      | Cross-Module Consistency               |
+| BR-835         | BO-007              | SH-011      | Compliance Reporting                   |
+
+---
+
+# 9.20.5 Summary
+
+Modul **Audit Trail** menyediakan layanan pencatatan aktivitas terpusat, konsisten, dan tidak dapat diubah (*immutable*) yang digunakan bersama oleh seluruh modul ERP, menjadi fondasi bagi kebutuhan investigasi, kepatuhan regulasi, dan integritas data pada keseluruhan platform.
+
+Seluruh requirement pada bagian ini akan diturunkan lebih lanjut menjadi Functional Requirements, desain basis data, spesifikasi API, dan skenario pengujian pada dokumen lanjutan.

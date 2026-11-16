@@ -1,0 +1,36 @@
+config {
+  type: "assertion",
+  tags: ["assert", "currency", "fx", "cortex_v7"],
+  description: "Asserts positive and non-null FX conversion rates across tri-currency fact tables"
+}
+
+SELECT
+  'fact_gl_transaction' AS fact_table,
+  gl_journal_id AS record_id,
+  exchange_rate_fc,
+  exchange_rate_pc
+FROM ${ref("fact_gl_transaction")}
+WHERE exchange_rate_fc IS NULL OR exchange_rate_fc <= 0
+   OR exchange_rate_pc IS NULL OR exchange_rate_pc <= 0
+
+UNION ALL
+
+SELECT
+  'fact_sales_order' AS fact_table,
+  order_id AS record_id,
+  exchange_rate_fc,
+  exchange_rate_pc
+FROM ${ref("fact_sales_order")}
+WHERE exchange_rate_fc IS NULL OR exchange_rate_fc <= 0
+   OR exchange_rate_pc IS NULL OR exchange_rate_pc <= 0
+
+UNION ALL
+
+SELECT
+  'fact_inventory_snapshot' AS fact_table,
+  CONCAT(material_id, '|', warehouse_id) AS record_id,
+  exchange_rate_fc,
+  exchange_rate_pc
+FROM ${ref("fact_inventory_snapshot")}
+WHERE exchange_rate_fc IS NULL OR exchange_rate_fc <= 0
+   OR exchange_rate_pc IS NULL OR exchange_rate_pc <= 0

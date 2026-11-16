@@ -1,0 +1,359 @@
+# Software Architecture Document (SAD) — Table of Contents
+
+Dokumen ini merupakan **Software Architecture Document (SAD)** untuk platform Enterprise Resource Planning (ERP) multi-organisasi, disusun sebagai dokumen turunan teknis dari **Business Requirement Document (BRD)**. SAD mendeskripsikan arsitektur aplikasi, integrasi antarlayanan, keamanan, deployment, observability, serta prinsip desain sistem.
+
+> **Status penyusunan:** BAB 1 s.d. BAB 13 telah disusun (Fase 1 & Fase 2). Detail fisik basis data (ERD, Data Dictionary, indeks, partisi) didokumentasikan terpisah pada artefak **Database Design**.
+
+---
+
+## Front Matter
+
+## Cover
+
+## Revision History
+
+## Table of Contents
+
+## Glossary, Acronyms, and Abbreviations
+
+---
+
+# BAB 1. Introduction
+
+### 1.1 Purpose of Document
+
+### 1.2 Scope of the SAD
+
+### 1.3 Relationship to BRD and Other Artifacts
+
+### 1.4 Intended Audience
+
+### 1.5 Definitions, Acronyms, and Abbreviations
+
+### 1.6 References
+
+### 1.7 Document Conventions and Identifier Schemes
+
+### 1.8 How to Read This Document
+
+---
+
+# BAB 2. Architectural Drivers
+
+### 2.1 Overview
+
+### 2.2 Architecturally Significant Requirements (ASR)
+
+### 2.3 Business Drivers
+
+### 2.4 Constraints and Assumptions
+
+### 2.5 Architectural Principles
+
+### 2.6 Quality Attribute Priorities (Utility Tree)
+
+### 2.7 Driver-to-Decision Traceability
+
+### 2.8 Summary
+
+---
+
+# BAB 3. Architecture Decisions
+
+### 3.1 Overview and ADR Process
+
+### 3.2 ADR Catalog
+
+#### ADR-001 Domain-Driven Microservices + Database-per-Service
+
+#### ADR-002 Hybrid Multi-Tenancy
+
+#### ADR-003 Kong API Gateway and Apicurio Registry
+
+#### ADR-004 Self-Managed Infrastructure
+
+#### ADR-005 Selective Exactly-Once Delivery
+
+#### ADR-006 Standard Technology Stack Baseline
+
+#### ADR-007 API Style — REST (External) + gRPC (Internal)
+
+#### ADR-008 Transactional Outbox with CDC
+
+#### ADR-009 CQRS Read Model for Reporting
+
+#### ADR-010 Observability Stack (OpenTelemetry)
+
+#### ADR-011 Decoupled Single-Page Application (SPA) untuk Enterprise Backoffice
+
+#### ADR-012 Enterprise Chrome Extension Companion (Manifest V3)
+
+#### ADR-013 Cortex Framework Data Products & SAP DDIC Coexistence
+
+#### ADR-014 Tri-Currency & Multi-Country Real-Time Accounting Engine
+
+#### ADR-015 Composite Partitioning, Read Replicas & Connection Pooling untuk Jutaan Transaksi
+
+### 3.3 Decision Log
+
+### 3.4 Decision Traceability (ADR ↔ Driver ↔ NFR)
+
+### 3.5 Summary
+
+---
+
+# BAB 4. Logical and Component View
+
+### 4.1 Overview
+
+### 4.2 System Context (C4 Level 1)
+
+### 4.3 Container View (C4 Level 2)
+
+### 4.4 Component View (C4 Level 3)
+
+### 4.5 Service Catalog
+
+### 4.6 Bounded Contexts and Domain Mapping
+
+### 4.7 Cross-Cutting Capabilities
+
+### 4.8 Summary
+
+---
+
+# BAB 5. Integration and Event Architecture
+
+### 5.1 Overview
+
+### 5.2 Synchronous Integration (REST via Kong, gRPC Internal)
+
+### 5.3 Asynchronous Integration (Apache Kafka)
+
+### 5.4 Event Catalog and Schema Governance (Apicurio)
+
+### 5.5 Delivery Semantics — Selective Exactly-Once
+
+### 5.6 Transactional Outbox and Change Data Capture
+
+### 5.7 Saga and Distributed Transaction Patterns
+
+### 5.8 External System Integration
+
+### 5.9 API Gateway Architecture (Kong)
+
+### 5.10 Integration Traceability
+
+### 5.11 Summary
+
+---
+
+# BAB 6. Data Architecture
+
+### 6.1 Overview
+
+### 6.2 Data Ownership and Database-per-Service
+
+### 6.3 Multi-Tenancy Data Strategy
+
+### 6.4 Row-Level Security and Scope-Based Data Access
+
+### 6.5 Data Partitioning and Scalability
+
+### 6.6 Data Consistency Model
+
+### 6.7 Master Data and Reference Data Management
+
+### 6.8 Data Lifecycle, Retention, and Archiving
+
+### 6.9 High Availability and Disaster Recovery (Data)
+
+### 6.10 Data Migration Architecture
+
+### 6.11 Data Traceability and Link to Database Design
+
+### 6.12 Summary
+
+---
+
+# BAB 7. Security Architecture
+
+### 7.1 Overview
+
+### 7.2 Security Principles and Threat Model
+
+### 7.3 Authentication
+
+### 7.4 Authorization
+
+### 7.5 Data Protection and Encryption
+
+### 7.6 API and Gateway Security
+
+### 7.7 Audit Logging and Security Monitoring
+
+### 7.8 Compliance Controls
+
+### 7.9 Secrets and Certificate Management
+
+### 7.10 Security in the SDLC
+
+### 7.11 Security Traceability
+
+### 7.12 Summary
+
+---
+
+# BAB 8. Deployment and Infrastructure Architecture
+
+### 8.1 Overview
+
+### 8.2 Deployment Topology
+
+### 8.3 Containerization and Orchestration
+
+### 8.4 Environment Strategy
+
+### 8.5 Network Architecture
+
+### 8.6 Scalability and Resource Management
+
+### 8.7 High Availability and Failover
+
+### 8.8 Disaster Recovery Topology
+
+### 8.9 Capacity Planning
+
+### 8.10 Deployment Traceability
+
+### 8.11 Summary
+
+---
+
+# BAB 9. Observability and Operations
+
+### 9.1 Overview
+
+### 9.2 Observability Architecture — Three Pillars
+
+### 9.3 Metrics
+
+### 9.4 Logging
+
+### 9.5 Distributed Tracing
+
+### 9.6 Alerting and Incident Response
+
+### 9.7 SLO/SLA Management
+
+### 9.8 Health Checks and Readiness
+
+### 9.9 Operational Runbooks
+
+### 9.10 Observability Traceability
+
+### 9.11 Summary
+
+---
+
+# BAB 10. CI/CD and Release Management
+
+### 10.1 Overview
+
+### 10.2 Pipeline Stages
+
+### 10.3 GitOps and Per-Service Pipelines
+
+### 10.4 Database Migration (Expand–Contract)
+
+### 10.5 Release Strategies
+
+### 10.6 Schema and Contract Governance in CI
+
+### 10.7 Security in the Pipeline
+
+### 10.8 Rollback and Recovery
+
+### 10.9 Artifact and Environment Promotion
+
+### 10.10 CI/CD Traceability
+
+### 10.11 Summary
+
+---
+
+# BAB 11. Cross-Cutting Concerns
+
+### 11.1 Overview
+
+### 11.2 Configuration Management
+
+### 11.3 Organization Tree and Scope Context Propagation
+
+### 11.4 Idempotency and Deduplication
+
+### 11.5 Error Handling and Resilience
+
+### 11.6 Correlation and Traceability
+
+### 11.7 Internationalization and Localization
+
+### 11.8 Caching Strategy
+
+### 11.9 Time, Currency, and Precision Handling
+
+### 11.10 Feature Flags and Progressive Delivery
+
+### 11.11 Cross-Cutting Traceability
+
+### 11.12 Summary
+
+---
+
+# BAB 12. Quality Attribute Scenarios
+
+### 12.1 Overview
+
+### 12.2 Performance
+
+### 12.3 Availability
+
+### 12.4 Scalability
+
+### 12.5 Security
+
+### 12.6 Reliability and Consistency
+
+### 12.7 Recoverability
+
+### 12.8 Modifiability
+
+### 12.9 Traceability (QAS ↔ NFR ↔ ADR/ARC)
+
+### 12.10 Summary
+
+---
+
+# BAB 13. Architecture Risks and Appendix
+
+### 13.1 Overview
+
+### 13.2 Architecture Risks
+
+### 13.3 Technical Debt Register
+
+### 13.4 Risk Mitigation and Monitoring
+
+### 13.5 Appendix A — Consolidated Traceability Matrix
+
+### 13.6 Appendix B — Technology Version Baseline
+
+### 13.7 Appendix C — Glossary Reference
+
+### 13.8 Open Items and Future Work
+
+### 13.9 Revision History
+
+### 13.10 Document Closing Statement
+
+---

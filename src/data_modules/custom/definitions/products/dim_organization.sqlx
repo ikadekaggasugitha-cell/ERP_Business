@@ -1,0 +1,77 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["dimension", "cortex_v7", "organization"],
+  clusterBy: ["org_type", "country_code"],
+  description: "Conformed organization dimension across NEW_ERP and SAP entities"
+}
+
+WITH new_erp_orgs AS (
+  SELECT
+    CAST(organization_id AS STRING) AS org_id,
+    CAST(org_name AS STRING) AS org_name,
+    UPPER(CAST(org_type AS STRING)) AS org_type,
+    CAST(sap_company_code AS STRING) AS sap_company_code,
+    CAST(plant_code AS STRING) AS plant_code,
+    UPPER(TRIM(CAST(country_code AS STRING))) AS country_code,
+    UPPER(TRIM(CAST(functional_currency AS STRING))) AS functional_currency,
+    CAST(parent_org_id AS STRING) AS parent_org_id,
+    COALESCE(is_active, TRUE) AS is_active,
+    CAST(updated_at AS TIMESTAMP) AS recordstamp
+  FROM ${ref("erp_staging", "stg_organizations_cdc")}
+),
+
+sap_company_codes AS (
+  SELECT
+    CONCAT('SAP_CC_', c.company_code) AS org_id,
+    c.company_name AS org_name,
+    'COMPANY_CODE' AS org_type,
+    c.company_code AS sap_company_code,
+    CAST(NULL AS STRING) AS plant_code,
+    UPPER(TRIM(c.country_code)) AS country_code,
+    UPPER(TRIM(c.currency_key)) AS functional_currency,
+    CAST(NULL AS STRING) AS parent_org_id,
+    TRUE AS is_active,
+    CAST(c.recordstamp AS TIMESTAMP) AS recordstamp
+  FROM ${ref("stg_t001")} c
+),
+
+sap_plants AS (
+  SELECT
+    CONCAT('SAP_PLANT_', m.plant) AS org_id,
+    CONCAT('Plant ', m.plant) AS org_name,
+    'PLANT' AS org_type,
+    c.company_code AS sap_company_code,
+    m.plant AS plant_code,
+    c.country_code AS country_code,
+    c.currency_key AS functional_currency,
+    CONCAT('SAP_CC_', c.company_code) AS parent_org_id,
+    TRUE AS is_active,
+    CAST(m.recordstamp AS TIMESTAMP) AS recordstamp
+  FROM ${ref("stg_marc")} m
+  LEFT JOIN ${ref("stg_t001")} c
+    ON m.mandt = c.mandt
+    AND m.plant = c.company_code
+  GROUP BY m.plant, m.recordstamp, c.company_code, c.country_code, c.currency_key
+),
+
+combined AS (
+  SELECT * FROM new_erp_orgs
+  UNION ALL
+  SELECT * FROM sap_company_codes
+  UNION ALL
+  SELECT * FROM sap_plants
+)
+
+SELECT
+  org_id,
+  org_name,
+  org_type,
+  sap_company_code,
+  plant_code,
+  country_code,
+  functional_currency,
+  parent_org_id,
+  is_active
+FROM combined
+QUALIFY ROW_NUMBER() OVER (PARTITION BY org_id ORDER BY recordstamp DESC) = 1

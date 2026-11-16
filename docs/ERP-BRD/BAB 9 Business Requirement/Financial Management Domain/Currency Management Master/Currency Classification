@@ -1,0 +1,206 @@
+# 9.5.3.2 Currency Classification Requirements
+
+---
+
+# 9.5.3.2.1 Overview
+
+Currency Classification merupakan komponen konfigurasi bisnis yang mendefinisikan peran (*business role*) suatu mata uang dalam Enterprise Resource Planning (ERP).
+
+Berbeda dengan Currency Master yang hanya mendefinisikan identitas mata uang, Currency Classification menentukan bagaimana suatu mata uang digunakan dalam konteks organisasi, ledger, transaksi, pelaporan, konsolidasi, treasury, maupun kebijakan keuangan lainnya.
+
+Satu mata uang dapat memiliki lebih dari satu klasifikasi secara bersamaan tergantung pada Financial Organization, Ledger, atau Business Policy.
+
+Currency Classification menjadi dasar pengambilan keputusan pada proses konversi mata uang, posting jurnal, pelaporan keuangan, serta konsolidasi grup perusahaan.
+
+---
+
+# 9.5.3.2.2 Business Capability
+
+Currency Classification menyediakan kapabilitas berikut:
+
+* Pengelolaan klasifikasi penggunaan mata uang.
+* Penetapan Functional Currency.
+* Penetapan Transaction Currency.
+* Penetapan Reporting Currency.
+* Penetapan Presentation Currency.
+* Penetapan Consolidation Currency.
+* Penetapan Settlement Currency.
+* Penetapan Treasury Currency.
+* Assignment ke Financial Organization dan Ledger.
+* Versioning dan audit konfigurasi.
+
+---
+
+# 9.5.3.2.3 Business Requirement Catalogue
+
+## BR-091 – Currency Classification Master
+
+| Attribute           | Description                                                                                              |
+| ------------------- | -------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-091                                                                                                   |
+| Requirement Name    | Currency Classification Master                                                                           |
+| Category            | Currency Classification                                                                                  |
+| Priority            | Critical                                                                                                 |
+| Business Objective  | BO-009                                                                                                   |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                         |
+| Description         | Sistem harus menyediakan master klasifikasi mata uang yang dapat dikonfigurasi tanpa perubahan aplikasi. |
+| Business Value      | Menjamin fleksibilitas penggunaan mata uang pada seluruh domain ERP.                                     |
+| Acceptance Criteria | Administrator dapat menambah, mengubah, mengaktifkan, dan menonaktifkan jenis klasifikasi mata uang.     |
+
+---
+
+## BR-092 – Multiple Currency Classification
+
+| Attribute        | Description                                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-092                                                                                                                  |
+| Requirement Name | Multiple Currency Classification                                                                                        |
+| Priority         | Critical                                                                                                                |
+| Description      | Satu mata uang harus dapat memiliki lebih dari satu klasifikasi secara bersamaan sesuai konteks organisasi atau ledger. |
+
+---
+
+## BR-093 – Functional Currency Assignment
+
+| Attribute        | Description                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-093                                                                                         |
+| Requirement Name | Functional Currency Assignment                                                                 |
+| Priority         | Critical                                                                                       |
+| Description      | Sistem harus mendukung penetapan satu Functional Currency untuk setiap Financial Organization. |
+
+---
+
+## BR-094 – Reporting Currency Assignment
+
+| Attribute        | Description                                                                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-094                                                                                                                              |
+| Requirement Name | Reporting Currency Assignment                                                                                                       |
+| Priority         | Critical                                                                                                                            |
+| Description      | Financial Organization harus dapat memiliki satu atau lebih Reporting Currency untuk kebutuhan pelaporan manajemen maupun regulasi. |
+
+---
+
+## BR-095 – Transaction Currency Classification
+
+| Attribute        | Description                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-095                                                                                                                                      |
+| Requirement Name | Transaction Currency Classification                                                                                                         |
+| Priority         | Critical                                                                                                                                    |
+| Description      | Sistem harus mendukung penggunaan mata uang transaksi yang berbeda dari Functional Currency tanpa mengubah integritas pencatatan akuntansi. |
+
+---
+
+## BR-096 – Settlement Currency Assignment
+
+| Attribute        | Description                                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-096                                                                                                |
+| Requirement Name | Settlement Currency Assignment                                                                        |
+| Priority         | High                                                                                                  |
+| Description      | Sistem harus mendukung mata uang penyelesaian pembayaran yang dapat berbeda dari mata uang transaksi. |
+
+---
+
+## BR-097 – Consolidation Currency
+
+| Attribute        | Description                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-097                                                                                                       |
+| Requirement Name | Consolidation Currency                                                                                       |
+| Priority         | High                                                                                                         |
+| Description      | Sistem harus mendukung penetapan mata uang khusus untuk proses konsolidasi laporan keuangan grup perusahaan. |
+
+---
+
+## BR-098 – Organization & Ledger Assignment
+
+| Attribute        | Description                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-098                                                                                                                                                 |
+| Requirement Name | Organization & Ledger Assignment                                                                                                                       |
+| Priority         | Critical                                                                                                                                               |
+| Description      | Currency Classification harus dapat dikaitkan dengan Financial Organization, Ledger, Financial Book, maupun Business Unit sesuai kebijakan perusahaan. |
+
+---
+
+## BR-099 – Effective Dating & Versioning
+
+| Attribute        | Description                                                                                                                                               |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-099                                                                                                                                                    |
+| Requirement Name | Effective Dating & Versioning                                                                                                                             |
+| Priority         | High                                                                                                                                                      |
+| Description      | Setiap konfigurasi Currency Classification harus memiliki periode berlaku dan dukungan versioning sehingga perubahan tidak memengaruhi histori transaksi. |
+
+---
+
+## BR-100 – Currency Classification Auditability
+
+| Attribute        | Description                                                                                                                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-100                                                                                                                                                                              |
+| Requirement Name | Currency Classification Auditability                                                                                                                                                |
+| Priority         | Critical                                                                                                                                                                            |
+| Description      | Seluruh perubahan konfigurasi Currency Classification harus dicatat secara lengkap dalam Audit Trail beserta pengguna, waktu perubahan, nilai sebelum, dan nilai sesudah perubahan. |
+
+---
+
+# 9.5.3.2.4 Business Rules
+
+| Business Rule ID | Description                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------- |
+| BRule-CC-001     | Setiap Financial Organization wajib memiliki tepat satu Functional Currency yang aktif pada satu waktu. |
+| BRule-CC-002     | Reporting Currency dapat berjumlah lebih dari satu.                                                     |
+| BRule-CC-003     | Transaction Currency dapat berbeda dari Functional Currency.                                            |
+| BRule-CC-004     | Settlement Currency dapat berbeda dari Transaction Currency.                                            |
+| BRule-CC-005     | Satu Currency Master dapat memiliki lebih dari satu Currency Classification.                            |
+| BRule-CC-006     | Currency Classification harus memiliki periode berlaku yang jelas.                                      |
+| BRule-CC-007     | Perubahan klasifikasi tidak boleh mengubah transaksi historis.                                          |
+| BRule-CC-008     | Seluruh perubahan wajib dicatat pada Audit Trail.                                                       |
+
+---
+
+# 9.5.3.2.5 Data Attributes
+
+| Attribute                  | Description                                          |
+| -------------------------- | ---------------------------------------------------- |
+| Currency Classification ID | Identitas unik klasifikasi.                          |
+| Classification Code        | Kode klasifikasi.                                    |
+| Classification Name        | Nama klasifikasi.                                    |
+| Currency ID                | Referensi ke Currency Master.                        |
+| Organization Scope         | Financial Organization yang menggunakan klasifikasi. |
+| Ledger Scope               | Ledger terkait.                                      |
+| Financial Book Scope       | Financial Book terkait.                              |
+| Effective From             | Tanggal mulai berlaku.                               |
+| Effective To               | Tanggal akhir berlaku.                               |
+| Status                     | Draft, Active, Suspended, Archived.                  |
+| Version                    | Nomor versi konfigurasi.                             |
+| Remarks                    | Catatan bisnis.                                      |
+
+---
+
+# 9.5.3.2.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                         |
+| -------------- | ------------------ | ----------- | -------------------------------------- |
+| BR-091         | BO-009             | SH-003      | Currency Classification Administration |
+| BR-092         | BO-009             | SH-003      | Currency Usage Management              |
+| BR-093         | BO-009             | SH-003      | Functional Currency Configuration      |
+| BR-094         | BO-011             | SH-003      | Reporting Currency Configuration       |
+| BR-095         | BO-010             | SH-003      | Multi-Currency Transaction             |
+| BR-096         | BO-010             | SH-003      | Settlement Processing                  |
+| BR-097         | BO-011             | SH-003      | Financial Consolidation                |
+| BR-098         | BO-009             | SH-003      | Organization Assignment                |
+| BR-099         | BO-029             | SH-010      | Configuration Governance               |
+| BR-100         | BO-029             | SH-010      | Audit & Compliance                     |
+
+---
+
+# 9.5.3.2.7 Summary
+
+Currency Classification mendefinisikan fungsi bisnis suatu mata uang dalam berbagai konteks organisasi dan proses keuangan. Dengan memisahkan identitas mata uang dari peran bisnisnya, ERP memperoleh fleksibilitas untuk mendukung berbagai skenario seperti transaksi multi-currency, pelaporan lintas mata uang, treasury, penyelesaian pembayaran, dan konsolidasi grup perusahaan tanpa mengubah definisi dasar Currency Master.
+
+Seluruh requirement pada bagian ini menjadi dasar bagi sub-domain **Currency Pair**, **Exchange Rate Type**, **Exchange Rate Provider**, **Exchange Rate**, serta proses konversi dan translasi mata uang pada Financial Management Domain.

@@ -1,0 +1,235 @@
+# BAB 21. Appendix
+
+## 21.1 Overview
+
+Bab ini merupakan bab penutup dari Business Requirement Document (BRD) Enterprise Resource Planning (ERP) System. Tujuan bab ini adalah menyediakan materi pendukung dan referensi tambahan yang melengkapi BAB 1 sampai dengan BAB 20, tanpa memperkenalkan kebutuhan bisnis baru.
+
+Materi yang disajikan pada Appendix ini mencakup:
+
+* Referensi visual struktur organisasi sebagai pelengkap BAB 9 Business Requirement (Organization Management).
+* Pointer notasi diagram proses bisnis sebagai pelengkap BAB 7 (As-Is) dan BAB 8 (To-Be).
+* Glosarium bisnis konsolidasi lintas seluruh BAB.
+* Indeks ringkas katalog requirement (BR-001 s/d BR-835) per modul.
+* Daftar dokumen rujukan standar industri.
+* Daftar akronim dan singkatan yang digunakan di seluruh dokumen.
+* Catatan revisi dokumen.
+* Pernyataan penutup yang menegaskan kedudukan BRD dalam siklus hidup proyek.
+
+Appendix bersifat referensial dan tidak menggantikan isi normatif pada bab-bab sebelumnya. Apabila terjadi perbedaan interpretasi, maka isi pada bab substantif (BAB 1–BAB 20) yang berlaku sebagai acuan utama.
+
+---
+
+## 21.2 Organization Structure Reference
+
+Struktur organisasi ERP dirancang berjenjang tanpa batas level (*unlimited level*), dikonfigurasi melalui modul Organization Management sebagaimana dijabarkan pada **BAB 9 Business Requirement — 9.1 Organization Management Requirements (BR-001 s/d BR-010)**.
+
+Contoh ilustrasi struktur organisasi target:
+
+```text
+Holding Company (PT ABC Group)
+│
+├── Sub Holding (Agribusiness Division)
+│   │
+│   ├── Company (PT ABC Plantation)
+│   │   ├── Business Unit (Estate Operation)
+│   │   │   ├── Branch (Regional Office - Sumatra)
+│   │   │   │   ├── Department (Finance & Accounting)
+│   │   │   │   ├── Department (Human Resources)
+│   │   │   │   └── Warehouse (Central Warehouse - Sumatra)
+│   │   │   └── Project Site (New Plantation Development Site)
+│   │   └── Business Unit (Processing Mill)
+│   │       ├── Department (Production)
+│   │       └── Warehouse (Finished Goods Warehouse)
+│   │
+│   └── Company (PT ABC Trading)
+│       ├── Branch (Jakarta Branch)
+│       └── Branch (Surabaya Branch)
+│
+└── Sub Holding (Manufacturing Division)
+    │
+    └── Company (PT ABC Manufacturing)
+        ├── Business Unit (Plant 1)
+        ├── Business Unit (Plant 2)
+        └── Department (Corporate Shared Service)
+```
+
+Catatan atas diagram:
+
+* Level organisasi bersifat konfiguratif; contoh di atas hanya menggambarkan salah satu kemungkinan konfigurasi (BRule-ORG-001).
+* Setiap unit organisasi memiliki hubungan Parent–Child yang membentuk Organization Tree (BR-003) dan wajib memiliki Organization Code unik (BR-005).
+* Organization Scope pada setiap level menjadi dasar pengendalian akses, workflow, dan konsolidasi pelaporan lintas Holding, Sub Holding, dan Company (BR-007).
+* Rujukan lengkap kebutuhan bisnis terkait struktur organisasi tersedia pada **BAB 9.1 Organization Management Requirements, BR-001 sampai dengan BR-010**.
+
+---
+
+## 21.3 Business Process Diagram Reference
+
+Diagram proses bisnis As-Is dan To-Be telah dijelaskan secara naratif masing-masing pada **BAB 7 Current Business Process (As-Is)** dan **BAB 8 Future Business Process (To-Be)**. Appendix ini tidak menampilkan ulang diagram tersebut, melainkan menyediakan pointer dan legenda notasi **Business Process Model and Notation (BPMN) 2.0** yang menjadi acuan penggambaran proses pada kedua bab tersebut.
+
+| Elemen Notasi | Simbol/Bentuk           | Fungsi dalam Diagram                                                        |
+| -------------- | ----------------------- | ----------------------------------------------------------------------------- |
+| Actor/Pool     | Kotak persegi panjang besar (swimlane) | Menunjukkan pihak atau peran yang menjalankan aktivitas (mis. Requester, Approver, Finance). |
+| Activity       | Kotak persegi dengan sudut membulat    | Menunjukkan satu langkah kerja atau tugas dalam proses bisnis.              |
+| Decision/Gateway | Bentuk belah ketupat (diamond)        | Menunjukkan titik percabangan keputusan (mis. Approved/Rejected).           |
+| Start Event    | Lingkaran garis tipis    | Menandai titik awal dimulainya proses.                                     |
+| End Event      | Lingkaran garis tebal    | Menandai titik akhir/selesainya proses.                                    |
+| Intermediate Event | Lingkaran garis ganda | Menandai kejadian antara, seperti menunggu notifikasi atau timer.           |
+| Sequence Flow  | Garis panah penuh       | Menunjukkan urutan aliran aktivitas.                                       |
+| Message Flow   | Garis panah putus-putus | Menunjukkan pertukaran informasi antar Actor/Pool yang berbeda.             |
+
+Pembaca yang memerlukan detail alur proses per modul agar merujuk langsung ke narasi proses pada BAB 7 (kondisi saat ini) dan BAB 8 (kondisi target), yang disusun konsisten menggunakan legenda notasi di atas.
+
+---
+
+## 21.4 Business Glossary
+
+Tabel berikut merupakan konsolidasi istilah kunci yang digunakan lintas seluruh BAB dalam BRD ini.
+
+| Istilah                          | Definisi                                                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| ERP                                | Enterprise Resource Planning, sistem terpadu untuk mengelola seluruh proses bisnis organisasi.               |
+| Holding                            | Entitas induk yang mengendalikan satu atau lebih perusahaan dalam grup.                                      |
+| Sub Holding                        | Entitas di bawah Holding yang mengelola sekelompok perusahaan tertentu.                                      |
+| Organization Scope                 | Ruang lingkup data dan proses yang melekat pada posisi suatu unit dalam hierarki organisasi.                 |
+| Scope-Based Access Control         | Mekanisme pembatasan akses data berdasarkan ruang lingkup organisasi pengguna, melengkapi RBAC.               |
+| RBAC (Role-Based Access Control)   | Mekanisme pemberian hak akses kepada pengguna berdasarkan peran yang dimiliki.                                |
+| Workflow Engine                    | Komponen sistem yang mengeksekusi alur proses dan persetujuan sesuai konfigurasi bisnis.                     |
+| Master Data                        | Data utama dan referensi yang digunakan bersama oleh berbagai modul ERP.                                     |
+| Chart of Accounts                  | Struktur kode akun yang menjadi dasar pencatatan seluruh transaksi keuangan.                                  |
+| General Ledger                     | Buku besar yang mencatat seluruh transaksi akuntansi hasil posting dari modul-modul terkait.                  |
+| Fiscal Calendar                    | Kalender periode akuntansi yang mengatur pembukaan dan penutupan periode keuangan.                            |
+| Financial Organization             | Struktur organisasi keuangan (Legal Entity, Ledger, Fiscal Entity) yang menjadi dasar pelaporan keuangan.      |
+| Business Objective                 | Tujuan bisnis tingkat tinggi yang menjadi dasar penurunan kebutuhan bisnis (BR-xxx).                          |
+| Stakeholder                        | Pihak yang memiliki kepentingan atau pengaruh terhadap keberhasilan proyek ERP.                               |
+| Business Requirement               | Kebutuhan bisnis tingkat tinggi yang harus dipenuhi oleh sistem, diidentifikasi dengan kode BR-xxx.            |
+| Business Rule                      | Aturan bisnis yang membatasi atau mengarahkan perilaku proses dan data dalam sistem.                          |
+| Non-Functional Requirement         | Kebutuhan yang berkaitan dengan kualitas sistem, seperti performa, keamanan, dan ketersediaan.                |
+| Traceability Matrix                | Matriks yang menelusuri hubungan antara Business Objective, Requirement, Functional Requirement, dan Test Case. |
+| Configuration over Customization   | Prinsip perancangan sistem yang mengutamakan pengaturan melalui konfigurasi dibanding perubahan source code.  |
+| Organization Tree First            | Prinsip bahwa seluruh data, akses, dan proses mengacu pada hierarki organisasi yang dikelola secara dinamis.   |
+| Single Source of Truth             | Prinsip bahwa satu data hanya memiliki satu sumber kebenaran yang diakui di seluruh sistem.                   |
+| Multi-Organization                 | Kemampuan sistem mendukung banyak entitas organisasi dalam satu platform terpadu.                              |
+| Business Unit                      | Unit operasional dalam suatu Company yang memiliki lingkup usaha atau fungsi tertentu.                        |
+| Effective Date                     | Tanggal mulai dan berakhirnya keberlakuan suatu data atau konfigurasi organisasi.                              |
+| Audit Trail                        | Jejak rekam seluruh aktivitas dan perubahan data untuk kebutuhan telusur dan kepatuhan.                       |
+| Localization                       | Kemampuan sistem menyesuaikan bahasa, format, mata uang, dan regulasi lokal sesuai wilayah operasi.            |
+| Requirement ID (BR-xxx)            | Kode unik penanda kebutuhan bisnis untuk kebutuhan penelusuran lintas dokumen.                                 |
+| Change Request                     | Mekanisme formal pengajuan perubahan terhadap requirement yang telah disepakati.                              |
+| Living Document                    | Dokumen yang bersifat dinamis dan dapat diperbarui secara berkelanjutan sesuai kebutuhan proyek.               |
+
+---
+
+## 21.5 Requirement Catalogue Index
+
+Tabel berikut merupakan indeks ringkas seluruh katalog kebutuhan bisnis (Business Requirement Catalogue) sebagaimana dirinci pada **BAB 9 Business Requirement**. Rentang BR-001 sampai dengan BR-835 tersebar pada modul-modul berikut.
+
+| Module                                    | Section (BAB 9) | BR Range        |
+| ------------------------------------------ | ---------------- | ----------------- |
+| Organization Management                    | 9.1               | BR-001 – BR-010  |
+| User Management                            | 9.2               | BR-011 – BR-020  |
+| Workflow Management                        | 9.3               | BR-021 – BR-030  |
+| Security Management                        | 9.4               | BR-031 – BR-040  |
+| Financial Organization                     | 9.5.1             | BR-051 – BR-060  |
+| Fiscal Calendar                            | 9.5.2             | BR-061 – BR-070  |
+| Currency Management Master                 | 9.5.3             | BR-081 – BR-250  |
+| General Ledger                             | 9.5.4             | BR-556 – BR-565  |
+| Accounts Payable                           | 9.5.5             | BR-566 – BR-575  |
+| Accounts Receivable                        | 9.5.6             | BR-576 – BR-585  |
+| Fixed Asset                                | 9.5.7             | BR-586 – BR-595  |
+| Treasury                                   | 9.5.8             | BR-596 – BR-605  |
+| Cash and Bank                              | 9.5.9             | BR-606 – BR-615  |
+| Cost Center                                | 9.5.10            | BR-616 – BR-625  |
+| Profit Center                              | 9.5.11            | BR-626 – BR-635  |
+| Budget Management                          | 9.5.12            | BR-636 – BR-645  |
+| Tax Management                             | 9.5.13            | BR-646 – BR-655  |
+| Financial Close                            | 9.5.14            | BR-656 – BR-665  |
+| Financial Consolidation                    | 9.5.15            | BR-666 – BR-675  |
+| Financial Reporting                        | 9.5.16            | BR-676 – BR-685  |
+| Financial Analytics                        | 9.5.17            | BR-686 – BR-695  |
+| Chart of Accounts                          | 9.6.3             | BR-301 – BR-555  |
+| Procurement Management                     | 9.7               | BR-696 – BR-705  |
+| Inventory Management                       | 9.8               | BR-706 – BR-715  |
+| Manufacturing Management                   | 9.9               | BR-716 – BR-725  |
+| Project Management                         | 9.10              | BR-726 – BR-735  |
+| Asset Management                           | 9.11              | BR-736 – BR-745  |
+| Human Resource Management                  | 9.12              | BR-746 – BR-755  |
+| Dashboard and Executive Reporting          | 9.13              | BR-756 – BR-765  |
+| Sales Management                           | 9.14              | BR-766 – BR-775  |
+| Customer Relationship Management (CRM)     | 9.15              | BR-776 – BR-785  |
+| Maintenance Management                     | 9.16              | BR-786 – BR-795  |
+| Payroll Management                         | 9.17              | BR-796 – BR-805  |
+| Master Data Management                     | 9.18              | BR-806 – BR-815  |
+| Localization and Multi Language            | 9.19              | BR-816 – BR-825  |
+| Audit Trail                                | 9.20              | BR-826 – BR-835  |
+
+Rincian lengkap setiap requirement, termasuk Business Objective, Stakeholder Owner, Business Rationale, dan Acceptance Criteria, tersedia pada dokumen sub-modul masing-masing di BAB 9, serta penelusuran menyeluruh pada Requirement Traceability Matrix (BAB 20).
+
+---
+
+## 21.6 Reference Documents
+
+Penyusunan BRD ini mengacu pada standar dan praktik terbaik industri berikut, konsisten dengan referensi yang telah disebutkan pada BAB 1.10:
+
+* IEEE 29148 — Systems and Software Engineering — Life Cycle Processes — Requirements Engineering.
+* BABOK® Guide Version 3 — Business Analysis Body of Knowledge.
+* PMBOK® Guide — Project Management Institute.
+* TOGAF® Standard — Enterprise Architecture.
+* BPMN 2.0 — Business Process Model and Notation.
+* ISO 9001 — Quality Management Systems.
+* ISO/IEC 27001 — Information Security Management Systems.
+* COBIT — Governance and Management of Enterprise IT.
+
+---
+
+## 21.7 Acronyms and Abbreviations
+
+| Acronym | Full Term                                       |
+| ------- | ------------------------------------------------- |
+| ERP     | Enterprise Resource Planning                      |
+| BRD     | Business Requirement Document                     |
+| SRS     | Software Requirement Specification                |
+| FRS     | Functional Requirement Specification               |
+| HLD     | High-Level Design                                  |
+| LLD     | Low-Level Design                                   |
+| RBAC    | Role-Based Access Control                          |
+| SLA     | Service Level Agreement                            |
+| RTO     | Recovery Time Objective                            |
+| RPO     | Recovery Point Objective                           |
+| KPI     | Key Performance Indicator                          |
+| PSAK    | Pernyataan Standar Akuntansi Keuangan               |
+| IFRS    | International Financial Reporting Standards        |
+| BPMN    | Business Process Model and Notation                |
+| API     | Application Programming Interface                  |
+| SSO     | Single Sign-On                                     |
+| UAT     | User Acceptance Test                               |
+| PMO     | Project Management Office                          |
+| BO      | Business Objective                                 |
+| BR      | Business Requirement                               |
+| FR      | Functional Requirement                             |
+| TC      | Test Case                                          |
+| SH      | Stakeholder                                        |
+| RTM     | Requirement Traceability Matrix                    |
+| CRM     | Customer Relationship Management                   |
+| HRM     | Human Resource Management                          |
+| MDM     | Master Data Management                             |
+| SAD     | Solution Architecture Document                      |
+| CoA     | Chart of Accounts                                  |
+| GL      | General Ledger                                     |
+
+---
+
+## 21.8 Revision Notes
+
+| Version | Date       | Description                                    | Author                    |
+| ------- | ---------- | ------------------------------------------------- | --------------------------- |
+| 1.0     | 2026-08-03 | Draft — Penyusunan awal seluruh BAB 1-21 BRD ERP. | Business Analyst Team      |
+
+---
+
+## 21.9 Document Closing Statement
+
+Business Requirement Document (BRD) ini merupakan dasar utama bagi penyusunan **Software Requirement Specification (SRS)**, **Functional Specification (FS)**, dan **Solution Architecture Document (SAD)** pada tahap analisis dan perancangan sistem berikutnya. Seluruh kebutuhan bisnis, aturan bisnis, dan kriteria keberhasilan yang tercantum dalam dokumen ini menjadi acuan yang mengikat bagi tim analis, arsitek, dan pengembang dalam menerjemahkan kebutuhan bisnis menjadi solusi teknis.
+
+BRD ini bersifat **living document**. Setiap perubahan, penambahan, atau penyesuaian terhadap kebutuhan bisnis yang telah disepakati wajib dilakukan melalui mekanisme **Change Request** yang terdokumentasi, disetujui oleh pihak berwenang, dan ditelusuri kembali ke Business Objective serta Requirement Traceability Matrix terkait, guna menjaga konsistensi dan akuntabilitas seluruh kebutuhan bisnis sepanjang siklus hidup proyek ERP.
+
+Dengan disusunnya BAB 21 ini, keseluruhan Business Requirement Document ERP System — mulai dari Pendahuluan hingga Appendix — dinyatakan lengkap sebagai dasar formal bagi tahapan pengembangan sistem selanjutnya.

@@ -1,0 +1,183 @@
+# API Specification — Table of Contents
+
+Dokumen ini merupakan **API Specification** untuk platform Enterprise Resource Planning (ERP) multi-organisasi. API Specification merupakan artefak turunan dari **Software Architecture Document (SAD)** dan **Database Design Document (DBDD)**, mendefinisikan **kontrak antarmuka**: REST API sinkron (via **Kong**, didokumentasikan OpenAPI) dan **event asinkron** (Apache Kafka, skema via **Apicurio**).
+
+> **Konsistensi:** mengikuti ADR-003 (Kong + Apicurio), ADR-005 (Selective Exactly-Once), ADR-007 (REST + gRPC), INT-013–016, dan Service Catalog SVC-001–019 (SAD BAB 4.5). Setiap *resource* dipetakan ke tabel DBDD; setiap *event* dipetakan ke tabel `outbox` sumbernya.
+>
+> **Cakupan:** kontrak REST & event untuk domain inti; endpoint direpresentasikan sebagai *resource catalog* (**API-xxx**) dengan skema kunci dan aksi domain. Kontrak OpenAPI/Protobuf final per layanan diturunkan dari dokumen ini.
+
+---
+
+## Front Matter
+
+## Cover
+
+## Revision History
+
+## Table of Contents
+
+## Conventions and Legend
+
+---
+
+# BAB 1. Introduction
+
+### 1.1 Purpose
+
+### 1.2 Scope
+
+### 1.3 Relationship to SAD, DBDD, and BRD
+
+### 1.4 API Landscape (Sync and Async)
+
+### 1.5 Identifier and Notation Conventions
+
+### 1.6 How to Read This Document
+
+---
+
+# BAB 2. API Standards and Conventions
+
+### 2.1 Overview
+
+### 2.2 Base URL, Routing, and API Gateway (Kong)
+
+### 2.3 Versioning
+
+### 2.4 Authentication and Authorization (OAuth2/OIDC)
+
+### 2.5 Organization Scope and Context
+
+### 2.6 Standard Resource Model and Operations
+
+### 2.7 Request/Response Format
+
+### 2.8 Pagination, Filtering, and Sorting
+
+### 2.9 Error Model
+
+### 2.10 Idempotency
+
+### 2.11 Rate Limiting and Throttling
+
+### 2.12 Correlation and Standard Headers
+
+### 2.13 HTTP Status Codes
+
+### 2.14 OpenAPI and Contract Governance
+
+### 2.15 Summary
+
+---
+
+# BAB 3. Platform and Core APIs
+
+### 3.1 Overview
+
+### 3.2 Organization API
+
+### 3.3 User API
+
+### 3.4 Security API (Role/Permission)
+
+### 3.5 Workflow API
+
+### 3.6 Master Data API
+
+### 3.7 Audit API
+
+### 3.8 Summary
+
+---
+
+# BAB 4. Financial APIs
+
+### 4.1 Overview
+
+### 4.2 Chart of Accounts API
+
+### 4.3 Currency API
+
+### 4.4 General Ledger API
+
+### 4.5 Accounts Payable API
+
+### 4.6 Accounts Receivable API
+
+### 4.7 Tax API
+
+### 4.8 Treasury / Cash & Bank API
+
+### 4.9 Summary
+
+---
+
+# BAB 5. Operational APIs
+
+### 5.1 Overview
+
+### 5.2 Procurement API
+
+### 5.3 Inventory API
+
+### 5.4 Sales API
+
+### 5.5 Manufacturing API
+
+### 5.6 Summary
+
+---
+
+# BAB 6. Human Resource and Payroll APIs
+
+### 6.1 Overview
+
+### 6.2 Human Resource API
+
+### 6.3 Payroll API
+
+### 6.4 PII Handling in APIs
+
+### 6.5 Summary
+
+---
+
+# BAB 7. Event / Asynchronous API Catalog
+
+### 7.1 Overview
+
+### 7.2 Event Envelope and Schema Governance (Apicurio)
+
+### 7.3 Topic Catalog
+
+### 7.4 Key Event Schemas
+
+### 7.5 Delivery Semantics and Consumer Guidance
+
+### 7.6 Dead Letter and Retry
+
+### 7.7 Summary
+
+---
+
+# BAB 8. Traceability and Appendix
+
+### 8.1 Overview
+
+### 8.2 API Resource Catalog (API-xxx)
+
+### 8.3 Traceability (API ↔ INT/BR ↔ Table ↔ Service)
+
+### 8.4 Error Code Catalog
+
+### 8.5 Internal gRPC Interfaces (Note)
+
+### 8.6 Appendix A — OpenAPI Example
+
+### 8.7 Appendix B — Open Items
+
+### 8.8 Revision History
+
+### 8.9 Summary
+
+---

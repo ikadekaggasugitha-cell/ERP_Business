@@ -1,0 +1,141 @@
+# 9.5.9 Cash and Bank Requirements
+
+---
+
+# 9.5.9.1 Overview
+
+Cash and Bank Management merupakan domain yang mengelola seluruh transaksi kas dan bank harian organisasi, mencakup penerimaan, pengeluaran, pengelolaan kas kecil (petty cash), serta pencocokan mutasi bank dengan pencatatan sistem melalui proses rekonsiliasi.
+
+Domain ini menjadi titik pertemuan antara aktivitas operasional harian (penerimaan pelanggan, pembayaran vendor, pengeluaran operasional) dengan pencatatan akuntansi pada General Ledger. Karena sifatnya yang bersinggungan langsung dengan pergerakan uang, domain ini memerlukan tingkat kontrol, jejak audit, dan akurasi yang tinggi.
+
+Dalam arsitektur ERP yang mendukung struktur organisasi bertingkat tanpa batas (Holding, Sub Holding, Company, Business Unit, Branch, Department, Warehouse, Project Site), setiap Bank Account dan Petty Cash Fund harus terhubung secara eksplisit ke scope organisasi dan Financial Organization tertentu, sehingga transaksi kas dan bank dapat dikonsolidasikan maupun dipisahkan sesuai kebutuhan pelaporan grup perusahaan.
+
+Cash and Bank Management juga dirancang untuk mendukung otomatisasi rekonsiliasi antara bank statement dan pencatatan sistem, guna mengurangi proses manual, mempercepat proses tutup buku, dan meningkatkan akurasi laporan posisi kas.
+
+---
+
+# 9.5.9.2 Business Requirement Catalogue
+
+## BR-606 – Bank Account Master
+
+| Attribute           | Description                                                                                                                                                                                        |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-606                                                                                                                                                                                             |
+| Requirement Name    | Bank Account Master                                                                                                                                                                                |
+| Category            | Cash and Bank Management                                                                                                                                                                           |
+| Priority            | Critical                                                                                                                                                                                           |
+| Business Objective  | BO-009, BO-022                                                                                                                                                                                     |
+| Stakeholder Owner   | SH-003 (CFO), SH-028 (Accounting Department)                                                                                                                                                       |
+| Description         | Sistem harus menyediakan master data Bank Account yang mencatat informasi rekening bank (nomor rekening, nama bank, cabang, mata uang, GL Account terkait) dan dikaitkan dengan scope organisasi tertentu. |
+| Business Rationale  | Setiap entitas organisasi dapat memiliki satu atau lebih rekening bank dengan mata uang dan bank berbeda, sehingga diperlukan master data terpusat yang dapat mendukung struktur multi-organisasi dan multi-currency. |
+| Business Value      | Menjamin konsistensi data rekening bank di seluruh modul yang bertransaksi kas dan bank, serta menjadi Single Source of Truth untuk identitas rekening.                                            |
+| Acceptance Criteria | Administrator dapat membuat, mengubah, menonaktifkan, dan mengaktifkan kembali Bank Account; setiap Bank Account wajib memiliki scope organisasi, mata uang, dan GL Account penghubung yang valid. |
+
+---
+
+## BR-607 – Cash and Bank Receipt Transaction
+
+| Requirement ID   | Requirement Name                    | Priority | Description                                                                                                                                          | Acceptance Criteria                                                                                                          |
+| ---------------- | ------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| BR-607           | Cash and Bank Receipt Transaction   | Critical | Sistem harus menyediakan fungsi pencatatan penerimaan kas dan bank, baik yang berasal dari pelunasan piutang, penerimaan lain, maupun setoran tunai. | Setiap penerimaan tercatat dengan referensi sumber (invoice, pelanggan, atau akun lawan) dan otomatis membentuk jurnal terkait Bank Account atau kas. |
+
+---
+
+## BR-608 – Cash and Bank Payment Transaction
+
+| Requirement ID   | Requirement Name                   | Priority | Description                                                                                                                                     | Acceptance Criteria                                                                                                        |
+| ---------------- | ------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| BR-608           | Cash and Bank Payment Transaction  | Critical | Sistem harus menyediakan fungsi pencatatan pengeluaran kas dan bank untuk keperluan pembayaran vendor, pengeluaran operasional, maupun transfer antar rekening. | Setiap pengeluaran tercatat dengan referensi tujuan pembayaran dan otomatis membentuk jurnal pengurang saldo Bank Account atau kas. |
+
+---
+
+## BR-609 – Petty Cash Fund Management
+
+| Requirement ID   | Requirement Name              | Priority | Description                                                                                                                            | Business Value                                                                                     |
+| ---------------- | -------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| BR-609           | Petty Cash Fund Management      | High     | Sistem harus mendukung pengelolaan dana kas kecil (petty cash) pada tingkat organisasi tertentu, termasuk penetapan pemegang kas dan batas saldo. | Memberikan kontrol atas pengeluaran kas kecil di tingkat unit operasional tanpa mengurangi akurasi pencatatan pusat. |
+
+---
+
+## BR-610 – Petty Cash Replenishment (Imprest)
+
+| Requirement ID   | Requirement Name                    | Priority | Description                                                                                                                                   | Acceptance Criteria                                                                                          |
+| ---------------- | -------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| BR-610           | Petty Cash Replenishment (Imprest)    | High     | Sistem harus mendukung proses penggantian (replenishment) dana kas kecil berbasis metode imprest, berdasarkan rekap bukti pengeluaran yang telah diverifikasi. | Nilai replenishment harus sama dengan total pengeluaran terverifikasi sehingga saldo kas kecil kembali ke batas yang ditetapkan. |
+
+---
+
+## BR-611 – Bank Statement Import
+
+| Requirement ID   | Requirement Name          | Priority | Description                                                                                                                            | Acceptance Criteria                                                                                                       |
+| ---------------- | ---------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| BR-611           | Bank Statement Import       | Critical | Sistem harus mendukung impor mutasi bank statement dari bank melalui format standar (misalnya MT940, CAMT.053, atau CSV) ke dalam sistem. | Sistem melakukan validasi duplikasi data statement dan menampilkan ringkasan hasil impor sebelum diproses lebih lanjut.     |
+
+---
+
+## BR-612 – Automated Bank Reconciliation
+
+| Requirement ID   | Requirement Name              | Priority | Description                                                                                                                                       | Business Value                                                                                          |
+| ---------------- | -------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| BR-612           | Automated Bank Reconciliation   | Critical | Sistem harus menyediakan mekanisme rekonsiliasi otomatis yang mencocokkan mutasi bank statement dengan pencatatan transaksi kas dan bank pada sistem. | Mengurangi waktu dan risiko kesalahan proses rekonsiliasi manual serta mempercepat proses tutup buku bulanan. |
+
+---
+
+## BR-613 – Manual Reconciliation Adjustment
+
+| Requirement ID   | Requirement Name                | Priority | Description                                                                                                                                       | Acceptance Criteria                                                                                          |
+| ---------------- | ----------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| BR-613           | Manual Reconciliation Adjustment  | High     | Sistem harus menyediakan fungsi penyesuaian manual atas item yang tidak dapat dicocokkan secara otomatis (unreconciled items), disertai alasan dan persetujuan. | Item hasil penyesuaian manual tercatat sebagai reconciling item dan tertelusur ke pengguna serta waktu penyesuaian. |
+
+---
+
+## BR-614 – Cash Position and Bank Balance Dashboard
+
+| Requirement ID   | Requirement Name                        | Priority | Description                                                                                                                              | Business Value                                                                                       |
+| ---------------- | ------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| BR-614           | Cash Position and Bank Balance Dashboard  | Medium   | Sistem harus menyediakan dashboard yang menampilkan posisi saldo kas dan bank secara real-time di seluruh Bank Account dan scope organisasi. | Mendukung pengambilan keputusan keuangan berbasis data terkini terkait ketersediaan dan kebutuhan kas. |
+
+---
+
+## BR-615 – Cash and Bank Transaction Approval Workflow
+
+| Requirement ID   | Requirement Name                          | Priority | Description                                                                                                                                    | Acceptance Criteria                                                                                                     |
+| ---------------- | --------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| BR-615           | Cash and Bank Transaction Approval Workflow | High     | Sistem harus mendukung workflow persetujuan configurable untuk transaksi kas dan bank yang melebihi ambang batas (threshold) tertentu sesuai kebijakan organisasi. | Transaksi di atas threshold tidak dapat diposting ke buku besar sebelum melalui seluruh tahapan persetujuan yang ditetapkan. |
+
+---
+
+# 9.5.9.3 Cash and Bank Business Rules
+
+| Business Rule ID | Description                                                                                                                              |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-CB-001      | Setiap transaksi kas dan bank harus terhubung ke Bank Account Master atau Petty Cash Fund yang valid dan berstatus aktif.                |
+| BRule-CB-002      | Rekonsiliasi otomatis mencocokkan mutasi bank statement dengan jurnal sistem berdasarkan kombinasi nominal, tanggal, dan nomor referensi. |
+| BRule-CB-003      | Selisih hasil rekonsiliasi (unreconciled items) dicatat sebagai reconciling item dan tidak memengaruhi saldo buku besar sampai disetujui. |
+| BRule-CB-004      | Petty cash dikelola dengan metode imprest; nilai replenishment harus sama dengan total pengeluaran yang telah diverifikasi.              |
+| BRule-CB-005      | Bank statement import wajib melalui proses validasi duplikasi sebelum data diproses ke dalam sistem.                                     |
+| BRule-CB-006      | Transaksi kas dan bank yang melebihi threshold tertentu wajib melalui approval workflow sesuai delegation of authority pada scope organisasi terkait. |
+| BRule-CB-007      | Setiap perubahan pada Bank Account Master (nomor rekening, status, otorisasi) tercatat dalam audit trail secara permanen.                 |
+
+---
+
+# 9.5.9.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder      | Future Process                              |
+| -------------- | ------------------- | ----------------- | --------------------------------------------- |
+| BR-606         | BO-009, BO-022      | SH-003, SH-028    | Bank Account Administration                   |
+| BR-607         | BO-009, BO-022      | SH-028             | Cash and Bank Receipt Processing              |
+| BR-608         | BO-009, BO-022      | SH-028             | Cash and Bank Payment Processing              |
+| BR-609         | BO-009              | SH-028             | Petty Cash Fund Administration                |
+| BR-610         | BO-009              | SH-028             | Petty Cash Replenishment Processing           |
+| BR-611         | BO-009, BO-022      | SH-028             | Bank Statement Import Processing              |
+| BR-612         | BO-009, BO-022      | SH-003, SH-028    | Automated Bank Reconciliation Processing      |
+| BR-613         | BO-022              | SH-028             | Manual Reconciliation Adjustment Processing   |
+| BR-614         | BO-022              | SH-003             | Cash Position Monitoring                      |
+| BR-615         | BO-009              | SH-003, SH-028    | Cash and Bank Transaction Approval Administration |
+
+---
+
+# 9.5.9.5 Summary
+
+Cash and Bank Requirements menetapkan fondasi pengelolaan transaksi kas dan bank harian yang akurat, terkendali, dan terintegrasi dengan struktur organisasi bertingkat serta Financial Organization. Dengan dukungan Bank Account Master yang terpusat, mekanisme penerimaan dan pengeluaran yang tertelusur, pengelolaan petty cash berbasis imprest, serta rekonsiliasi otomatis antara mutasi bank dan pencatatan sistem, domain ini mendukung akurasi laporan keuangan sekaligus mempercepat proses tutup buku. Seluruh requirement pada bagian ini menjadi dasar bagi desain lanjutan pada dokumen fungsional dan teknis berikutnya.

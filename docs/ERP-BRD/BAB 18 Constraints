@@ -1,0 +1,87 @@
+# BAB 18. Constraints
+
+## 18.1 Overview
+
+Constraints merupakan batasan-batasan yang membingkai ruang gerak (*degree of freedom*) pelaksanaan implementasi ERP. Berbeda dengan Assumptions yang bersifat kondisi yang *diasumsikan benar*, Constraints adalah kondisi yang **sudah pasti** membatasi pilihan solusi, jadwal, anggaran, maupun cakupan proyek, baik yang berasal dari kebijakan internal organisasi, keterbatasan teknis, maupun regulasi eksternal.
+
+Tujuan utama bab ini adalah:
+
+* Mendokumentasikan batasan yang wajib dipatuhi selama perencanaan dan pelaksanaan proyek ERP.
+* Memberikan dasar yang jelas bagi tim proyek dalam menentukan pilihan desain solusi yang realistis.
+* Menjadi acuan evaluasi ketika terjadi permintaan perubahan (*Change Request*) yang berpotensi melanggar batasan yang telah ditetapkan.
+* Menyelaraskan ekspektasi seluruh stakeholder mengenai hal-hal yang tidak dapat diubah secara sepihak selama proyek berjalan.
+
+Seluruh batasan pada bab ini bersifat mengikat kecuali terdapat persetujuan perubahan resmi dari Project Steering Committee melalui mekanisme **Change Request (CR)**.
+
+---
+
+## 18.2 Project Constraints
+
+Batasan proyek berkaitan dengan pendekatan pelaksanaan, jadwal, dan anggaran yang telah disepakati sejak tahap perencanaan, sejalan dengan strategi implementasi bertahap (*phased implementation*) yang menjadi prinsip utama proyek ERP ini.
+
+* **CONS-001** – Implementasi ERP dilakukan secara bertahap (*phased implementation*) per modul dan/atau per unit organisasi, bukan secara serentak (*big bang*), sehingga urutan prioritas modul mengikuti roadmap yang telah disepakati.
+* **CONS-002** – Timeline dan anggaran proyek bersifat tetap (*fixed*) sesuai kontrak dan rencana proyek yang telah disetujui; penambahan ruang lingkup tidak secara otomatis memperpanjang jadwal atau menambah anggaran tanpa persetujuan resmi.
+* **CONS-003** – Setiap perubahan ruang lingkup (*scope*), baik penambahan maupun pengurangan, wajib melalui proses **Change Request (CR)** yang disertai analisis dampak terhadap jadwal, biaya, dan sumber daya sebelum disetujui.
+
+---
+
+## 18.3 Technical Constraints
+
+Batasan teknis membatasi pilihan arsitektur dan pendekatan integrasi yang dapat diterapkan, mengingat ERP harus tetap beroperasi berdampingan dengan sistem lain selama masa transisi.
+
+* **CONS-004** – Integrasi dengan sistem eksternal (payment gateway, perbankan, sistem pajak, atau sistem pihak ketiga lainnya) sangat bergantung pada ketersediaan, stabilitas, dan dokumentasi API yang disediakan oleh masing-masing pihak ketiga, di luar kendali tim proyek ERP.
+* **CONS-005** – Kapasitas infrastruktur (komputasi, penyimpanan, jaringan) mengikuti batasan kontrak atau lisensi layanan (*cloud* maupun *on-premise*) yang berlaku, sehingga penambahan kapasitas di luar kontrak memerlukan proses pengadaan tambahan.
+* **CONS-006** – Selama masa transisi, ERP wajib tetap kompatibel dan dapat berjalan berdampingan (*coexist*) dengan sistem *legacy* yang belum dimigrasikan, guna menjaga kontinuitas operasional bisnis.
+* **CONS-013** – Pengembangan ERP wajib menggunakan **tumpukan teknologi standar** yang telah diratifikasi (BAB 4.6.1 & ADR-011), yaitu **Go (Golang)** untuk layanan *backend*, **React 19 + Vite + TanStack Query** untuk *frontend Backoffice SPA*, **Apache Kafka** untuk *event streaming*, dan **PostgreSQL** untuk basis data, di atas platform *container* (Docker/Kubernetes). Penggunaan teknologi inti di luar standar ini memerlukan persetujuan melalui mekanisme **Change Request (CR)** dan *architecture review*.
+* **CONS-014** – **PostgreSQL** merupakan satu-satunya *system of record* transaksional; data *event* yang mengalir melalui Apache Kafka tunduk pada kebijakan retensi yang ditetapkan dan **bukan** merupakan sumber kebenaran utama. Penambahan penyimpanan data primer alternatif (mis. basis data NoSQL sebagai *system of record*) tidak diperbolehkan tanpa persetujuan arsitektur dan CR.
+
+---
+
+## 18.4 Organizational Constraints
+
+Batasan organisasi mencerminkan keterbatasan kebijakan internal serta ketersediaan waktu dan kewenangan pemangku kepentingan dalam mendukung proses implementasi.
+
+* **CONS-007** – Penyesuaian proses bisnis dalam konfigurasi ERP wajib mengikuti kebijakan, SOP, dan tata kelola organisasi yang berlaku, sehingga konfigurasi tidak dapat menyimpang dari kebijakan resmi tanpa persetujuan manajemen terkait.
+* **CONS-008** – Ketersediaan waktu *key user* untuk kegiatan *requirement gathering*, konfirmasi proses bisnis, dan User Acceptance Test (UAT) bersifat terbatas karena harus dijalankan berdampingan dengan tugas operasional harian mereka.
+* **CONS-009** – Perubahan struktur organisasi dalam skala besar (misalnya penambahan/penghapusan Sub Holding atau Company, atau restrukturisasi lintas Holding) memerlukan persetujuan **Steering Committee** sebelum dapat direfleksikan ke dalam konfigurasi ERP.
+
+---
+
+## 18.5 Regulatory Constraints
+
+Batasan regulasi berkaitan dengan kepatuhan terhadap standar dan ketentuan hukum yang berlaku di Indonesia, yang bersifat wajib dan tidak dapat dinegosiasikan dalam desain solusi.
+
+* **CONS-010** – Modul Finance dan Accounting wajib mematuhi standar akuntansi yang berlaku, yaitu **Pernyataan Standar Akuntansi Keuangan (PSAK)** dan, apabila relevan bagi entitas tertentu, **International Financial Reporting Standards (IFRS)**.
+* **CONS-011** – Perhitungan, pelaporan, dan dokumentasi perpajakan wajib mematuhi ketentuan perpajakan yang berlaku di Indonesia, termasuk perubahan regulasi yang mungkin terjadi selama masa proyek maupun pasca *go-live*.
+* **CONS-012** – Pengelolaan data pribadi karyawan, pelanggan, maupun mitra bisnis dalam ERP wajib mematuhi **Undang-Undang Perlindungan Data Pribadi (UU PDP)**, termasuk aspek persetujuan, penyimpanan, dan hak akses subjek data.
+
+---
+
+## 18.6 Constraint Register
+
+Tabel berikut merangkum seluruh batasan proyek beserta kategori dan dampak apabila batasan tersebut diabaikan.
+
+| Constraint ID | Description                                                                      | Category      | Impact if Ignored                                                          |
+| -------------- | ---------------------------------------------------------------------------------- | -------------- | ----------------------------------------------------------------------------- |
+| CONS-001       | Implementasi dilakukan secara bertahap/phased                                      | Project         | Risiko kegagalan implementasi meningkat, adopsi pengguna tidak terkelola      |
+| CONS-002       | Timeline dan budget proyek bersifat tetap                                          | Project         | Pembengkakan biaya (*cost overrun*) dan keterlambatan jadwal (*schedule slip*)|
+| CONS-003       | Perubahan scope wajib melalui Change Request                                       | Project         | Scope creep tidak terkendali, kualitas dan jadwal terdampak                   |
+| CONS-004       | Integrasi eksternal tergantung ketersediaan API pihak ketiga                        | Technical       | Modul integrasi tidak dapat berfungsi sesuai rencana                         |
+| CONS-005       | Kapasitas infrastruktur mengikuti kontrak/lisensi yang berlaku                      | Technical       | Kinerja sistem menurun saat beban melebihi kapasitas terkontrak              |
+| CONS-006       | Kompatibilitas dengan sistem legacy selama masa transisi                           | Technical       | Gangguan operasional akibat data atau proses tidak sinkron                    |
+| CONS-013       | Wajib menggunakan tumpukan teknologi standar (Go, React 19, Kafka, PostgreSQL)      | Technical       | Fragmentasi teknologi, biaya pemeliharaan naik, kompetensi tim terpecah        |
+| CONS-014       | PostgreSQL sebagai satu-satunya system of record; Kafka bukan sumber kebenaran      | Technical       | Duplikasi/ambiguitas sumber kebenaran data, risiko inkonsistensi & audit       |
+| CONS-007       | Penyesuaian proses bisnis mengikuti kebijakan organisasi                           | Organizational  | Konfigurasi menyimpang dari kebijakan resmi, temuan audit                     |
+| CONS-008       | Ketersediaan waktu key user untuk requirement gathering & UAT terbatas             | Organizational  | Kualitas requirement dan hasil UAT menurun, rework meningkat                  |
+| CONS-009       | Perubahan struktur organisasi besar memerlukan persetujuan Steering Committee       | Organizational  | Perubahan tidak terkoordinasi, konfigurasi tidak konsisten antar unit         |
+| CONS-010       | Kepatuhan terhadap standar akuntansi PSAK/IFRS                                     | Regulatory      | Laporan keuangan tidak sah secara akuntansi, risiko temuan audit eksternal    |
+| CONS-011       | Kepatuhan terhadap regulasi perpajakan Indonesia                                   | Regulatory      | Sanksi administratif/denda perpajakan, risiko hukum bagi organisasi           |
+| CONS-012       | Kepatuhan terhadap UU Perlindungan Data Pribadi                                    | Regulatory      | Pelanggaran hukum, sanksi regulator, dan hilangnya kepercayaan pemangku data  |
+
+---
+
+## 18.7 Summary
+
+Constraints pada bab ini menetapkan batasan yang membingkai ruang gerak implementasi ERP, baik dari sisi proyek, teknis, organisasi, maupun regulasi. Seluruh keputusan desain solusi dan strategi implementasi wajib mempertimbangkan batasan-batasan tersebut sebagai kondisi yang tidak dapat diabaikan.
+
+Setiap usulan yang berpotensi melanggar salah satu batasan pada bab ini wajib dievaluasi terlebih dahulu oleh Project Manager dan disetujui oleh Project Steering Committee melalui mekanisme Change Request (CR) sebelum dapat diimplementasikan.

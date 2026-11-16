@@ -1,0 +1,38 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "s4hana"],
+  description: "SAP S/4HANA Universal Journal staging view with CDC deduplication"
+}
+
+SELECT
+  RCLNT AS mandt,
+  RLDNR AS ledger,
+  RBUKRS AS company_code,
+  GJAHR AS fiscal_year,
+  BELNR AS document_number,
+  DOCLN AS line_item_number,
+  POPER AS posting_period,
+  DRCRK AS debit_credit_indicator,
+  RACCT AS gl_account_number,
+  RCNTR AS cost_center,
+  PRCTR AS profit_center,
+  SEGMENT AS segment,
+  WERKS AS plant,
+  TSL AS amount_tc,
+  RTCUR AS currency_tc,
+  HSL AS amount_fc,
+  RHCUR AS currency_fc,
+  KSL AS amount_pc,
+  RKCUR AS currency_pc,
+  BUDAT AS posting_date,
+  BLDAT AS document_date,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "acdoca")}
+WHERE RLDNR = '0L'
+  AND COALESCE(BSTAT, '') NOT IN ('V', 'S', 'C')
+  AND COALESCE(POPER, '') != '000'
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY RCLNT, RLDNR, RBUKRS, GJAHR, BELNR, DOCLN
+  ORDER BY recordstamp DESC
+) = 1

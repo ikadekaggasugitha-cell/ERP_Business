@@ -1,0 +1,178 @@
+# 9.7 Procurement Management Requirements
+
+## 9.7.1 Overview
+
+Procurement Management merupakan modul yang mengelola seluruh proses pengadaan barang dan jasa mulai dari pengajuan kebutuhan internal (Purchase Requisition), permintaan penawaran harga (Request for Quotation/RFQ), evaluasi vendor, penerbitan Purchase Order (PO), hingga penerimaan barang (Goods Receipt).
+
+Modul ini dirancang mengikuti prinsip **Configuration over Customization** dan **Scope-Based Everything**, sehingga alur persetujuan (approval workflow), ambang batas nilai transaksi, serta struktur organisasi yang terlibat dalam proses pengadaan dapat dikonfigurasi tanpa perubahan source code. Proses pengadaan harus terintegrasi penuh dengan modul Inventory (untuk pembaruan stok), Accounts Payable (untuk penyelesaian kewajiban pembayaran ke vendor), dan Vendor Master (sebagai sumber data vendor tunggal/Single Source of Truth).
+
+Setiap kebutuhan bisnis pada bagian ini menggunakan **Requirement ID (BR-xxx)** agar dapat ditelusuri ke Business Objectives (BO-xxx), Stakeholder (SH-xxx), Functional Requirements (FR-xxx), dan Test Cases (TC-xxx).
+
+---
+
+# 9.7.2 Business Requirement Catalogue
+
+## BR-696 – Purchase Requisition Creation and Multi-Level Approval
+
+| Attribute              | Description                                                                                                                                                                     |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID         | BR-696                                                                                                                                                                          |
+| Requirement Name       | Purchase Requisition Creation and Multi-Level Approval                                                                                                                          |
+| Category               | Procurement Management                                                                                                                                                          |
+| Priority               | Critical                                                                                                                                                                        |
+| Business Objective     | BO-003, BO-009                                                                                                                                                                  |
+| Stakeholder Owner      | SH-030 (Procurement Department), SH-031 (Purchasing Department)                                                                                                                 |
+| Description            | Sistem harus memungkinkan pengguna pada seluruh scope organisasi (Company, Business Unit, Branch, Department, Project Site) membuat Purchase Requisition (PR) yang selanjutnya diproses melalui alur persetujuan berjenjang secara otomatis. |
+| Business Rationale     | Pengajuan kebutuhan pengadaan harus melalui validasi dan otorisasi berjenjang sebelum diproses lebih lanjut, guna menjaga tata kelola dan mencegah pengadaan yang tidak sah.     |
+| Business Value         | Mempercepat proses pengajuan kebutuhan pengadaan, meningkatkan akuntabilitas, dan mengurangi risiko pengadaan tanpa otorisasi.                                                  |
+| Acceptance Criteria    | Pengguna dapat membuat PR dengan referensi item, kuantitas, estimasi harga, dan scope organisasi; PR secara otomatis diarahkan ke jalur approval sesuai konfigurasi organisasi.  |
+| Related Modules        | Procurement Management, Workflow Management, Organization Management                                                                                                            |
+| Related Business Rules | BRule-PROC-001, BRule-PROC-002                                                                                                                                                   |
+
+---
+
+## BR-697 – Multi-Level Approval Workflow Based on Transaction Value and Organization
+
+| Attribute           | Description                                                                                                                            |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-697                                                                                                                                 |
+| Requirement Name    | Multi-Level Approval Workflow Based on Transaction Value and Organization                                                              |
+| Priority            | Critical                                                                                                                               |
+| Description         | Sistem harus mendukung konfigurasi alur persetujuan berjenjang untuk PR dan PO berdasarkan kombinasi nilai transaksi dan level/scope organisasi, tanpa memerlukan perubahan aplikasi. |
+| Acceptance Criteria | Administrator dapat mendefinisikan ambang nilai dan pemetaan approver per level organisasi melalui konfigurasi Workflow Management.     |
+| Business Value      | Fleksibilitas kebijakan otorisasi sesuai kebutuhan tata kelola masing-masing entitas bisnis.                                            |
+
+---
+
+## BR-698 – Request for Quotation (RFQ) Management
+
+| Attribute           | Description                                                                                                              |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-698                                                                                                                   |
+| Requirement Name    | Request for Quotation (RFQ) Management                                                                                  |
+| Priority            | High                                                                                                                     |
+| Description         | Sistem harus memungkinkan Procurement Department menerbitkan RFQ kepada satu atau lebih vendor berdasarkan PR yang telah disetujui, mengelola batas waktu penawaran, dan mencatat status respons vendor. |
+| Acceptance Criteria | RFQ dapat dikirim ke minimal jumlah vendor yang dikonfigurasi dan status respons vendor (submitted, expired, declined) tercatat secara real-time.                                               |
+
+---
+
+## BR-699 – Vendor Quotation Comparison and Evaluation
+
+| Attribute           | Description                                                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-699                                                                                                                  |
+| Requirement Name    | Vendor Quotation Comparison and Evaluation                                                                             |
+| Priority            | High                                                                                                                    |
+| Description         | Sistem harus menyediakan fitur perbandingan penawaran vendor secara sisi-berdampingan berdasarkan harga, termin pembayaran, waktu pengiriman, dan skor kualitas, untuk mendukung keputusan pemilihan vendor. |
+| Acceptance Criteria | Pengguna dapat melihat tabel perbandingan penawaran seluruh vendor yang merespons RFQ dan memilih vendor pemenang berdasarkan kriteria yang dikonfigurasi. |
+| Business Value      | Pengambilan keputusan pengadaan yang lebih objektif dan transparan.                                                     |
+
+---
+
+## BR-700 – Vendor Master Integration and Vendor Performance Scoring
+
+| Attribute           | Description                                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-700                                                                                                                 |
+| Requirement Name    | Vendor Master Integration and Vendor Performance Scoring                                                              |
+| Priority            | High                                                                                                                   |
+| Description         | Sistem harus mengintegrasikan seluruh proses pengadaan dengan Vendor Master sebagai Single Source of Truth data vendor, serta menghitung skor kinerja vendor berdasarkan histori transaksi. |
+| Acceptance Criteria | Data vendor pada proses RFQ dan PO selalu mengacu pada Vendor Master aktif; skor kinerja vendor diperbarui otomatis setelah setiap transaksi selesai. |
+
+---
+
+## BR-701 – Purchase Order Creation and Management
+
+| Attribute           | Description                                                                                                          |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-701                                                                                                               |
+| Requirement Name    | Purchase Order Creation and Management                                                                              |
+| Priority            | Critical                                                                                                             |
+| Description         | Sistem harus memungkinkan penerbitan Purchase Order (PO) berdasarkan hasil evaluasi RFQ atau langsung dari PR yang disetujui, lengkap dengan referensi vendor, item, kuantitas, harga, dan syarat pembayaran. |
+| Acceptance Criteria | PO hanya dapat diterbitkan setelah PR/RFQ terkait disetujui dan vendor berstatus aktif pada Vendor Master.           |
+
+---
+
+## BR-702 – Purchase Order Amendment and Revision Control
+
+| Attribute           | Description                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-702                                                                                                          |
+| Requirement Name    | Purchase Order Amendment and Revision Control                                                                  |
+| Priority            | Medium                                                                                                          |
+| Description         | Sistem harus mendukung revisi PO (perubahan kuantitas, harga, atau tanggal pengiriman) dengan pencatatan versi dan riwayat perubahan secara lengkap, serta memerlukan ulang persetujuan sesuai ambang nilai. |
+| Acceptance Criteria | Setiap perubahan PO tercatat sebagai versi baru dengan jejak audit; perubahan yang melampaui ambang nilai memicu ulang alur persetujuan. |
+
+---
+
+## BR-703 – Goods Receipt against Purchase Order
+
+| Attribute           | Description                                                                                                        |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-703                                                                                                             |
+| Requirement Name    | Goods Receipt against Purchase Order                                                                              |
+| Priority            | Critical                                                                                                           |
+| Description         | Sistem harus mendukung pencatatan Goods Receipt (penerimaan barang/jasa) yang direferensikan langsung ke PO, termasuk penerimaan sebagian (partial receipt), dan memperbarui stok Inventory secara otomatis. |
+| Acceptance Criteria | Goods Receipt tidak dapat melebihi kuantitas outstanding pada PO; stok Inventory pada scope Warehouse terkait diperbarui secara real-time setelah Goods Receipt disimpan. |
+
+---
+
+## BR-704 – Three-Way Matching Integration with Accounts Payable
+
+| Attribute           | Description                                                                                                          |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-704                                                                                                               |
+| Requirement Name    | Three-Way Matching Integration with Accounts Payable                                                                |
+| Priority            | Critical                                                                                                             |
+| Description         | Sistem harus melakukan pencocokan tiga arah (three-way matching) antara Purchase Order, Goods Receipt, dan Invoice vendor sebelum kewajiban pembayaran dapat diproses oleh modul Accounts Payable. |
+| Acceptance Criteria | Invoice vendor yang tidak sesuai dengan PO dan Goods Receipt (dalam toleransi yang dikonfigurasi) akan ditahan (on-hold) dan memerlukan resolusi manual sebelum diteruskan ke Accounts Payable. |
+| Business Value      | Mencegah pembayaran ganda atau tidak sesuai serta meningkatkan akurasi laporan keuangan.                             |
+
+---
+
+## BR-705 – Procurement Budget Control and Commitment Tracking
+
+| Attribute           | Description                                                                                                       |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-705                                                                                                            |
+| Requirement Name    | Procurement Budget Control and Commitment Tracking                                                               |
+| Priority            | High                                                                                                              |
+| Description         | Sistem harus memvalidasi ketersediaan anggaran (budget) pada scope organisasi terkait setiap kali PR atau PO diterbitkan, serta mencatat komitmen anggaran (budget commitment) secara real-time. |
+| Acceptance Criteria | PR/PO yang melebihi sisa anggaran akan ditolak atau memerlukan approval override sesuai konfigurasi kebijakan anggaran. |
+
+---
+
+# 9.7.3 Procurement Business Rules Reference
+
+| Business Rule ID | Description                                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| BRule-PROC-001    | Purchase Requisition wajib melalui alur persetujuan yang berlaku sebelum dapat dikonversi menjadi RFQ atau Purchase Order.           |
+| BRule-PROC-002    | Alur persetujuan berjenjang ditentukan berdasarkan kombinasi nilai transaksi dan level/scope organisasi yang mengajukan.             |
+| BRule-PROC-003    | RFQ untuk pembelian di atas ambang nilai tertentu wajib dikirim ke jumlah vendor minimum yang dikonfigurasi, kecuali vendor bersifat sole source. |
+| BRule-PROC-004    | Purchase Order hanya dapat diterbitkan kepada vendor yang berstatus aktif dan tervalidasi pada Vendor Master.                        |
+| BRule-PROC-005    | Setiap Goods Receipt wajib direferensikan ke Purchase Order yang valid dan tidak boleh melebihi kuantitas/nilai outstanding.          |
+| BRule-PROC-006    | Kewajiban pembayaran ke vendor tidak dapat diproses oleh Accounts Payable tanpa three-way matching antara PO, Goods Receipt, dan Invoice, kecuali dikonfigurasi sebagai transaksi non-PO. |
+| BRule-PROC-007    | Purchase Requisition dan Purchase Order tidak boleh melebihi sisa anggaran pada scope organisasi terkait, kecuali melalui approval budget override. |
+
+---
+
+# 9.7.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder      | Future Process                 |
+| -------------- | ------------------- | ----------------- | ------------------------------- |
+| BR-696         | BO-003, BO-009       | SH-030, SH-031     | Purchase Requisition Management |
+| BR-697         | BO-009               | SH-030             | Approval Workflow Configuration |
+| BR-698         | BO-003               | SH-031             | Request for Quotation           |
+| BR-699         | BO-003               | SH-030             | Vendor Evaluation                |
+| BR-700         | BO-003, BO-009       | SH-030             | Vendor Master Integration        |
+| BR-701         | BO-003               | SH-031             | Purchase Order Management        |
+| BR-702         | BO-009               | SH-031             | Purchase Order Revision          |
+| BR-703         | BO-003, BO-009       | SH-032 (Inventory Department) | Goods Receipt         |
+| BR-704         | BO-003, BO-009       | SH-028 (Accounting Department) | Accounts Payable Settlement |
+| BR-705         | BO-009               | SH-027 (Finance Department)     | Budget Control            |
+
+---
+
+# 9.7.5 Summary
+
+Modul **Procurement Management** menghubungkan seluruh rangkaian proses pengadaan barang/jasa, mulai dari Purchase Requisition, RFQ, evaluasi vendor, Purchase Order, hingga Goods Receipt, dalam satu alur kerja yang terkonfigurasi dan terintegrasi penuh dengan Inventory, Accounts Payable, dan Vendor Master. Sepuluh kebutuhan bisnis (BR-696 hingga BR-705) pada bagian ini akan diturunkan lebih lanjut menjadi Functional Requirements, desain basis data, spesifikasi API, dan skenario pengujian pada dokumen lanjutan.

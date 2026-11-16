@@ -1,0 +1,29 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc"],
+  description: "SAP ECC Accounting Document Line Item staging view with CDC deduplication"
+}
+
+SELECT
+  MANDT AS mandt,
+  BUKRS AS company_code,
+  BELNR AS document_number,
+  GJAHR AS fiscal_year,
+  BUZEI AS line_item_number,
+  SHKZG AS debit_credit_indicator,
+  HKONT AS gl_account_number,
+  WRBTR AS amount_doc_curr,
+  DMBTR AS amount_loc_curr,
+  DMBE2 AS amount_loc_curr2,
+  WAERS AS currency_doc,
+  MWSKZ AS tax_code,
+  KOSTL AS cost_center,
+  PRCTR AS profit_center,
+  WERKS AS plant,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "bseg")}
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY MANDT, BUKRS, BELNR, GJAHR, BUZEI
+  ORDER BY recordstamp DESC
+) = 1

@@ -1,0 +1,100 @@
+# Revision History
+
+## Document Control
+
+Dokumen **Business Requirement Document (BRD)** merupakan dokumen yang dikendalikan (controlled document). Seluruh perubahan terhadap dokumen ini harus melalui proses review, persetujuan, dan pencatatan pada tabel *Revision History*.
+
+Setiap perubahan wajib memiliki nomor versi, tanggal perubahan, ringkasan perubahan, serta pihak yang bertanggung jawab sehingga riwayat pengembangan dokumen dapat ditelusuri secara lengkap.
+
+---
+
+## Revision History
+
+| Version | Date       | Author           | Reviewer           | Approver           | Description of Changes                             | Status           |
+| ------- | ---------- | ---------------- | ------------------ | ------------------ | -------------------------------------------------- | ---------------- |
+| 0.1     | YYYY-MM-DD | Business Analyst | Project Manager    | -                  | Initial Draft                                      | Draft            |
+| 0.2     | YYYY-MM-DD | Business Analyst | Project Manager    | -                  | Added Business Background and Objectives           | Draft            |
+| 0.3     | YYYY-MM-DD | Business Analyst | Solution Architect | -                  | Added Business Scope and Stakeholder Analysis      | Draft            |
+| 0.4     | YYYY-MM-DD | Business Analyst | Solution Architect | -                  | Added Business Requirements (Core Modules)         | Draft            |
+| 0.5     | YYYY-MM-DD | Business Analyst | Technical Lead     | -                  | Added Non-Functional Requirements                  | Draft            |
+| 0.6     | YYYY-MM-DD | Business Analyst | Security Architect | -                  | Added Security, Audit, and Compliance Requirements | Draft            |
+| 0.7     | YYYY-MM-DD | Business Analyst | PMO                | -                  | Internal Review Completed                          | In Review        |
+| 0.8     | YYYY-MM-DD | Business Analyst | Steering Committee | -                  | Incorporated Review Feedback                       | In Review        |
+| 0.9     | YYYY-MM-DD | Business Analyst | Steering Committee | -                  | Final Draft for Approval                           | Pending Approval |
+| 1.0     | YYYY-MM-DD | Business Analyst | Project Manager    | Steering Committee | First Official Release                             | Approved         |
+| 1.1     | 2026-08-05 | Solution Architect | Technical Lead   | Steering Committee | Menetapkan tumpukan teknologi standar (Go, React 19 SPA, Apache Kafka, PostgreSQL) dan menambahkan cetak biru arsitektur teknologi HLD/LLD-lite: BAB 4.6.1, BAB 11.2.1, BAB 12.12, BAB 13.7–13.13, CONS-013–014, ASM-013–014, RISK-013–015 | Draft            |
+| 1.2     | 2026-08-05 | Solution Architect | Technical Lead   | Steering Committee | Finalisasi keputusan arsitektur (ADR-001–005 pada BAB 13.7.1): Hybrid Multi-Tenancy, Kong API Gateway, Apicurio Registry, infrastruktur Self-Managed, dan Selective Exactly-Once Delivery (EOS untuk GL/Journal/Payment/Inventory Reservation; At-Least-Once + idempotensi untuk selebihnya) | Draft            |
+
+---
+
+## Versioning Policy
+
+Dokumen menggunakan skema penomoran versi sebagai berikut:
+
+| Version | Description                                                                                                                     |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 0.x     | Draft yang masih dalam tahap penyusunan dan belum disetujui secara resmi.                                                       |
+| 1.0     | Rilis resmi pertama setelah memperoleh persetujuan seluruh stakeholder utama.                                                   |
+| 1.x     | Perubahan minor seperti penambahan requirement, klarifikasi, atau penyempurnaan dokumentasi tanpa mengubah ruang lingkup utama. |
+| 2.0     | Perubahan mayor yang memengaruhi ruang lingkup proyek, arsitektur bisnis, atau proses bisnis utama.                             |
+| 3.0+    | Rilis utama berikutnya yang merepresentasikan perubahan signifikan terhadap dokumen maupun arah proyek.                         |
+
+---
+
+## Change Management Process
+
+Seluruh perubahan terhadap dokumen BRD harus mengikuti tahapan berikut:
+
+1. **Change Request**
+   Perubahan diajukan oleh stakeholder melalui mekanisme permintaan perubahan (*Change Request*).
+
+2. **Impact Analysis**
+   Tim Business Analyst melakukan analisis dampak terhadap kebutuhan bisnis, ruang lingkup proyek, biaya, jadwal, risiko, dan artefak lain yang terkait.
+
+3. **Review**
+   Hasil analisis ditinjau oleh Project Manager, Solution Architect, dan stakeholder yang relevan.
+
+4. **Approval**
+   Perubahan disetujui oleh pihak yang memiliki kewenangan sesuai matriks persetujuan proyek.
+
+5. **Revision Update**
+   Nomor versi, riwayat perubahan, dan bagian dokumen yang terdampak diperbarui.
+
+6. **Distribution**
+   Dokumen versi terbaru didistribusikan kepada seluruh pihak yang tercantum dalam *Distribution List*.
+
+---
+
+## Revision Guidelines
+
+Perubahan terhadap dokumen dapat berupa:
+
+* Penambahan kebutuhan bisnis (*Business Requirement*).
+* Perubahan ruang lingkup (*Scope*).
+* Penyesuaian proses bisnis (*Business Process*).
+* Perubahan struktur organisasi.
+* Penambahan modul ERP.
+* Perubahan aturan bisnis (*Business Rules*).
+* Perubahan kebutuhan keamanan (*Security Requirements*).
+* Penambahan kebutuhan integrasi (*Integration Requirements*).
+* Penyempurnaan kebutuhan non-fungsional (*Non-Functional Requirements*).
+* Perbaikan redaksional yang tidak mengubah makna kebutuhan bisnis.
+
+---
+
+## Document Change Log Reference
+
+Setiap perubahan pada dokumen harus memiliki referensi terhadap artefak proyek lainnya apabila terdampak, seperti:
+
+| Affected Artifact                  | Reference |
+| ---------------------------------- | --------- |
+| Business Requirement               | BR-xxx    |
+| Software Requirement Specification | SRS-xxx   |
+| Functional Specification           | FS-xxx    |
+| Database Design                    | DB-xxx    |
+| API Specification                  | API-xxx   |
+| Test Case                          | TC-xxx    |
+| Change Request                     | CR-xxx    |
+| Risk Register                      | RSK-xxx   |
+
+Tujuan dari referensi ini adalah menjaga *traceability* sehingga setiap perubahan dapat ditelusuri dari kebutuhan bisnis hingga implementasi dan pengujian.

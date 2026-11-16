@@ -1,0 +1,179 @@
+# BAB 4. Financial APIs
+
+## 4.1 Overview
+
+Bab ini mendefinisikan kontrak REST domain **Financial**: Chart of Accounts, Currency, General Ledger, Accounts Payable, Accounts Receivable, Tax, dan Treasury/Cash & Bank. Operasi finansial berkonsistensi absolut (posting jurnal, pembayaran) menerapkan **idempotensi** (BAB 2.10) dan menghasilkan *event* Exactly-Once (ADR-005, BAB 7). Resource memetakan ke DBDD BAB 4–5.
+
+---
+
+## 4.2 Chart of Accounts API — API-009
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/chart-of-accounts`, `/v1/accounts`, `/v1/posting-rules` |
+| Layanan | SVC-006 coa-service |
+| Tabel | `coa.chart_of_accounts`, `coa.account`, `coa.account_segment`, `coa.posting_rule` |
+| Referensi | 9.6 (25 sub-domain) |
+
+**Endpoint kunci:**
+
+| Method & Path                             | Deskripsi                                  |
+| ----------------------------------------- | ------------------------------------------ |
+| `GET /v1/accounts?type=Asset&postable=true`| Daftar akun (filter tipe/postable).       |
+| `GET /v1/accounts/{id}/hierarchy`         | Hierarki akun (Account Hierarchy).         |
+| `POST /v1/account-combinations/validate`  | Validasi kombinasi segmen (Account Validation Rule). |
+| `GET /v1/posting-rules?sourceModule=AP`   | Aturan derivasi akun per modul.            |
+
+---
+
+## 4.3 Currency API — API-010
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/currencies`, `/v1/exchange-rates` |
+| Layanan | currency-service |
+| Tabel | `cur.currency`, `cur.exchange_rate`, `cur.exchange_rate_type` |
+| Referensi | 9.5.3 (17 sub-domain) |
+
+**Endpoint kunci:**
+
+| Method & Path                                                        | Deskripsi                       |
+| ------------------------------------------------------------------- | ------------------------------- |
+| `GET /v1/exchange-rates?from=USD&to=IDR&type=Spot&onDate=2026-08-05`| Kurs berlaku pada tanggal.      |
+| `POST /v1/exchange-rates`                                            | Input kurs bertanggal.          |
+
+---
+
+## 4.4 General Ledger API — API-011
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/journal-entries` |
+| Layanan | SVC-007 gl-service |
+| Tabel | `gl.journal_entry`, `gl.journal_line`, `gl.account_balance` |
+| Referensi | BR-556–562 (9.5.4) |
+
+**Endpoint kunci:**
+
+| Method & Path                              | Deskripsi                                      | Catatan |
+| ------------------------------------------ | ---------------------------------------------- | ------- |
+| `POST /v1/journal-entries`                 | Buat jurnal draft (Idempotency-Key).           | 201     |
+| `POST /v1/journal-entries/{id}/post`       | Posting jurnal (validasi balanced & period).   | EOS event |
+| `POST /v1/journal-entries/{id}/reverse`    | Balik jurnal (reversal).                        | EOS event |
+| `GET /v1/journal-entries?period=…&status=Posted` | Cari jurnal.                             |         |
+| `GET /v1/accounts/{id}/balances?period=…`  | Saldo akun per periode (`gl.account_balance`).  |         |
+
+**Skema `JournalEntry` (create request):**
+
+```json
+{
+  "financialOrganizationId": "uuid",
+  "ledgerId": "uuid",
+  "postingDate": "2026-08-05",
+  "journalSource": "Manual",
+  "currency": "IDR",
+  "exchangeRate": "1.00000000",
+  "lines": [
+    { "accountId": "uuid", "debitAmount": "1000.0000", "creditAmount": "0.0000", "costCenterId": "uuid" },
+    { "accountId": "uuid", "debitAmount": "0.0000", "creditAmount": "1000.0000" }
+  ]
+}
+```
+
+**Validasi (BR-556, BR-562):**
+
+* `SUM(debitAmount) = SUM(creditAmount)` → jika tidak, `422 GL_JOURNAL_UNBALANCED`.
+* Periode target harus `Open` → jika `Closed/Locked`, `409 GL_PERIOD_LOCKED`.
+* Sukses `post` → *event* `erp.gl.journal.posted.v1` (Exactly-Once, BAB 7.4).
+
+---
+
+## 4.5 Accounts Payable API — API-012
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/ap-invoices` |
+| Layanan | SVC-008 ap-service |
+| Tabel | `ap.ap_invoice`, `ap.ap_invoice_line` |
+| Referensi | 9.5.5, INT-002 |
+
+**Endpoint kunci:**
+
+| Method & Path                              | Deskripsi                                      |
+| ------------------------------------------ | ---------------------------------------------- |
+| `POST /v1/ap-invoices`                      | Catat invoice vendor (dari GR).                |
+| `POST /v1/ap-invoices/{id}/record`          | Finalisasi → memicu posting GL (INT-002).      |
+| `GET /v1/ap-invoices?vendorId=…&status=Recorded` | Daftar hutang vendor.                    |
+| `GET /v1/ap-invoices?dueDate[lte]=…&status=Recorded` | Hutang jatuh tempo.                  |
+
+Penerbitan/`record` menghasilkan `erp.ap.invoice.recorded.v1` (Exactly-Once) → dikonsumsi GL & Treasury.
+
+---
+
+## 4.6 Accounts Receivable API — API-013
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/ar-invoices` |
+| Layanan | SVC-009 ar-service |
+| Tabel | `ar.ar_invoice`, `ar.ar_invoice_line` |
+| Referensi | 9.5.6, INT-001 |
+
+**Endpoint kunci:**
+
+| Method & Path                              | Deskripsi                                      |
+| ------------------------------------------ | ---------------------------------------------- |
+| `POST /v1/ar-invoices`                      | Terbitkan invoice pelanggan (dari delivery).   |
+| `GET /v1/ar-invoices?customerId=…&status=Overdue` | Piutang jatuh tempo.                     |
+| `POST /v1/ar-invoices/{id}/receipts`        | Catat penerimaan/alokasi.                       |
+
+Penerbitan menghasilkan `erp.ar.invoice.issued.v1` (Exactly-Once) → dikonsumsi GL & Tax.
+
+---
+
+## 4.7 Tax API — API-014
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/tax-codes`, `/v1/tax-transactions` |
+| Layanan | SVC-010 tax-service |
+| Tabel | `tax.tax_code`, `tax.tax_transaction` |
+| Referensi | 9.5.13, INT-006 |
+
+**Endpoint kunci:**
+
+| Method & Path                                    | Deskripsi                                 |
+| ------------------------------------------------ | ----------------------------------------- |
+| `POST /v1/tax-transactions/calculate`            | Hitung pajak atas dasar (base amount).    |
+| `POST /v1/tax-transactions/{id}/efaktur`         | Terbitkan faktur pajak (e-Faktur, INT-006).|
+| `GET /v1/tax-transactions?efakturStatus=Reported`| Status pelaporan faktur.                  |
+
+---
+
+## 4.8 Treasury / Cash & Bank API — API-015
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/bank-accounts`, `/v1/payments` |
+| Layanan | SVC-011 treasury-cashbank-service |
+| Tabel | `trs.bank_account`, `trs.payment`, `trs.bank_statement_line` |
+| Referensi | 9.5.8/9, INT-005 |
+
+**Endpoint kunci:**
+
+| Method & Path                              | Deskripsi                                      | Catatan |
+| ------------------------------------------ | ---------------------------------------------- | ------- |
+| `POST /v1/payments`                         | Buat pembayaran/penerimaan (Idempotency-Key).  | EOS     |
+| `POST /v1/payments/{id}/settle`             | Settle via bank/payment gateway (INT-005).     | EOS event |
+| `POST /v1/bank-accounts/{id}/reconcile`     | Rekonsiliasi mutasi bank.                      |         |
+| `GET /v1/payments?status=Settled&party=…`   | Daftar pembayaran.                             |         |
+
+Pembayaran bersifat **Exactly-Once** (ADR-005); `settle` menghasilkan `erp.cashbank.payment.settled.v1`.
+
+---
+
+## 4.9 Summary
+
+Bab ini mendefinisikan kontrak REST domain Financial: **CoA** (akun, hierarki, validasi kombinasi, posting rule), **Currency** (kurs bertanggal), **General Ledger** (jurnal draft→post→reverse dengan validasi *balanced* & period lock), **AP/AR** (invoice + posting GL via event), **Tax** (perhitungan + e-Faktur), dan **Treasury** (payment Exactly-Once + rekonsiliasi). Operasi kritikal finansial memakai idempotensi dan menghasilkan *event* Exactly-Once (BAB 7), memetakan ke DBDD BAB 4–5 dan layanan SVC-006–011.
+
+---

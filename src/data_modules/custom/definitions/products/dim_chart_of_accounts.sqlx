@@ -1,0 +1,74 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["dimension", "cortex_v7", "chart_of_accounts"],
+  clusterBy: ["account_type", "is_active"],
+  description: "Conformed chart of accounts dimension with stripped leading zeros and holding CoA mapping"
+}
+
+WITH sap_accounts AS (
+  SELECT
+    'SAP' AS source_system,
+    s.chart_of_accounts,
+    s.gl_account_number AS raw_account_code,
+    -- Strip leading zeros from SAP 10-digit account string ('0000100000' -> '100000')
+    LTRIM(s.gl_account_number, '0') AS account_code,
+    s.account_name,
+    CASE
+      WHEN STARTS_WITH(LTRIM(s.gl_account_number, '0'), '1') THEN 'ASSET'
+      WHEN STARTS_WITH(LTRIM(s.gl_account_number, '0'), '2') THEN 'LIABILITY'
+      WHEN STARTS_WITH(LTRIM(s.gl_account_number, '0'), '3') THEN 'EQUITY'
+      WHEN STARTS_WITH(LTRIM(s.gl_account_number, '0'), '4') THEN 'REVENUE'
+      WHEN STARTS_WITH(LTRIM(s.gl_account_number, '0'), '5') 
+        OR STARTS_WITH(LTRIM(s.gl_account_number, '0'), '6')
+        OR STARTS_WITH(LTRIM(s.gl_account_number, '0'), '7')
+        OR STARTS_WITH(LTRIM(s.gl_account_number, '0'), '8') THEN 'EXPENSE'
+      ELSE 'OTHER'
+    END AS account_type,
+    TRUE AS is_active,
+    CAST(s.recordstamp AS TIMESTAMP) AS recordstamp
+  FROM ${ref("stg_ska1")} s
+),
+
+new_erp_accounts AS (
+  SELECT
+    'NEW_ERP' AS source_system,
+    'COA_HOLDING' AS chart_of_accounts,
+    CAST(account_code AS STRING) AS raw_account_code,
+    LTRIM(CAST(account_code AS STRING), '0') AS account_code,
+    CAST(account_name AS STRING) AS account_name,
+    UPPER(CAST(account_type AS STRING)) AS account_type,
+    COALESCE(is_active, TRUE) AS is_active,
+    CAST(updated_at AS TIMESTAMP) AS recordstamp
+  FROM ${ref("erp_staging", "stg_chart_of_accounts_cdc")}
+),
+
+combined AS (
+  SELECT * FROM sap_accounts
+  UNION ALL
+  SELECT * FROM new_erp_accounts
+),
+
+deduped AS (
+  SELECT *
+  FROM combined
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY chart_of_accounts, account_code
+    ORDER BY recordstamp DESC
+  ) = 1
+)
+
+SELECT
+  TO_HEX(MD5(CONCAT(d.chart_of_accounts, '|', d.account_code))) AS account_key,
+  d.chart_of_accounts,
+  d.raw_account_code,
+  d.account_code,
+  d.account_name,
+  d.account_type,
+  COALESCE(m.holding_account_code, d.account_code) AS holding_account_code,
+  COALESCE(m.holding_account_name, d.account_name) AS holding_account_name,
+  d.is_active,
+  d.source_system
+FROM deduped d
+LEFT JOIN ${ref("erp_staging", "stg_holding_coa_mapping")} m
+  ON d.account_code = m.local_account_code

@@ -1,0 +1,177 @@
+# BAB 4. Financial Foundation and Chart of Accounts Schema
+
+## 4.1 Overview
+
+Bab ini mendesain fondasi domain **Financial Core**: Financial Organization, Fiscal Calendar, Currency Management, dan Chart of Accounts (CoA). Fondasi ini menjadi kerangka pencatatan bagi General Ledger dan seluruh sub-ledger (BAB 5). Desain mengacu BRD 9.5 (Financial Foundation) & 9.6 (Chart of Accounts) dan mengikuti standar BAB 2.
+
+---
+
+## 4.2 Financial Organization (`coa_db`)
+
+Merealisasikan BRD 9.5.1: entitas keuangan (legal entity, ledger, company code) yang selaras Organization Tree namun independen dari struktur operasional.
+
+### `fin.financial_organization`
+
+| Column           | Type         | Null | Key | Description                                                    |
+| ---------------- | ------------ | ---- | --- | -------------------------------------------------------------- |
+| `code`           | VARCHAR(50)  | No   | U   | Kode entitas keuangan (company code).                          |
+| `name`           | VARCHAR(200) | No   |     | Nama legal entity.                                             |
+| `organization_ref_id`| UUID     | No   | IDX | Referensi logis ke `org.organization`.                        |
+| `functional_currency_code`| VARCHAR(3)| No |     | Mata uang fungsional (BRD 9.5.3).                          |
+| `chart_of_accounts_id`| UUID    | No   | FK  | CoA yang digunakan.                                            |
+| `fiscal_calendar_id`| UUID      | No   | FK  | Kalender fiskal yang berlaku.                                  |
+
+### `fin.ledger`
+
+| Column           | Type         | Null | Key | Description                                                    |
+| ---------------- | ------------ | ---- | --- | -------------------------------------------------------------- |
+| `financial_organization_id`| UUID| No | FK  | Entitas keuangan pemilik.                                      |
+| `code`           | VARCHAR(50)  | No   | U   | Kode ledger.                                                   |
+| `ledger_type`    | VARCHAR(30)  | No   |     | Primary/Statutory/Management/Consolidation.                    |
+| `currency_code`  | VARCHAR(3)   | No   |     | Mata uang ledger.                                              |
+
+---
+
+## 4.3 Fiscal Calendar
+
+Merealisasikan BRD 9.5.2: periode akuntansi, tahun buku, penutupan periode per entitas.
+
+```mermaid
+erDiagram
+  FISCAL_CALENDAR ||--o{ FISCAL_YEAR : contains
+  FISCAL_YEAR ||--o{ FISCAL_PERIOD : contains
+```
+
+### `fin.fiscal_calendar`
+
+| Column        | Type         | Null | Key | Description                          |
+| ------------- | ------------ | ---- | --- | ------------------------------------ |
+| `code`        | VARCHAR(50)  | No   | U   | Kode kalender fiskal.                |
+| `name`        | VARCHAR(150) | No   |     | Nama.                                |
+| `period_type` | VARCHAR(20)  | No   |     | Monthly/Quarterly (jumlah periode).  |
+
+### `fin.fiscal_period`
+
+| Column          | Type        | Null | Key | Description                                          |
+| --------------- | ----------- | ---- | --- | ---------------------------------------------------- |
+| `fiscal_year_id`| UUID        | No   | FK  | Tahun buku.                                          |
+| `period_no`     | INTEGER     | No   |     | Nomor periode (1–12/13).                             |
+| `start_date`    | DATE        | No   |     | Awal periode.                                        |
+| `end_date`      | DATE        | No   |     | Akhir periode.                                       |
+| `status`        | VARCHAR(20) | No   |     | Open/Closed/Locked (BR-562).                         |
+
+> `status` = Closed/Locked mencegah posting jurnal baru (validasi di `gl-service`, BR-562).
+
+---
+
+## 4.4 Currency Management (`currency_db`)
+
+Merealisasikan BRD 9.5.3 (17 sub-domain): mata uang, pasangan, tipe & sumber kurs, kurs bertanggal.
+
+```mermaid
+erDiagram
+  CURRENCY ||--o{ CURRENCY_PAIR : base_or_quote
+  CURRENCY_PAIR ||--o{ EXCHANGE_RATE : has
+  EXCHANGE_RATE_TYPE ||--o{ EXCHANGE_RATE : classifies
+```
+
+### `cur.currency`
+
+| Column        | Type        | Null | Key | Description                                          |
+| ------------- | ----------- | ---- | --- | ---------------------------------------------------- |
+| `code`        | VARCHAR(3)  | No   | U   | ISO 4217 alfabetik (BRD Currency Master).            |
+| `numeric_code`| VARCHAR(3)  | Yes  |     | ISO 4217 numerik.                                    |
+| `name`        | VARCHAR(100)| No   |     | Nama mata uang.                                      |
+| `precision`   | INTEGER     | No   |     | Presisi desimal (Currency Precision).                |
+| `is_active`   | BOOLEAN     | No   |     | Status aktif.                                        |
+
+### `cur.exchange_rate_type`
+
+| Column  | Type        | Null | Key | Description                              |
+| ------- | ----------- | ---- | --- | ---------------------------------------- |
+| `code`  | VARCHAR(30) | No   | U   | Spot/Historical/Budget/Average/Closing.  |
+| `name`  | VARCHAR(100)| No   |     | Nama tipe kurs.                          |
+
+### `cur.exchange_rate`
+
+| Column          | Type          | Null | Key | Description                                          |
+| --------------- | ------------- | ---- | --- | ---------------------------------------------------- |
+| `from_currency` | VARCHAR(3)    | No   | IDX | Mata uang asal.                                      |
+| `to_currency`   | VARCHAR(3)    | No   | IDX | Mata uang tujuan.                                    |
+| `rate_type_id`  | UUID          | No   | FK  | Tipe kurs.                                           |
+| `rate`          | NUMERIC(20,8) | No   |     | Nilai kurs.                                          |
+| `valid_from`    | DATE          | No   | IDX | Berlaku sejak (bertanggal — Currency Management).    |
+| `valid_to`      | DATE          | Yes  |     | Berlaku hingga.                                      |
+
+**Unique:** `uq_exchange_rate (organization_id, from_currency, to_currency, rate_type_id, valid_from)`.
+
+---
+
+## 4.5 Chart of Accounts (`coa_db`)
+
+Merealisasikan BRD 9.6 (25 sub-domain): struktur akun bersegmen, kombinasi akun, posting rule, pemetaan. Menjadi kerangka pencatatan GL.
+
+```mermaid
+erDiagram
+  COA ||--o{ ACCOUNT_SEGMENT : defines
+  ACCOUNT_SEGMENT ||--o{ SEGMENT_VALUE : allows
+  COA ||--o{ ACCOUNT : contains
+  ACCOUNT ||--o{ ACCOUNT_COMBINATION : composed_in
+  COA ||--o{ POSTING_RULE : governs
+```
+
+### `coa.chart_of_accounts`
+
+| Column     | Type         | Null | Key | Description                          |
+| ---------- | ------------ | ---- | --- | ------------------------------------ |
+| `code`     | VARCHAR(50)  | No   | U   | Kode CoA (CoA Master).               |
+| `name`     | VARCHAR(150) | No   |     | Nama.                                |
+| `structure`| JSONB        | No   |     | Definisi struktur segmen (urutan/panjang). |
+
+### `coa.account`
+
+| Column          | Type         | Null | Key | Description                                          |
+| --------------- | ------------ | ---- | --- | ---------------------------------------------------- |
+| `chart_of_accounts_id`| UUID   | No   | FK  | CoA induk.                                           |
+| `code`          | VARCHAR(50)  | No   | U   | Kode akun (unik per CoA).                            |
+| `name`          | VARCHAR(200) | No   |     | Nama akun.                                           |
+| `account_type`  | VARCHAR(30)  | No   |     | Asset/Liability/Equity/Revenue/Expense (Account Type).|
+| `account_class` | VARCHAR(30)  | Yes  |     | Klasifikasi lanjutan (Account Class).                |
+| `is_control`    | BOOLEAN      | No   |     | Akun kontrol (sub-ledger) — Account Control.         |
+| `is_monetary`   | BOOLEAN      | No   |     | Akun mata uang asing (untuk revaluasi, BR-561).      |
+| `allow_posting` | BOOLEAN      | No   |     | Boleh diposting (leaf) vs header (Account Activation).|
+| `parent_id`     | UUID         | Yes  | FK  | Hierarki akun (Account Hierarchy).                   |
+
+### `coa.account_segment` & `coa.segment_value`
+
+| Table                 | Kolom kunci                                                    | Deskripsi                              |
+| --------------------- | ------------------------------------------------------------- | -------------------------------------- |
+| `coa.account_segment` | `chart_of_accounts_id`, `segment_no`, `name`, `length`        | Definisi segmen (Segment).             |
+| `coa.segment_value`   | `segment_id`, `value`, `description`, `is_active`             | Nilai valid per segmen (Segment Value).|
+
+### `coa.account_combination` (kombinasi segmen valid — Account Combination)
+
+| Column          | Type         | Null | Key | Description                                          |
+| --------------- | ------------ | ---- | --- | ---------------------------------------------------- |
+| `chart_of_accounts_id`| UUID   | No   | FK  | CoA.                                                 |
+| `combination_code`| VARCHAR(100)| No | U   | Kode kombinasi (concatenated segments).              |
+| `is_enabled`    | BOOLEAN      | No   |     | Diizinkan/diblokir (Account Validation Rule).        |
+
+### `coa.posting_rule` (Posting Rule / Account Derivation)
+
+| Column          | Type         | Null | Key | Description                                          |
+| --------------- | ------------ | ---- | --- | ---------------------------------------------------- |
+| `source_module` | VARCHAR(50)  | No   | IDX | Modul sumber (AP/AR/Inventory/Payroll/…).            |
+| `event_key`     | VARCHAR(100) | No   |     | Peristiwa akuntansi (mis. goods_issue, invoice).     |
+| `debit_account_rule`| JSONB    | No   |     | Aturan penentu akun debit (derivation).              |
+| `credit_account_rule`| JSONB   | No   |     | Aturan penentu akun kredit.                          |
+
+> Posting Rule menjadi acuan `automatic journal posting` (BR-558) yang memetakan transaksi sub-ledger ke akun GL.
+
+---
+
+## 4.6 Summary
+
+Bab ini mendesain fondasi finansial: **Financial Organization/Ledger** (entitas keuangan selaras Organization Tree), **Fiscal Calendar** (periode dengan status Open/Closed/Locked untuk period lock), **Currency Management** (mata uang ISO 4217, tipe & kurs bertanggal presisi tinggi), dan **Chart of Accounts** (akun bersegmen, kombinasi valid, hierarki, dan **Posting Rule** sebagai jembatan sub-ledger → GL). Fondasi ini menjadi kerangka referensi bagi seluruh transaksi finansial pada BAB 5.
+
+---

@@ -1,0 +1,168 @@
+# 9.2 User Management Requirements
+
+## 9.2.1 Overview
+
+User Management mengelola identitas pengguna, akun, hubungan dengan organisasi, status kepegawaian, autentikasi, serta pengelolaan akses awal ke dalam Enterprise Resource Planning (ERP).
+
+Modul ini menjadi fondasi bagi Authentication, Authorization, Workflow, Audit Trail, dan seluruh aktivitas yang dilakukan oleh pengguna dalam sistem.
+
+Setiap pengguna memiliki identitas unik yang dapat dikaitkan dengan satu atau lebih organisasi, beberapa peran (role), serta ruang lingkup akses (organization scope) sesuai kebijakan perusahaan.
+
+---
+
+# 9.2.2 Business Requirement Catalogue
+
+## BR-011 – Global User Identity
+
+| Attribute           | Description                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-011                                                                                       |
+| Requirement Name    | Global User Identity                                                                         |
+| Category            | User Management                                                                              |
+| Priority            | Critical                                                                                     |
+| Business Objective  | BO-001, BO-002                                                                               |
+| Stakeholder Owner   | SH-006 (CIO), SH-007 (Business Owner)                                                        |
+| Description         | Sistem harus menyediakan identitas global yang unik untuk setiap pengguna.                   |
+| Business Rationale  | Satu individu hanya memiliki satu identitas utama meskipun bekerja pada beberapa organisasi. |
+| Business Value      | Menghindari duplikasi akun dan mempermudah pengelolaan identitas.                            |
+| Acceptance Criteria | Setiap pengguna memiliki Global User ID yang unik dan tidak dapat diduplikasi.               |
+
+---
+
+## BR-012 – User Account Management
+
+| Attribute           | Description                                                                                                                       |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-012                                                                                                                            |
+| Requirement Name    | User Account Management                                                                                                           |
+| Priority            | Critical                                                                                                                          |
+| Description         | Sistem harus mendukung pembuatan, perubahan, penonaktifan, penguncian, dan penghapusan akun pengguna sesuai kebijakan organisasi. |
+| Acceptance Criteria | Status akun dapat berubah tanpa menghilangkan riwayat aktivitas pengguna.                                                         |
+
+---
+
+## BR-013 – Multiple Organization Assignment
+
+| Attribute           | Description                                                                         |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| Requirement ID      | BR-013                                                                              |
+| Requirement Name    | Multiple Organization Assignment                                                    |
+| Priority            | Critical                                                                            |
+| Description         | Seorang pengguna dapat ditugaskan pada satu atau lebih organisasi secara bersamaan. |
+| Business Value      | Mendukung pengguna lintas perusahaan atau lintas unit organisasi.                   |
+| Acceptance Criteria | Sistem mampu menyimpan lebih dari satu penugasan organisasi untuk satu pengguna.    |
+
+---
+
+## BR-014 – Primary Organization
+
+| Attribute        | Description                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-014                                                                                                            |
+| Requirement Name | Primary Organization                                                                                              |
+| Priority         | High                                                                                                              |
+| Description      | Sistem harus memungkinkan penetapan satu organisasi utama (*Primary Organization*) sebagai konteks kerja default. |
+
+---
+
+## BR-015 – Employment Type
+
+| Attribute        | Description                                                                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-015                                                                                                                                                           |
+| Requirement Name | Employment Type                                                                                                                                                  |
+| Priority         | High                                                                                                                                                             |
+| Description      | Sistem harus mendukung berbagai jenis hubungan kerja seperti Pegawai Tetap, Pegawai Kontrak, Magang, Konsultan, Vendor, dan jenis lain yang dapat dikonfigurasi. |
+
+---
+
+## BR-016 – User Status Management
+
+| Attribute        | Description                                                                                                 |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-016                                                                                                      |
+| Requirement Name | User Status Management                                                                                      |
+| Priority         | High                                                                                                        |
+| Description      | Sistem harus mendukung status Draft, Pending Activation, Active, Suspended, Locked, Inactive, dan Archived. |
+
+---
+
+## BR-017 – User Profile Management
+
+| Attribute        | Description                                                                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-017                                                                                                                                                           |
+| Requirement Name | User Profile Management                                                                                                                                          |
+| Priority         | Medium                                                                                                                                                           |
+| Description      | Sistem harus menyimpan informasi profil pengguna seperti nama, email, nomor telepon, jabatan, foto, preferensi bahasa, zona waktu, dan informasi kontak lainnya. |
+
+---
+
+## BR-018 – Authentication Support
+
+| Attribute        | Description                                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID   | BR-018                                                                                                                                     |
+| Requirement Name | Authentication Support                                                                                                                     |
+| Priority         | Critical                                                                                                                                   |
+| Description      | Sistem harus mendukung autentikasi menggunakan username, email, Single Sign-On (SSO), atau metode lain yang dikonfigurasi oleh organisasi. |
+
+---
+
+## BR-019 – Password & Credential Policy
+
+| Attribute        | Description                                                                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-019                                                                                                                                          |
+| Requirement Name | Password & Credential Policy                                                                                                                    |
+| Priority         | High                                                                                                                                            |
+| Description      | Sistem harus menerapkan kebijakan keamanan kredensial, termasuk kompleksitas kata sandi, masa berlaku, riwayat kata sandi, dan mekanisme reset. |
+
+---
+
+## BR-020 – User Audit Information
+
+| Attribute        | Description                                                                                                                                                                      |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-020                                                                                                                                                                           |
+| Requirement Name | User Audit Information                                                                                                                                                           |
+| Priority         | High                                                                                                                                                                             |
+| Description      | Sistem harus mencatat informasi audit seperti waktu login, logout, perubahan profil, perubahan status akun, serta aktivitas administratif yang dilakukan terhadap akun pengguna. |
+
+---
+
+# 9.2.3 User Business Rules Reference
+
+| Business Rule ID | Description                                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| BRule-USR-001    | Setiap pengguna memiliki Global User ID yang unik.                                                                                         |
+| BRule-USR-002    | Satu pengguna dapat memiliki lebih dari satu penugasan organisasi.                                                                         |
+| BRule-USR-003    | Setiap pengguna memiliki satu Primary Organization sebagai konteks default.                                                                |
+| BRule-USR-004    | Akun yang dinonaktifkan tidak dapat digunakan untuk autentikasi, namun histori aktivitas tetap dipertahankan.                              |
+| BRule-USR-005    | Perubahan status akun harus tercatat pada audit trail.                                                                                     |
+| BRule-USR-006    | Informasi identitas pengguna tidak boleh dihapus secara permanen apabila masih memiliki transaksi yang menjadi bagian dari histori bisnis. |
+
+---
+
+# 9.2.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process          |
+| -------------- | ------------------ | ----------- | ----------------------- |
+| BR-011         | BO-001             | SH-006      | Identity Management     |
+| BR-012         | BO-001             | SH-006      | User Administration     |
+| BR-013         | BO-002             | SH-007      | Organization Assignment |
+| BR-014         | BO-002             | SH-007      | User Context            |
+| BR-015         | BO-005             | SH-005      | Employment Management   |
+| BR-016         | BO-007             | SH-006      | User Lifecycle          |
+| BR-017         | BO-001             | SH-006      | User Profile            |
+| BR-018         | BO-028             | SH-006      | Authentication          |
+| BR-019         | BO-028             | SH-006      | Credential Management   |
+| BR-020         | BO-028             | SH-010      | Audit & Compliance      |
+
+---
+
+# 9.2.5 Summary
+
+Modul **User Management** bertanggung jawab atas pengelolaan identitas, akun, dan hubungan pengguna dengan organisasi. Modul ini menjadi dasar bagi mekanisme autentikasi, penugasan organisasi, pengendalian akses, audit trail, serta integrasi dengan modul Authorization, Workflow, Human Resource Management (HRM), dan Security.
+
+Seluruh kebutuhan pada bagian ini akan diturunkan menjadi Functional Requirements, desain data, spesifikasi API, serta skenario pengujian pada dokumen lanjutan.

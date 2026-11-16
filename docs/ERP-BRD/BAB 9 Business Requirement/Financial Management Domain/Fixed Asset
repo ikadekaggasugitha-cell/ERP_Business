@@ -1,0 +1,174 @@
+# 9.5.7 Fixed Asset Requirements
+
+---
+
+# 9.5.7.1 Overview
+
+Fixed Asset Requirements mengatur pengelolaan aset tetap dari perspektif keuangan, mencakup seluruh siklus hidup aset mulai dari kapitalisasi, perhitungan dan pencatatan penyusutan (depreciation), revaluasi, transfer antar Financial Organization, hingga penghapusan (disposal), beserta dampak akuntansinya terhadap General Ledger.
+
+Setiap aset tetap wajib terhubung ke Financial Organization tertentu sebagai basis kepemilikan akuntansi, sehingga seluruh transaksi terkait aset — baik kapitalisasi, penyusutan, revaluasi, transfer, maupun disposal — dapat ditelusuri dan dikonsolidasikan sesuai struktur organisasi keuangan grup perusahaan tanpa memerlukan perubahan source code aplikasi.
+
+---
+
+# 9.5.7.2 Business Requirement Catalogue
+
+## BR-586 – Fixed Asset Master Data
+
+| Attribute           | Description                                                                                                                                                                                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-586                                                                                                                                                                                                                                                                              |
+| Requirement Name    | Fixed Asset Master Data                                                                                                                                                                                                                                                             |
+| Category            | Fixed Asset Master                                                                                                                                                                                                                                                                  |
+| Priority            | Critical                                                                                                                                                                                                                                                                            |
+| Business Objective  | BO-004, BO-022                                                                                                                                                                                                                                                                      |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer), SH-038 (Asset Management Department)                                                                                                                                                                                                             |
+| Description         | Sistem harus menyediakan master data Fixed Asset yang mencatat seluruh atribut aset tetap secara terpusat, meliputi nomor aset, deskripsi, kategori aset, tanggal perolehan, nilai perolehan (acquisition cost), umur manfaat (useful life), nilai residu (salvage value), metode penyusutan, Financial Organization pemilik, serta akun GL terkait (Asset Account, Accumulated Depreciation Account, Depreciation Expense Account). |
+| Business Rationale  | Tanpa master data aset tetap yang terpusat dan lengkap, organisasi tidak memiliki basis data yang konsisten untuk perhitungan penyusutan, pelaporan keuangan, dan audit aset, sehingga berisiko menimbulkan duplikasi pencatatan serta ketidaksesuaian antara catatan fisik dan catatan akuntansi.       |
+| Business Value      | Menjadi fondasi single source of truth bagi seluruh proses lanjutan (kapitalisasi, penyusutan, revaluasi, transfer, disposal) serta mendukung akurasi laporan keuangan dan audit trail aset tetap.                                                                                |
+| Acceptance Criteria | Administrator dapat membuat, mengubah, mengaktifkan, dan menonaktifkan record Fixed Asset dengan atribut wajib lengkap; setiap Fixed Asset harus terhubung ke tepat satu Financial Organization dan satu set akun GL yang valid; sistem menolak penyimpanan record yang tidak memiliki metode penyusutan dan umur manfaat terdefinisi. |
+
+---
+
+## BR-587 – Asset Capitalization
+
+| Attribute           | Description                                                                                                                                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-587                                                                                                                                                                                                                        |
+| Requirement Name    | Asset Capitalization                                                                                                                                                                                                          |
+| Priority            | Critical                                                                                                                                                                                                                      |
+| Description         | Sistem harus mendukung proses kapitalisasi aset dari transaksi pengadaan (purchase, construction in progress/CIP, atau kontribusi aset) menjadi Fixed Asset aktif, termasuk penentuan tanggal mulai penyusutan (depreciation start date) dan pembentukan jurnal kapitalisasi otomatis ke General Ledger. |
+| Acceptance Criteria | Pengguna dapat mengkapitalisasi aset dari dokumen sumber (Purchase Order/Invoice/CIP) menjadi Fixed Asset baru; sistem menghasilkan jurnal debit Asset Account dan kredit akun sumber sesuai Financial Organization; kapitalisasi parsial dari CIP didukung.                    |
+
+---
+
+## BR-588 – Depreciation Method Configuration
+
+| Attribute           | Description                                                                                                                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-588                                                                                                                                                                                 |
+| Requirement Name    | Depreciation Method Configuration                                                                                                                                                      |
+| Priority            | Critical                                                                                                                                                                               |
+| Description         | Sistem harus menyediakan konfigurasi metode penyusutan yang dapat dipilih per kategori aset atau per aset individual, meliputi minimal Straight Line, Declining Balance, dan Units of Production, tanpa memerlukan perubahan source code. |
+| Acceptance Criteria | Administrator dapat mendefinisikan dan mengonfigurasi parameter metode penyusutan (umur manfaat, tarif, kapasitas produksi) per kategori aset; sistem menghitung hasil penyusutan secara konsisten sesuai metode yang dipilih.        |
+
+---
+
+## BR-589 – Depreciation Calculation and GL Posting
+
+| Attribute           | Description                                                                                                                                                                                                                    |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-589                                                                                                                                                                                                                        |
+| Requirement Name    | Depreciation Calculation and GL Posting                                                                                                                                                                                      |
+| Priority            | Critical                                                                                                                                                                                                                      |
+| Description         | Sistem harus dapat menjalankan proses perhitungan penyusutan secara periodik (bulanan) untuk seluruh aset aktif sesuai Fiscal Calendar Financial Organization masing-masing, serta memposting jurnal penyusutan (debit Depreciation Expense, kredit Accumulated Depreciation) ke General Ledger secara otomatis. |
+| Acceptance Criteria | Sistem menjalankan proses depreciation run terjadwal atau on-demand per periode; jurnal penyusutan diposting sesuai Financial Organization dan Cost Center/Profit Center kepemilikan aset; depreciation run yang telah diposting tidak dapat dijalankan ulang pada periode yang sama tanpa reversal.       |
+
+---
+
+## BR-590 – Asset Revaluation
+
+| Attribute           | Description                                                                                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-590                                                                                                                                                                                         |
+| Requirement Name    | Asset Revaluation                                                                                                                                                                              |
+| Priority            | High                                                                                                                                                                                            |
+| Description         | Sistem harus mendukung proses revaluasi aset tetap, baik peningkatan (appraisal increase) maupun penurunan nilai, berdasarkan kebijakan revaluasi organisasi, termasuk pembentukan jurnal revaluation surplus/reserve dan penyesuaian nilai buku serta beban penyusutan ke depan. |
+| Acceptance Criteria | Pengguna dengan otorisasi dapat mencatat revaluasi aset dengan nilai baru dan tanggal efektif; sistem menghasilkan jurnal penyesuaian sesuai kebijakan akuntansi yang berlaku; proses revaluasi tunduk pada approval workflow.   |
+
+---
+
+## BR-591 – Asset Transfer Between Financial Organization
+
+| Attribute           | Description                                                                                                                                                                                                       |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-591                                                                                                                                                                                                           |
+| Requirement Name    | Asset Transfer Between Financial Organization                                                                                                                                                                    |
+| Priority            | High                                                                                                                                                                                                              |
+| Description         | Sistem harus mendukung transfer aset tetap antar Financial Organization, termasuk lintas Company, Business Unit, maupun Branch, dengan pemindahan kepemilikan akuntansi aset beserta akumulasi penyusutannya, serta menghasilkan jurnal transfer pada Financial Organization asal maupun tujuan. |
+| Acceptance Criteria | Pengguna dapat mencatat transfer aset dengan Financial Organization asal dan tujuan; sistem menghasilkan jurnal double-entry pada kedua Financial Organization; riwayat transfer aset tercatat pada asset history log.        |
+
+---
+
+## BR-592 – Asset Disposal
+
+| Attribute           | Description                                                                                                                                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-592                                                                                                                                                                                                                         |
+| Requirement Name    | Asset Disposal                                                                                                                                                                                                                  |
+| Priority            | Critical                                                                                                                                                                                                                        |
+| Description         | Sistem harus mendukung proses penghapusan aset tetap (disposal) melalui penjualan, scrapping, atau write-off, dengan perhitungan otomatis keuntungan/kerugian pelepasan aset (gain/loss on disposal) berdasarkan nilai buku dan nilai pelepasan, serta pembentukan jurnal disposal ke General Ledger. |
+| Acceptance Criteria | Pengguna dapat memproses disposal dengan berbagai metode (sale, scrap, write-off); sistem menghitung dan memposting gain/loss on disposal secara otomatis; aset yang telah didisposal berubah status menjadi non-aktif dan tidak lagi disertakan dalam depreciation run. |
+
+---
+
+## BR-593 – Asset Component and Sub-Asset Management
+
+| Attribute           | Description                                                                                                                                                                                       |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-593                                                                                                                                                                                           |
+| Requirement Name    | Asset Component and Sub-Asset Management                                                                                                                                                         |
+| Priority            | Medium                                                                                                                                                                                            |
+| Description         | Sistem harus mendukung pengelolaan komponen atau sub-aset dari satu aset induk (parent-child asset), dengan kemampuan penyusutan terpisah per komponen apabila memiliki umur manfaat yang berbeda (component accounting).      |
+| Acceptance Criteria | Pengguna dapat menambahkan komponen aset di bawah aset induk; setiap komponen dapat memiliki metode dan umur manfaat penyusutan tersendiri; penyusutan komponen terkonsolidasi pada laporan aset induk.          |
+
+---
+
+## BR-594 – Asset Impairment
+
+| Attribute           | Description                                                                                                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-594                                                                                                                                                                                        |
+| Requirement Name    | Asset Impairment                                                                                                                                                                              |
+| Priority            | Medium                                                                                                                                                                                          |
+| Description         | Sistem harus mendukung pencatatan impairment aset tetap ketika nilai buku aset melebihi nilai terpulihkan (recoverable amount), termasuk pembentukan jurnal impairment loss dan penyesuaian dasar penyusutan ke depan. |
+| Business Value      | Memastikan nilai aset yang dilaporkan mencerminkan kondisi ekonomi terkini sesuai prinsip akuntansi konservatif dan mendukung akurasi laporan keuangan.                                        |
+| Acceptance Criteria | Pengguna dengan otorisasi dapat mencatat impairment test beserta hasilnya; sistem menghasilkan jurnal impairment loss; nilai buku aset pasca-impairment menjadi dasar perhitungan penyusutan periode berikutnya. |
+
+---
+
+## BR-595 – Fixed Asset Register and Reporting
+
+| Attribute           | Description                                                                                                                                                                                                              |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-595                                                                                                                                                                                                                  |
+| Requirement Name    | Fixed Asset Register and Reporting                                                                                                                                                                                       |
+| Priority            | High                                                                                                                                                                                                                      |
+| Description         | Sistem harus menyediakan Fixed Asset Register yang menampilkan seluruh informasi aset (nilai perolehan, akumulasi penyusutan, nilai buku, status, lokasi, Financial Organization) serta laporan rekonsiliasi antara Fixed Asset Register dengan saldo akun aset tetap pada General Ledger. |
+| Acceptance Criteria | Sistem menyediakan laporan Fixed Asset Register yang dapat difilter per Financial Organization, kategori aset, dan periode; sistem menyediakan laporan rekonsiliasi otomatis antara subledger aset tetap dan General Ledger; selisih rekonsiliasi, jika ada, ditampilkan sebagai exception. |
+
+---
+
+# 9.5.7.3 Fixed Asset Business Rules
+
+| Business Rule ID | Description                                                                                                                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-FA-001      | Setiap aset tetap wajib terhubung ke Financial Organization dan Chart of Account (Asset Account, Accumulated Depreciation Account, Depreciation Expense Account) tertentu sebelum dapat dikapitalisasi. |
+| BRule-FA-002      | Nilai penyusutan tidak boleh menyebabkan nilai buku aset (net book value) menjadi negatif; perhitungan penyusutan wajib memperhitungkan nilai residu (salvage value).            |
+| BRule-FA-003      | Perubahan metode penyusutan atau umur manfaat pada aset yang telah berjalan hanya berlaku prospektif mulai periode perubahan disetujui, tanpa mengubah pencatatan penyusutan periode sebelumnya. |
+| BRule-FA-004      | Transfer aset antar Financial Organization wajib menghasilkan jurnal double-entry pada Financial Organization asal maupun tujuan secara bersamaan.                              |
+| BRule-FA-005      | Aset dengan status "Disposed" tidak dapat lagi disertakan dalam proses depreciation run berikutnya.                                                                              |
+| BRule-FA-006      | Revaluasi aset wajib melalui approval workflow sesuai authority matrix dan menghasilkan jurnal revaluation surplus/reserve pada Financial Organization pemilik aset.             |
+| BRule-FA-007      | Jurnal penyusutan, transfer, revaluasi, dan disposal pada periode akuntansi yang telah ditutup (period closed) bersifat final dan hanya dapat dikoreksi melalui reversal pada periode berjalan. |
+
+---
+
+# 9.5.7.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder      | Future Process                              |
+| -------------- | ------------------- | ---------------- | -------------------------------------------- |
+| BR-586         | BO-004, BO-022      | SH-003, SH-038   | Fixed Asset Master Administration            |
+| BR-587         | BO-004, BO-022      | SH-003, SH-038   | Asset Capitalization Processing              |
+| BR-588         | BO-022              | SH-038           | Depreciation Method Configuration            |
+| BR-589         | BO-022              | SH-003, SH-038   | Depreciation Run and GL Posting              |
+| BR-590         | BO-022              | SH-003, SH-038   | Asset Revaluation Processing                 |
+| BR-591         | BO-004, BO-022      | SH-038           | Asset Transfer Processing                    |
+| BR-592         | BO-022              | SH-003, SH-038   | Asset Disposal Processing                    |
+| BR-593         | BO-004              | SH-038           | Asset Component Management                   |
+| BR-594         | BO-022              | SH-003, SH-038   | Asset Impairment Assessment                  |
+| BR-595         | BO-004, BO-022      | SH-003, SH-038   | Fixed Asset Reporting and Reconciliation      |
+
+---
+
+# 9.5.7.5 Summary
+
+Fixed Asset Requirements menyediakan kerangka kerja pengelolaan aset tetap yang terintegrasi dengan Financial Organization, Chart of Account, dan General Ledger, sehingga seluruh proses kapitalisasi, penyusutan, revaluasi, transfer, dan disposal aset tercatat secara akurat, konsisten, dan dapat diaudit. Seluruh requirement pada bagian ini menjadi dasar bagi desain proses bisnis dan spesifikasi teknis pengelolaan aset tetap pada dokumen berikutnya.

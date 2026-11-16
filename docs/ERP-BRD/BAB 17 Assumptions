@@ -1,0 +1,87 @@
+# BAB 17. Assumptions
+
+## 17.1 Overview
+
+Assumptions merupakan kumpulan pernyataan yang **dianggap benar** pada saat perencanaan dan estimasi proyek Enterprise Resource Planning (ERP) disusun, tanpa perlu dibuktikan lebih dahulu melalui verifikasi formal. Asumsi digunakan sebagai dasar penyusunan ruang lingkup (Business Scope), estimasi timeline, alokasi sumber daya, serta strategi implementasi bertahap (*phased implementation*).
+
+Tujuan utama bab ini adalah:
+
+* Mendokumentasikan kondisi yang diasumsikan berlaku selama perencanaan proyek.
+* Memberikan dasar yang transparan bagi seluruh stakeholder mengenai kondisi prasyarat proyek.
+* Menjadi rujukan apabila terjadi penyimpangan kondisi aktual dari asumsi yang ditetapkan, sehingga dampaknya dapat dievaluasi lebih dini.
+* Menjadi masukan bagi manajemen risiko proyek, karena setiap asumsi yang tidak valid berpotensi menjadi risiko.
+
+Apabila salah satu asumsi pada bab ini terbukti tidak valid pada saat pelaksanaan proyek, maka Project Steering Committee wajib melakukan evaluasi ulang terhadap ruang lingkup, jadwal, dan/atau anggaran proyek melalui mekanisme **Change Request (CR)**.
+
+---
+
+## 17.2 Organizational Assumptions
+
+Asumsi terkait struktur dan proses organisasi menjadi dasar penting mengingat ERP dirancang dengan prinsip **Organization Tree First** dan mendukung struktur berjenjang (Holding, Sub Holding, Company, Branch). Perencanaan proyek mengasumsikan bahwa organisasi bersifat dinamis namun tetap dapat dipetakan ke dalam struktur konfigurasi ERP.
+
+* **ASM-001** – Struktur organisasi (Holding, Sub Holding, Company, Branch, Department, dan level turunan lainnya) dapat berubah sewaktu-waktu mengikuti kebutuhan bisnis, dan perubahan tersebut diasumsikan dapat diakomodasi melalui konfigurasi tanpa mengubah source code.
+* **ASM-002** – Setiap entitas organisasi (Company/Sub Holding) dapat memiliki proses bisnis, kebijakan, dan aturan approval yang berbeda satu sama lain, sehingga desain solusi diasumsikan cukup fleksibel untuk mengakomodasi variasi tersebut melalui konfigurasi per unit organisasi.
+* **ASM-003** – Data organisasi *existing* (struktur unit, data master, histori transaksi) tersedia dalam bentuk yang dapat diverifikasi dan digunakan sebagai bahan migrasi data ke sistem ERP baru.
+
+---
+
+## 17.3 Technical Assumptions
+
+Asumsi teknis berkaitan dengan kesiapan infrastruktur, ketersediaan integrasi, dan kualitas data sebagai fondasi teknis implementasi ERP yang bersifat modular dan berbasis konfigurasi.
+
+* **ASM-004** – Infrastruktur teknologi (baik *cloud* maupun *on-premise*) tersedia sesuai kebutuhan kapasitas, keamanan, dan performa yang dipersyaratkan oleh solusi ERP, serta dapat disediakan sesuai jadwal implementasi.
+* **ASM-005** – Sistem pihak ketiga yang perlu diintegrasikan (misalnya payment gateway, sistem perbankan, sistem perpajakan, atau sistem legacy) menyediakan API yang stabil, terdokumentasi, dan dapat diakses selama masa proyek maupun pasca *go-live*.
+* **ASM-006** – Data historis dari sistem yang digunakan saat ini tersedia dalam format terstruktur (basis data, spreadsheet, atau ekspor sistem lain) yang memungkinkan proses ekstraksi, transformasi, dan pemuatan (ETL) ke dalam ERP baru tanpa memerlukan rekonstruksi data dari awal.
+* **ASM-013** – Tim pengembangan memiliki (atau dapat dilatih untuk mencapai) kompetensi pada tumpukan teknologi standar yang ditetapkan (BAB 4.6.1): **Go (Golang)**, **React 19**, **Apache Kafka**, dan **PostgreSQL**, sesuai jadwal implementasi bertahap.
+* **ASM-014** – Platform infrastruktur pendukung tumpukan teknologi tersedia dalam konfigurasi *high-availability* dan dikelola secara **self-managed** (ADR-004) melalui *operator* Kubernetes — mencakup klaster **Kubernetes**, **PostgreSQL** (primary–standby dengan PITR), **Apache Kafka** (minimum 3 broker), **Kong**, dan **Apicurio** — sesuai target NFR-004, NFR-005, dan NFR-028. Organisasi mengasumsikan ketersediaan **Platform/DevOps Team** yang kompeten untuk menjalankan tanggung jawab operasional infrastruktur self-managed tersebut.
+
+---
+
+## 17.4 Resource Assumptions
+
+Keberhasilan proyek ERP sangat bergantung pada ketersediaan sumber daya manusia dan komitmen anggaran dari organisasi. Perencanaan proyek mengasumsikan dukungan penuh dari internal organisasi selama siklus proyek berlangsung.
+
+* **ASM-007** – Tim internal organisasi tersedia dan dialokasikan secara memadai untuk berpartisipasi dalam kegiatan User Acceptance Test (UAT), pelatihan (*training*), serta transisi pengetahuan (*knowledge transfer*) sesuai jadwal yang disepakati.
+* **ASM-008** – *Business owner* dari masing-masing unit bisnis tersedia untuk melakukan validasi requirement, memberikan keputusan atas *business rule*, dan menyetujui hasil konfigurasi pada setiap tahapan implementasi.
+* **ASM-009** – Anggaran proyek telah disetujui oleh manajemen dan dialokasikan sesuai dengan timeline implementasi bertahap (*phased*), tanpa terjadi pemotongan anggaran yang signifikan di tengah pelaksanaan proyek.
+
+---
+
+## 17.5 Business Process Assumptions
+
+Asumsi proses bisnis berkaitan dengan sejauh mana proses bisnis lintas unit organisasi dapat diselaraskan (*standardized*) melalui pendekatan **Configuration over Customization**, tanpa mengabaikan kebutuhan spesifik masing-masing unit.
+
+* **ASM-010** – Proses bisnis inti (*core process*) dapat distandardisasi lintas Holding/Sub Holding/Company/Branch melalui template proses dan konfigurasi, tanpa mengorbankan kebutuhan spesifik lokal yang bersifat material terhadap operasional unit tersebut.
+* **ASM-011** – Hierarki persetujuan (*approval hierarchy*) pada setiap organisasi dapat dipetakan secara memadai ke dalam *workflow engine* yang bersifat *configurable*, termasuk skenario eskalasi maupun delegasi wewenang.
+* **ASM-012** – Kebijakan dan Standard Operating Procedure (SOP) yang berlaku saat ini telah terdokumentasi atau dapat didokumentasikan ulang bersama tim internal, sehingga dapat dijadikan acuan konfigurasi proses dalam ERP.
+
+---
+
+## 17.6 Assumption Register
+
+Tabel berikut merangkum seluruh asumsi proyek beserta kategori dan risiko apabila asumsi tersebut terbukti tidak valid.
+
+| Assumption ID | Description                                                                             | Category            | Risk if Invalid                                                             |
+| ------------- | ---------------------------------------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------- |
+| ASM-001       | Struktur organisasi dapat berubah sewaktu-waktu dan diakomodasi via konfigurasi           | Organizational        | Perubahan struktur memerlukan modifikasi source code, timeline melebar       |
+| ASM-002       | Setiap perusahaan dapat memiliki proses bisnis berbeda                                    | Organizational        | Solusi generik tidak dapat mengakomodasi kebutuhan lokal, muncul CR tambahan  |
+| ASM-003       | Data organisasi *existing* tersedia untuk migrasi                                         | Organizational        | Migrasi data tertunda, kualitas data awal ERP rendah                          |
+| ASM-004       | Infrastruktur cloud/on-premise tersedia sesuai kebutuhan                                  | Technical             | Kinerja sistem tidak sesuai target, jadwal go-live tertunda                   |
+| ASM-005       | Integrasi API pihak ketiga tersedia dan stabil                                            | Technical             | Modul integrasi gagal berfungsi, proses bisnis manual kembali diperlukan      |
+| ASM-006       | Data historis dalam format yang dapat dimigrasikan                                        | Technical             | Effort migrasi data membengkak, risiko kehilangan data historis              |
+| ASM-013       | Tim memiliki/dapat dilatih kompetensi Go, React, Kafka, PostgreSQL                          | Technical             | Kurva belajar memperlambat pengembangan, kualitas kode & desain menurun       |
+| ASM-014       | Infrastruktur HA untuk Kubernetes, PostgreSQL, dan Kafka tersedia                          | Technical             | Target ketersediaan (NFR-004/005) dan DR (NFR-028) tidak tercapai             |
+| ASM-007       | Tim internal tersedia untuk UAT dan pelatihan                                             | Resource               | UAT tidak representatif, adopsi pengguna rendah pasca go-live                 |
+| ASM-008       | Business owner tersedia untuk validasi requirement                                       | Resource               | Requirement salah interpretasi, rework konfigurasi meningkat                  |
+| ASM-009       | Budget proyek disetujui sesuai timeline                                                  | Resource               | Fase implementasi tertunda atau ruang lingkup harus dikurangi                 |
+| ASM-010       | Proses bisnis dapat distandardisasi lintas unit tanpa mengorbankan kebutuhan lokal        | Business Process       | Resistensi pengguna, permintaan kustomisasi di luar prinsip konfigurasi       |
+| ASM-011       | Approval hierarchy dapat dipetakan ke dalam workflow configurable                         | Business Process       | Workflow tidak mencerminkan kebijakan aktual, proses persetujuan terhambat    |
+| ASM-012       | SOP terdokumentasi atau dapat didokumentasikan ulang bersama tim internal                 | Business Process       | Konfigurasi proses tidak akurat, kebutuhan revisi berulang selama UAT         |
+
+---
+
+## 17.7 Summary
+
+Assumptions pada bab ini menjadi fondasi bagi seluruh perencanaan proyek ERP, mulai dari estimasi ruang lingkup, jadwal, anggaran, hingga strategi implementasi bertahap. Setiap asumsi bersifat sementara dan wajib dipantau secara berkala sepanjang siklus proyek.
+
+Apabila terdapat perubahan kondisi yang menyebabkan salah satu asumsi tidak lagi valid, Project Manager bersama Project Steering Committee wajib melakukan evaluasi dampak terhadap ruang lingkup, jadwal, dan anggaran, serta menetapkan tindak lanjut melalui mekanisme Change Request (CR) sesuai kebijakan *Change Management* proyek.

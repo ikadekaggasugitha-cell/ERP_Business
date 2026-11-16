@@ -1,0 +1,261 @@
+# BAB 3. Core and Platform Domain Schema
+
+## 3.1 Overview
+
+Bab ini mendesain basis data domain **Platform/Core** (SAD BAB 4.6): Organization, User, Security, Workflow, Master Data, dan Audit. Domain ini menyediakan fondasi yang dikonsumsi seluruh modul lain — khususnya **Organization Tree** dan **Scope-Based Access** yang menjadi basis `organization_id` pada Common Columns (BAB 2.4). Seluruh tabel mengikuti standar BAB 2.
+
+---
+
+## 3.2 Organization Management (`org_db`)
+
+Merealisasikan BRD 9.1 (BR-001 s.d. BR-0xx): hierarki tanpa batas level (BR-001), tipe organisasi konfigurabel (BR-002), parent–child (BR-003), lifecycle (BR-004), kode unik (BR-005).
+
+```mermaid
+erDiagram
+  ORGANIZATION_TYPE ||--o{ ORGANIZATION : classifies
+  ORGANIZATION ||--o{ ORGANIZATION : "parent-child"
+  ORGANIZATION ||--o{ ORGANIZATION_CLOSURE : "ancestor/descendant"
+  ORGANIZATION ||--o{ ORGANIZATION_ATTRIBUTE : has
+```
+
+### `org.organization_type` — DBS-008 applied
+
+| Column        | Type         | Null | Key | Description                                         |
+| ------------- | ------------ | ---- | --- | --------------------------------------------------- |
+| `code`        | VARCHAR(50)  | No   | U   | Kode tipe (Holding, Company, Branch, dst.) — konfigurabel (BR-002). |
+| `name`        | VARCHAR(150) | No   |     | Nama tipe organisasi.                               |
+| `level_hint`  | INTEGER      | Yes  |     | Urutan/level indikatif (opsional, bukan pembatas).  |
+| `is_active`   | BOOLEAN      | No   |     | Status aktif.                                       |
+
+### `org.organization`
+
+| Column           | Type         | Null | Key      | Description                                                    |
+| ---------------- | ------------ | ---- | -------- | -------------------------------------------------------------- |
+| `code`           | VARCHAR(50)  | No   | U(org)   | Kode unik organisasi (BR-005), unik per scope induk/tenant.    |
+| `name`           | VARCHAR(200) | No   |          | Nama organisasi (BR-006).                                      |
+| `organization_type_id`| UUID    | No   | FK(→org.organization_type) | Tipe organisasi.                            |
+| `parent_id`      | UUID         | Yes  | FK(→org.organization) | Induk (NULL = root); membentuk Organization Tree (BR-003). |
+| `path`           | TEXT         | No   | IDX      | Materialized path (mis. `/root/sub/company`) untuk query scope. |
+| `status`         | VARCHAR(20)  | No   |          | Lifecycle: Draft/Active/Inactive/Merge/Split/Archived (BR-004).|
+| `effective_from` | DATE         | No   |          | Awal berlaku (DBS-016).                                        |
+| `effective_to`   | DATE         | Yes  |          | Akhir berlaku.                                                 |
+
+> Catatan: `organization_id` pada Common Columns tabel ini merujuk pada tenant/holding pemilik; `parent_id` merepresentasikan hierarki internal.
+
+### `org.organization_closure` (closure table untuk traversal cepat)
+
+| Column          | Type    | Null | Key | Description                                    |
+| --------------- | ------- | ---- | --- | ---------------------------------------------- |
+| `ancestor_id`   | UUID    | No   | PK,FK| Leluhur.                                       |
+| `descendant_id` | UUID    | No   | PK,FK| Keturunan.                                     |
+| `depth`         | INTEGER | No   |     | Jarak level (0 = diri sendiri).                |
+
+### `org.organization_attribute` (atribut fleksibel per tipe)
+
+| Column        | Type         | Null | Key | Description                          |
+| ------------- | ------------ | ---- | --- | ------------------------------------ |
+| `organization_ref_id`| UUID  | No   | FK  | Organisasi terkait.                  |
+| `attr_key`    | VARCHAR(100) | No   |     | Nama atribut.                        |
+| `attr_value`  | JSONB        | No   |     | Nilai atribut (fleksibel).           |
+
+**Indeks & partisi:** `uq_organization_org_code (organization_id, code)`; `idx_organization_parent (parent_id)`; `idx_organization_path (path)`. Tidak dipartisi (volume moderat).
+
+---
+
+## 3.3 User Management (`user_db`)
+
+Merealisasikan BRD 9.2: identitas pengguna, kredensial (federasi IdP), penugasan akses ber-scope.
+
+```mermaid
+erDiagram
+  APP_USER ||--o{ USER_ORG_ASSIGNMENT : assigned_to
+  APP_USER ||--o{ USER_IDENTITY : authenticates_via
+```
+
+### `usr.app_user`
+
+| Column          | Type         | Null | Key | Description                                            |
+| --------------- | ------------ | ---- | --- | ------------------------------------------------------ |
+| `username`      | VARCHAR(100) | No   | U   | Nama pengguna unik.                                    |
+| `email`         | VARCHAR(255) | No   | U   | Email (dari IdP).                                      |
+| `full_name`     | VARCHAR(200) | No   |     | Nama lengkap.                                          |
+| `status`        | VARCHAR(20)  | No   |     | Active/Suspended/Inactive.                            |
+| `default_organization_id`| UUID| Yes  | FK  | Organisasi default konteks login.                     |
+
+### `usr.user_identity` (federasi/SSO — INT-012)
+
+| Column          | Type         | Null | Key | Description                                            |
+| --------------- | ------------ | ---- | --- | ------------------------------------------------------ |
+| `user_id`       | UUID         | No   | FK  | Pengguna.                                              |
+| `provider`      | VARCHAR(50)  | No   |     | IdP (azure-ad/google/ldap).                           |
+| `subject`       | VARCHAR(255) | No   | U   | Subject/claim identitas pada IdP.                     |
+
+### `usr.user_org_assignment` (akses ber-scope)
+
+| Column          | Type    | Null | Key | Description                                            |
+| --------------- | ------- | ---- | --- | ------------------------------------------------------ |
+| `user_id`       | UUID    | No   | FK  | Pengguna.                                              |
+| `organization_ref_id`| UUID| No  | IDX | Organisasi/scope yang boleh diakses.                  |
+| `role_id`       | UUID    | No   |     | Referensi logis peran (`security_db`).                |
+
+> Tidak menyimpan *password*; autentikasi didelegasikan ke IdP (SAD BAB 7.3).
+
+---
+
+## 3.4 Security Management (`security_db`)
+
+Merealisasikan BRD 9.4 (BR-031 s.d. BR-040): RBAC & Scope-Based Access.
+
+```mermaid
+erDiagram
+  ROLE ||--o{ ROLE_PERMISSION : grants
+  PERMISSION ||--o{ ROLE_PERMISSION : included_in
+  ROLE ||--o{ ROLE_SCOPE : scoped_by
+```
+
+### `sec.role`
+
+| Column     | Type         | Null | Key | Description                          |
+| ---------- | ------------ | ---- | --- | ------------------------------------ |
+| `code`     | VARCHAR(50)  | No   | U   | Kode peran.                          |
+| `name`     | VARCHAR(150) | No   |     | Nama peran.                          |
+| `is_system`| BOOLEAN      | No   |     | Peran bawaan sistem (tak terhapus).  |
+
+### `sec.permission`
+
+| Column     | Type         | Null | Key | Description                                   |
+| ---------- | ------------ | ---- | --- | --------------------------------------------- |
+| `code`     | VARCHAR(100) | No   | U   | Kode izin (mis. `gl.journal.post`).           |
+| `module`   | VARCHAR(50)  | No   |     | Modul terkait.                                |
+| `action`   | VARCHAR(50)  | No   |     | Aksi (create/read/update/delete/approve).     |
+
+### `sec.role_permission`
+
+| Column         | Type | Null | Key | Description                |
+| -------------- | ---- | ---- | --- | -------------------------- |
+| `role_id`      | UUID | No   | PK,FK| Peran.                     |
+| `permission_id`| UUID | No   | PK,FK| Izin.                      |
+
+### `sec.role_scope` (Scope-Based Access — BR-031)
+
+| Column         | Type    | Null | Key | Description                                    |
+| -------------- | ------- | ---- | --- | ---------------------------------------------- |
+| `role_id`      | UUID    | No   | FK  | Peran.                                         |
+| `scope_type`   | VARCHAR(30)| No |     | Jenis scope (organization/branch/self/all).    |
+| `organization_ref_id`| UUID| Yes | IDX | Scope organisasi (bila spesifik).             |
+
+---
+
+## 3.5 Workflow Management (`workflow_db`)
+
+Merealisasikan BRD 9.3: approval matrix konfigurabel, eskalasi, delegasi (INT-004).
+
+```mermaid
+erDiagram
+  WORKFLOW_DEFINITION ||--o{ WORKFLOW_STEP : contains
+  WORKFLOW_DEFINITION ||--o{ WORKFLOW_INSTANCE : instantiated_as
+  WORKFLOW_INSTANCE ||--o{ WORKFLOW_TASK : has
+```
+
+### `wf.workflow_definition`
+
+| Column        | Type         | Null | Key | Description                                          |
+| ------------- | ------------ | ---- | --- | ---------------------------------------------------- |
+| `code`        | VARCHAR(50)  | No   | U   | Kode alur (mis. `PR_APPROVAL`).                      |
+| `document_type`| VARCHAR(50) | No   |     | Jenis dokumen yang dialurkan.                        |
+| `version`     | INTEGER      | No   |     | Versi definisi.                                      |
+| `is_active`   | BOOLEAN      | No   |     | Aktif.                                               |
+
+### `wf.workflow_step`
+
+| Column          | Type         | Null | Key | Description                                          |
+| --------------- | ------------ | ---- | --- | ---------------------------------------------------- |
+| `definition_id` | UUID         | No   | FK  | Definisi alur.                                       |
+| `step_order`    | INTEGER      | No   |     | Urutan langkah.                                      |
+| `approver_rule` | JSONB        | No   |     | Aturan penentu approver (peran/scope/kondisi).       |
+| `escalation_rule`| JSONB       | Yes  |     | Aturan eskalasi/SLA.                                 |
+
+### `wf.workflow_instance`
+
+| Column          | Type         | Null | Key | Description                                          |
+| --------------- | ------------ | ---- | --- | ---------------------------------------------------- |
+| `definition_id` | UUID         | No   | FK  | Definisi alur.                                       |
+| `document_ref`  | VARCHAR(100) | No   | IDX | Referensi dokumen sumber (mis. PR/PO id).            |
+| `status`        | VARCHAR(20)  | No   |     | Pending/Approved/Rejected/Cancelled.                 |
+| `current_step`  | INTEGER      | Yes  |     | Langkah berjalan.                                    |
+
+### `wf.workflow_task`
+
+| Column          | Type         | Null | Key | Description                                          |
+| --------------- | ------------ | ---- | --- | ---------------------------------------------------- |
+| `instance_id`   | UUID         | No   | FK  | Instance alur.                                       |
+| `assignee_id`   | UUID         | No   | IDX | Referensi logis approver.                            |
+| `decision`      | VARCHAR(20)  | Yes  |     | Approve/Reject/Delegate.                             |
+| `decided_at`    | TIMESTAMPTZ  | Yes  |     | Waktu keputusan.                                     |
+
+---
+
+## 3.6 Master Data Management (`masterdata_db`)
+
+Merealisasikan BRD 9.18: data master bersama (shared/isolated), Published Language via event (SAD BAB 6.7). Contoh entitas: Customer, Vendor, Item, Employee-ref.
+
+```mermaid
+erDiagram
+  PARTY ||--o{ PARTY_ADDRESS : has
+  PARTY ||--o{ CUSTOMER : is_a
+  PARTY ||--o{ VENDOR : is_a
+  ITEM ||--o{ ITEM_UOM : measured_in
+```
+
+### `md.party` (super-tipe Customer/Vendor)
+
+| Column        | Type         | Null | Key | Description                                    |
+| ------------- | ------------ | ---- | --- | ---------------------------------------------- |
+| `code`        | VARCHAR(50)  | No   | U   | Kode party unik ber-scope.                     |
+| `name`        | VARCHAR(200) | No   |     | Nama.                                          |
+| `party_type`  | VARCHAR(20)  | No   |     | customer/vendor/both.                          |
+| `tax_id`      | VARCHAR(50)  | Yes  |     | NPWP/identitas pajak.                          |
+| `is_shared`   | BOOLEAN      | No   |     | Shared vs isolated master (BO-019).            |
+
+### `md.item`
+
+| Column        | Type         | Null | Key | Description                                    |
+| ------------- | ------------ | ---- | --- | ---------------------------------------------- |
+| `code`        | VARCHAR(50)  | No   | U   | Kode item unik ber-scope.                      |
+| `name`        | VARCHAR(200) | No   |     | Nama item.                                     |
+| `item_type`   | VARCHAR(30)  | No   |     | stock/service/asset.                           |
+| `base_uom`    | VARCHAR(20)  | No   |     | Satuan dasar.                                  |
+
+### `md.item_uom`, `md.party_address` — mengikuti pola standar (kolom domain + Common Columns).
+
+---
+
+## 3.7 Audit Trail (`audit_db`)
+
+Merealisasikan BRD 9.20 (BR-826 s.d. BR-835): jejak audit immutable, konsumen seluruh event (SAD BAB 7.7). Tabel bersifat *append-only* & dipartisi RANGE per bulan (DBS-013).
+
+### `audit.audit_log` (PARTITION BY RANGE (`occurred_at`))
+
+| Column          | Type         | Null | Key | Description                                            |
+| --------------- | ------------ | ---- | --- | ------------------------------------------------------ |
+| `id`            | UUID         | No   | PK  | Identitas.                                             |
+| `occurred_at`   | TIMESTAMPTZ  | No   | IDX | Waktu kejadian (kunci partisi).                        |
+| `organization_id`| UUID        | No   | IDX | Scope organisasi.                                     |
+| `actor_id`      | UUID         | Yes  |     | Pengguna pelaku.                                       |
+| `action`        | VARCHAR(50)  | No   |     | Jenis aksi (create/update/delete/login/…).           |
+| `entity_type`   | VARCHAR(100) | No   | IDX | Entitas terdampak.                                     |
+| `entity_id`     | UUID         | Yes  |     | ID entitas terdampak.                                  |
+| `before_value`  | JSONB        | Yes  |     | Nilai sebelum (BR-828).                                |
+| `after_value`   | JSONB        | Yes  |     | Nilai sesudah.                                         |
+| `reason`        | TEXT         | Yes  |     | Alasan/remarks (bila diperlukan).                     |
+| `correlation_id`| UUID         | No   | IDX | Korelasi lintas layanan.                              |
+
+> Tabel audit tidak menerima `UPDATE`/`DELETE` (immutable); retensi panjang (BAB 8.6).
+
+---
+
+## 3.8 Summary
+
+Bab ini mendesain skema domain Platform/Core: **Organization** (tree via `parent_id` + closure + materialized path, tipe konfigurabel, lifecycle), **User** (identitas terfederasi + assignment ber-scope), **Security** (RBAC + role scope), **Workflow** (definition/step/instance/task konfigurabel), **Master Data** (party/item shared-isolated), dan **Audit** (append-only, dipartisi). Seluruh tabel menegakkan `organization_id` + RLS (DBS-011/012) sebagai fondasi Scope-Based Access yang dikonsumsi domain finansial dan operasional pada bab berikutnya.
+
+---

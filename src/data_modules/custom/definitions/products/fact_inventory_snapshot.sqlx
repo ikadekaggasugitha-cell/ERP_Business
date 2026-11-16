@@ -1,0 +1,150 @@
+config {
+  type: "incremental",
+  schema: dataform.projectConfig.vars.target_dataset,
+  uniqueKey: ["snapshot_date", "material_id", "warehouse_id", "org_id"],
+  tags: ["fact", "cortex_v7", "inventory", "tri_currency"],
+  partitionBy: "snapshot_date",
+  clusterBy: ["org_id", "material_id"],
+  description: "Daily inventory snapshot fact table unifying SAP MARD/MBEW/MATDOC and NEW_ERP stock positions"
+}
+
+WITH dedup_mbew AS (
+  SELECT *
+  FROM ${ref("stg_mbew")}
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY mandt, material_number, valuation_area
+    ORDER BY CASE WHEN valuation_type IS NULL OR valuation_type = '' THEN 1 ELSE 2 END, recordstamp DESC
+  ) = 1
+),
+
+dedup_org AS (
+  SELECT
+    org_id,
+    plant_code,
+    sap_company_code,
+    functional_currency,
+    country_code
+  FROM ${ref("dim_organization")}
+  WHERE is_active = TRUE
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY COALESCE(plant_code, org_id)
+    ORDER BY CASE WHEN functional_currency IS NOT NULL THEN 1 ELSE 2 END, org_id ASC
+  ) = 1
+),
+
+sap_inventory AS (
+  SELECT
+    'SAP' AS source_system,
+    CURRENT_DATE() AS snapshot_date,
+    d.material_number AS material_id,
+    COALESCE(d.storage_location, 'DEFAULT') AS warehouse_id,
+    CONCAT('SAP_PLANT_', d.plant) AS org_id,
+    d.plant AS plant_code,
+    CAST(d.unrestricted_stock AS NUMERIC) AS unrestricted_quantity,
+    CAST(d.blocked_stock AS NUMERIC) AS blocked_quantity,
+    CAST(d.unrestricted_stock AS NUMERIC) + CAST(d.blocked_stock AS NUMERIC) AS total_quantity,
+    mara.base_unit_of_measure AS uom,
+    
+    -- Valuation from MBEW
+    CASE
+      WHEN mbew.price_control = 'V' THEN CAST(mbew.moving_avg_price AS NUMERIC)
+      ELSE CAST(mbew.standard_price AS NUMERIC)
+    END AS unit_cost_fc,
+    CAST(mbew.total_value AS NUMERIC) AS total_value_fc,
+    COALESCE(org.functional_currency, t001.currency_key, 'IDR') AS currency_fc,
+    
+    ${sap_helpers.latestRecordstamp(["d.recordstamp", "mbew.recordstamp"])} AS source_last_updated_at
+  FROM ${ref("stg_mard")} d
+  LEFT JOIN ${ref("stg_mara")} mara
+    ON d.mandt = mara.mandt
+    AND d.material_number = mara.material_number
+  LEFT JOIN dedup_mbew mbew
+    ON d.mandt = mbew.mandt
+    AND d.material_number = mbew.material_number
+    AND d.plant = mbew.valuation_area
+  LEFT JOIN dedup_org org
+    ON org.plant_code = d.plant
+    OR org.org_id = CONCAT('SAP_PLANT_', d.plant)
+  LEFT JOIN ${ref("stg_t001")} t001
+    ON d.mandt = t001.mandt
+    AND org.sap_company_code = t001.company_code
+),
+
+new_erp_inventory AS (
+  SELECT
+    'NEW_ERP' AS source_system,
+    DATE(snapshot_date) AS snapshot_date,
+    CAST(item_id AS STRING) AS material_id,
+    CAST(warehouse_id AS STRING) AS warehouse_id,
+    CAST(organization_id AS STRING) AS org_id,
+    CAST(plant_code AS STRING) AS plant_code,
+    CAST(unrestricted_qty AS NUMERIC) AS unrestricted_quantity,
+    CAST(blocked_qty AS NUMERIC) AS blocked_quantity,
+    CAST(unrestricted_qty AS NUMERIC) + CAST(blocked_qty AS NUMERIC) AS total_quantity,
+    CAST(uom AS STRING) AS uom,
+    CAST(unit_cost AS NUMERIC) AS unit_cost_fc,
+    CAST(total_value AS NUMERIC) AS total_value_fc,
+    TRIM(currency) AS currency_fc,
+    CAST(updated_at AS TIMESTAMP) AS source_last_updated_at
+  FROM ${ref("erp_staging", "stg_inventory_snapshot")}
+),
+
+combined AS (
+  SELECT * FROM sap_inventory
+  UNION ALL
+  SELECT * FROM new_erp_inventory
+),
+
+filtered AS (
+  SELECT *
+  FROM combined
+  ${when(incremental(), `WHERE snapshot_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)`)}
+),
+
+dedup_fx AS (
+  SELECT
+    rate_date,
+    from_currency,
+    to_currency,
+    mid_rate
+  FROM ${ref("dim_currency")}
+  WHERE rate_type IN ('M', 'SPOT', 'DEFAULT')
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY rate_date, from_currency, to_currency
+    ORDER BY mid_rate DESC
+  ) = 1
+)
+
+SELECT
+  f.snapshot_date,
+  f.material_id,
+  f.warehouse_id,
+  f.org_id,
+  f.plant_code,
+  f.unrestricted_quantity,
+  f.blocked_quantity,
+  f.total_quantity,
+  f.uom,
+  f.unit_cost_fc,
+  f.total_value_fc,
+  f.currency_fc,
+  NUMERIC '1' AS exchange_rate_fc,
+  
+  -- Presentation Currency (USD)
+  CASE
+    WHEN f.currency_fc = 'USD' THEN f.total_value_fc
+    ELSE f.total_value_fc * fx.mid_rate
+  END AS total_value_pc,
+  'USD' AS currency_pc,
+  COALESCE(
+    fx.mid_rate,
+    CASE WHEN f.currency_fc = 'USD' THEN NUMERIC '1' ELSE CAST(NULL AS NUMERIC) END
+  ) AS exchange_rate_pc,
+  
+  f.source_system,
+  f.source_last_updated_at
+FROM filtered f
+LEFT JOIN dedup_fx fx
+  ON fx.rate_date = f.snapshot_date
+  AND fx.from_currency = f.currency_fc
+  AND fx.to_currency = 'USD'

@@ -1,0 +1,105 @@
+# BAB 5. Operational APIs
+
+## 5.1 Overview
+
+Bab ini mendefinisikan kontrak REST domain **Operasional**: Procurement, Inventory, Sales, dan Manufacturing. Aksi domain (confirm, reserve, receive, ship) memicu *event* yang menggerakkan alur lintas modul (INT-001/002); reservasi stok bersifat Exactly-Once (ADR-005). Resource memetakan ke DBDD BAB 6 dan mengikuti standar BAB 2.
+
+---
+
+## 5.2 Procurement API — API-016
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/purchase-requisitions`, `/v1/purchase-orders`, `/v1/goods-receipts` |
+| Layanan | SVC-012 procurement-service |
+| Tabel | `pr.purchase_requisition`, `po.purchase_order`, `gr.goods_receipt` |
+| Referensi | 9.7, INT-002 |
+
+**Endpoint kunci:**
+
+| Method & Path                                        | Deskripsi                                      |
+| ---------------------------------------------------- | ---------------------------------------------- |
+| `POST /v1/purchase-requisitions`                      | Buat PR (memicu workflow approval, INT-004).   |
+| `POST /v1/purchase-requisitions/{id}/submit`          | Ajukan PR untuk persetujuan.                   |
+| `POST /v1/purchase-orders`                            | Buat PO (dari PR disetujui).                    |
+| `POST /v1/purchase-orders/{id}/approve`               | Setujui PO → `procurement.po.approved.v1`.      |
+| `POST /v1/goods-receipts`                             | Catat penerimaan → `procurement.goods.received.v1`. |
+| `GET /v1/purchase-orders?vendorId=…&status=Approved`  | Daftar PO.                                     |
+
+`goods.received` memicu pencatatan AP (INT-002) & penambahan stok (Inventory).
+
+---
+
+## 5.3 Inventory API — API-017
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/warehouses`, `/v1/stock-balances`, `/v1/stock-movements`, `/v1/stock-reservations` |
+| Layanan | SVC-013 inventory-service |
+| Tabel | `inv.warehouse`, `inv.stock_balance`, `inv.stock_movement`, `inv.stock_reservation` |
+| Referensi | 9.8, INT-001 |
+
+**Endpoint kunci:**
+
+| Method & Path                                        | Deskripsi                                      | Catatan |
+| ---------------------------------------------------- | ---------------------------------------------- | ------- |
+| `GET /v1/stock-balances?warehouseId=…&itemId=…`      | Saldo stok (on-hand/reserved/available).       |         |
+| `POST /v1/stock-reservations`                         | Reservasi stok untuk SO (Idempotency-Key).     | **EOS** |
+| `POST /v1/stock-reservations/{id}/release`            | Lepas reservasi.                               | EOS     |
+| `POST /v1/stock-movements`                            | Catat pergerakan (receipt/issue/transfer/adj). |         |
+| `GET /v1/stock-movements?itemId=…&movementDate[gte]=…`| Riwayat pergerakan (terpartisi).               |         |
+
+Reservasi & pengeluaran menghasilkan `erp.inventory.stock.reserved.v1` / `erp.inventory.goods.issued.v1` (Exactly-Once) — bagian dari Saga INT-001.
+
+---
+
+## 5.4 Sales API — API-018
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/sales-orders`, `/v1/deliveries` |
+| Layanan | SVC-015 sales-service |
+| Tabel | `so.sales_order`, `so.so_line`, `so.delivery` |
+| Referensi | 9.14, INT-001 |
+
+**Endpoint kunci:**
+
+| Method & Path                              | Deskripsi                                      |
+| ------------------------------------------ | ---------------------------------------------- |
+| `POST /v1/sales-orders`                     | Buat Sales Order draft.                        |
+| `POST /v1/sales-orders/{id}/confirm`        | Konfirmasi → `sales.order.confirmed.v1` (mulai Saga INT-001). |
+| `POST /v1/sales-orders/{id}/deliveries`     | Buat pengiriman (memicu goods issue).          |
+| `GET /v1/sales-orders?customerId=…&status=Confirmed` | Daftar SO.                            |
+
+**Skema `SalesOrder` (create):** `customerId`, `orderDate`, `currency`, `lines[] { itemId, orderQty, unitPrice }`.
+
+---
+
+## 5.5 Manufacturing API — API-019
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/bills-of-material`, `/v1/work-orders` |
+| Layanan | SVC-014 manufacturing-service |
+| Tabel | `mfg.bill_of_material`, `mfg.bom_line`, `mfg.work_order` |
+| Referensi | 9.9 |
+
+**Endpoint kunci:**
+
+| Method & Path                              | Deskripsi                                      |
+| ------------------------------------------ | ---------------------------------------------- |
+| `POST /v1/bills-of-material`                | Definisikan BoM (komponen & kuantitas).        |
+| `POST /v1/work-orders`                      | Buat work order (dari SO/rencana).             |
+| `POST /v1/work-orders/{id}/release`         | Rilis WO ke produksi.                          |
+| `POST /v1/work-orders/{id}/complete`        | Selesaikan → `manufacturing.workorder.completed.v1`. |
+| `GET /v1/work-orders?status=InProgress`     | Daftar WO berjalan.                            |
+
+Penyelesaian WO memperbarui stok (barang jadi) via Inventory.
+
+---
+
+## 5.6 Summary
+
+Bab ini mendefinisikan kontrak REST domain operasional: **Procurement** (PR→PO→GR dengan approval), **Inventory** (saldo, reservasi Exactly-Once, pergerakan), **Sales** (SO confirm memulai Saga INT-001, delivery), dan **Manufacturing** (BoM, work order). Aksi domain memicu *event* yang menggerakkan alur lintas modul menuju finansial (INT-001/002), memetakan ke DBDD BAB 6 dan layanan SVC-012–015.
+
+---

@@ -1,0 +1,24 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["foundation", "sap_ddic", "ecc", "s4"],
+  description: "SAP Purchasing Document Item staging view with CDC deduplication"
+}
+
+SELECT
+  MANDT AS mandt,
+  EBELN AS po_number,
+  EBELP AS item_number,
+  MATNR AS material_number,
+  WERKS AS plant,
+  LGORT AS storage_location,
+  MENGE AS quantity,
+  MEINS AS unit_of_measure,
+  NETPR AS net_price,
+  NETWR AS net_value,
+  recordstamp
+FROM ${ref("sap_ddic_replica", "ekpo")}
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY MANDT, EBELN, EBELP
+  ORDER BY recordstamp DESC
+) = 1

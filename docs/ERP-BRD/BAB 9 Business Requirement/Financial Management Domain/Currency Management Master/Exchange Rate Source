@@ -1,0 +1,209 @@
+# 9.5.3.8 Exchange Rate Source Requirements
+
+---
+
+# 9.5.3.8.1 Overview
+
+Exchange Rate Source merupakan master konfigurasi yang mendefinisikan asal teknis (*technical source*) dan mekanisme akuisisi nilai tukar mata uang yang digunakan oleh Enterprise Resource Planning (ERP).
+
+Berbeda dengan Exchange Rate Provider yang merepresentasikan institusi atau organisasi penyedia data, Exchange Rate Source mendefinisikan media, endpoint, protokol, atau mekanisme yang digunakan untuk memperoleh data kurs dari provider tersebut.
+
+Exchange Rate Source menjadi fondasi bagi proses integrasi, sinkronisasi otomatis, validasi data, pemantauan kesehatan integrasi (*integration health*), serta pengelolaan kegagalan (*failover*) dalam lingkungan enterprise.
+
+---
+
+# 9.5.3.8.2 Business Capability
+
+Exchange Rate Source menyediakan kapabilitas berikut:
+
+* Pengelolaan sumber teknis data kurs.
+* Dukungan multi-source untuk satu provider.
+* Konfigurasi endpoint integrasi.
+* Pengelolaan metode akuisisi data.
+* Assignment ke Exchange Rate Provider.
+* Penjadwalan sinkronisasi.
+* Failover source.
+* Health monitoring.
+* Effective dating.
+* Versioning.
+* Audit trail.
+
+---
+
+# 9.5.3.8.3 Business Requirement Catalogue
+
+## BR-151 – Exchange Rate Source Master
+
+| Attribute           | Description                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID      | BR-151                                                                                                                               |
+| Requirement Name    | Exchange Rate Source Master                                                                                                          |
+| Category            | Exchange Rate Source                                                                                                                 |
+| Priority            | Critical                                                                                                                             |
+| Business Objective  | BO-027                                                                                                                               |
+| Stakeholder Owner   | SH-007 (Enterprise Integration Manager)                                                                                              |
+| Description         | Sistem harus menyediakan master Exchange Rate Source yang mendefinisikan mekanisme teknis pengambilan data kurs.                     |
+| Business Value      | Menyediakan konfigurasi integrasi yang terstandarisasi dan mudah dikelola.                                                           |
+| Acceptance Criteria | Administrator dapat membuat, mengubah, mengaktifkan, dan menonaktifkan Exchange Rate Source tanpa memengaruhi histori Exchange Rate. |
+
+---
+
+## BR-152 – Multi Source per Provider
+
+| Attribute        | Description                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-152                                                                                                            |
+| Requirement Name | Multi Source per Provider                                                                                         |
+| Priority         | Critical                                                                                                          |
+| Description      | Satu Exchange Rate Provider harus dapat memiliki lebih dari satu Exchange Rate Source yang aktif maupun cadangan. |
+
+---
+
+## BR-153 – Source Type Management
+
+| Attribute        | Description                                                                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-153                                                                                                                                                   |
+| Requirement Name | Source Type Management                                                                                                                                   |
+| Priority         | High                                                                                                                                                     |
+| Description      | Sistem harus mendukung berbagai jenis sumber data seperti REST API, SOAP Service, SFTP, File Import, Database Link, Message Queue, maupun Manual Upload. |
+
+---
+
+## BR-154 – Endpoint Configuration
+
+| Attribute        | Description                                                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-154                                                                                                                                            |
+| Requirement Name | Endpoint Configuration                                                                                                                            |
+| Priority         | High                                                                                                                                              |
+| Description      | Sistem harus memungkinkan konfigurasi endpoint, parameter koneksi, metode autentikasi, dan protokol komunikasi untuk setiap Exchange Rate Source. |
+
+---
+
+## BR-155 – Synchronization Schedule
+
+| Attribute        | Description                                                                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-155                                                                                                                              |
+| Requirement Name | Synchronization Schedule                                                                                                            |
+| Priority         | High                                                                                                                                |
+| Description      | Sistem harus mendukung penjadwalan sinkronisasi otomatis berdasarkan interval waktu, kalender bisnis, atau pemicu (*event-driven*). |
+
+---
+
+## BR-156 – Source Priority & Failover
+
+| Attribute        | Description                                                                                                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-156                                                                                                                        |
+| Requirement Name | Source Priority & Failover                                                                                                    |
+| Priority         | Critical                                                                                                                      |
+| Description      | Sistem harus mendukung prioritas sumber data dan perpindahan otomatis ke sumber cadangan apabila sumber utama tidak tersedia. |
+
+---
+
+## BR-157 – Source Health Monitoring
+
+| Attribute        | Description                                                                                                                             |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-157                                                                                                                                  |
+| Requirement Name | Source Health Monitoring                                                                                                                |
+| Priority         | High                                                                                                                                    |
+| Description      | Sistem harus memantau status konektivitas, waktu respons, keberhasilan sinkronisasi, dan tingkat kegagalan setiap Exchange Rate Source. |
+
+---
+
+## BR-158 – Effective Dating
+
+| Attribute        | Description                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-158                                                                                                                                |
+| Requirement Name | Effective Dating                                                                                                                      |
+| Priority         | Medium                                                                                                                                |
+| Description      | Setiap Exchange Rate Source harus memiliki periode efektif sehingga perubahan konfigurasi tidak memengaruhi histori proses integrasi. |
+
+---
+
+## BR-159 – Dependency Validation
+
+| Attribute        | Description                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-159                                                                                                                                      |
+| Requirement Name | Dependency Validation                                                                                                                       |
+| Priority         | Critical                                                                                                                                    |
+| Description      | Sistem harus mencegah penghapusan Exchange Rate Source yang masih digunakan oleh proses sinkronisasi, import job, atau Exchange Rate aktif. |
+
+---
+
+## BR-160 – Exchange Rate Source Auditability
+
+| Attribute        | Description                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| Requirement ID   | BR-160                                                                                             |
+| Requirement Name | Exchange Rate Source Auditability                                                                  |
+| Priority         | Critical                                                                                           |
+| Description      | Seluruh perubahan konfigurasi Exchange Rate Source harus dicatat secara lengkap dalam Audit Trail. |
+
+---
+
+# 9.5.3.8.4 Business Rules
+
+| Business Rule ID | Description                                                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| BRule-ERS-001    | Setiap Exchange Rate Source harus terhubung dengan tepat satu Exchange Rate Provider.                                                            |
+| BRule-ERS-002    | Satu Exchange Rate Provider dapat memiliki satu atau lebih Exchange Rate Source.                                                                 |
+| BRule-ERS-003    | Hanya Exchange Rate Source dengan status Active yang dapat digunakan untuk sinkronisasi otomatis.                                                |
+| BRule-ERS-004    | Source dengan prioritas tertinggi digunakan sebagai sumber utama, sedangkan source lainnya berfungsi sebagai cadangan sesuai kebijakan failover. |
+| BRule-ERS-005    | Perubahan konfigurasi Source tidak boleh mengubah histori Exchange Rate yang telah diimpor.                                                      |
+| BRule-ERS-006    | Source yang masih digunakan oleh proses aktif tidak boleh dihapus secara permanen.                                                               |
+| BRule-ERS-007    | Seluruh aktivitas konfigurasi dan operasional Source wajib tercatat dalam Audit Trail.                                                           |
+
+---
+
+# 9.5.3.8.5 Data Attributes
+
+| Attribute                           | Description                                                                            |
+| ----------------------------------- | -------------------------------------------------------------------------------------- |
+| Exchange Rate Source ID             | Identitas unik sistem.                                                                 |
+| Source Code                         | Kode unik sumber data.                                                                 |
+| Source Name                         | Nama sumber data.                                                                      |
+| Exchange Rate Provider ID           | Referensi ke Exchange Rate Provider.                                                   |
+| Source Type                         | REST API, SOAP, SFTP, File Import, Database, Message Queue, Manual Upload, Middleware. |
+| Endpoint URL / Connection Reference | Lokasi endpoint atau referensi koneksi.                                                |
+| Authentication Method               | API Key, OAuth2, Basic Authentication, Mutual TLS, Service Account, None.              |
+| Communication Protocol              | HTTPS, SFTP, JDBC, AMQP, Kafka, SMB, Local File.                                       |
+| Priority Sequence                   | Urutan prioritas sumber data.                                                          |
+| Retry Policy                        | Kebijakan pengulangan ketika sinkronisasi gagal.                                       |
+| Timeout Configuration               | Batas waktu koneksi dan respons.                                                       |
+| Effective From                      | Tanggal mulai berlaku.                                                                 |
+| Effective To                        | Tanggal akhir berlaku.                                                                 |
+| Status                              | Draft, Active, Suspended, Deprecated, Inactive, Archived.                              |
+| Version                             | Nomor versi konfigurasi.                                                               |
+| Created By / Created Date           | Informasi pembuatan data.                                                              |
+| Updated By / Updated Date           | Informasi perubahan terakhir.                                                          |
+
+---
+
+# 9.5.3.8.6 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process             |
+| -------------- | ------------------ | ----------- | -------------------------- |
+| BR-151         | BO-027             | SH-007      | Source Administration      |
+| BR-152         | BO-027             | SH-007      | Multi-Source Configuration |
+| BR-153         | BO-027             | SH-007      | Integration Configuration  |
+| BR-154         | BO-027             | SH-007      | Endpoint Management        |
+| BR-155         | BO-027             | SH-007      | Scheduled Synchronization  |
+| BR-156         | BO-027             | SH-007      | Failover Management        |
+| BR-157         | BO-029             | SH-010      | Integration Monitoring     |
+| BR-158         | BO-029             | SH-010      | Effective Date Governance  |
+| BR-159         | BO-029             | SH-010      | Dependency Validation      |
+| BR-160         | BO-029             | SH-010      | Audit & Compliance         |
+
+---
+
+# 9.5.3.8.7 Summary
+
+Exchange Rate Source memisahkan konfigurasi teknis akuisisi data dari identitas penyedia kurs sehingga organisasi dapat mengelola berbagai metode integrasi secara independen. Pendekatan ini memungkinkan penggunaan beberapa endpoint untuk provider yang sama, mendukung mekanisme *high availability*, *automatic failover*, *integration monitoring*, dan memastikan seluruh proses pengambilan nilai tukar tetap dapat diaudit dan ditelusuri tanpa memengaruhi histori Exchange Rate.
+
+Seluruh requirement pada bagian ini menjadi dasar bagi implementasi **Exchange Rate Import Job**, **Exchange Rate Validation**, **Exchange Rate Synchronization**, **Integration Monitoring**, dan **Enterprise Integration Framework**.

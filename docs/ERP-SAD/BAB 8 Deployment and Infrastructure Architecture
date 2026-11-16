@@ -1,0 +1,145 @@
+# BAB 8. Deployment and Infrastructure Architecture
+
+## 8.1 Overview
+
+Bab ini mendefinisikan topologi deployment dan infrastruktur platform ERP, merealisasikan **ADR-004 (Self-Managed)** dan **ADR-006 (stack baseline)** di atas **Kubernetes**. Tujuannya adalah memenuhi kebutuhan ketersediaan (NFR-004/005), skalabilitas (NFR-010/011), isolasi multi-tenant (NFR-012), dan pemulihan bencana (NFR-028/030), dengan kendali penuh dan kedaulatan data.
+
+Konfigurasi infrastruktur spesifik (*Infrastructure as Code*, nilai konfigurasi) didokumentasikan pada artefak **Deployment/Operations**; bab ini menetapkan arsitektur dan prinsipnya.
+
+---
+
+## 8.2 Deployment Topology
+
+```text
+                        ┌──────────────────────────────────────────┐
+        Internet ─TLS──►│  Ingress / Load Balancer  +  Kong Gateway │
+                        └───────────────────┬──────────────────────┘
+                                            ▼
+        ┌───────────────────── KUBERNETES CLUSTER (self-managed) ─────────────────────┐
+        │  namespace: prod                                                            │
+        │   Deployments (stateless, HPA):  web-spa │ go-services (SVC-001..019)  │
+        │   StatefulSets (operator-managed): postgresql(primary+standby) │ kafka(3+)   │
+        │                                    apicurio │ kong(control/data plane)       │
+        │   Platform: observability stack │ secret manager │ cert-manager              │
+        ├────────────────────────────────────────────────────────────────────────────┤
+        │  namespace: staging   (mirror prod, skala lebih kecil)                       │
+        │  namespace: dev                                                              │
+        └────────────────────────────────────────────────────────────────────────────┘
+                                            │  replikasi async
+                                            ▼
+                        ┌──────────────────────────────────────────┐
+                        │   DR SITE (geo-redundant) — PostgreSQL     │
+                        │   PITR + Kafka MirrorMaker                  │
+                        └──────────────────────────────────────────┘
+```
+
+---
+
+## 8.3 Containerization and Orchestration
+
+| Komponen                 | Pengelolaan                                                            | Referensi        |
+| ------------------------ | --------------------------------------------------------------------- | ---------------- |
+| Layanan Go & Web SPA     | *Image* Docker, dijalankan sebagai **Deployment** *stateless*.        | ADR-006, NFR-013 |
+| Apache Kafka             | *Operator* **Strimzi** (StatefulSet, PV, RF≥3).                       | ADR-004          |
+| PostgreSQL               | *Operator* **CloudNativePG/Zalando** (primary–standby, PITR).         | ADR-004          |
+| Kong                     | Deployment HA (control/data plane), multi-replica.                    | ADR-003          |
+| Apicurio Registry        | Deployment HA + penyimpanan skema persisten.                          | ADR-003          |
+| Platform services        | Observability, secret manager, cert-manager, CI/CD agent.             | ADR-010          |
+
+Seluruh komponen dijalankan **self-managed** (bukan *managed service*) untuk kendali & kedaulatan data (ADR-004).
+
+---
+
+## 8.4 Environment Strategy
+
+| Environment | Tujuan                          | Karakteristik                                   |
+| ----------- | ------------------------------- | ------------------------------------------------ |
+| dev         | Pengembangan & integrasi awal   | Skala kecil, data sintetis, siklus cepat.       |
+| staging     | Pra-produksi & UAT              | *Mirror* prod (skala lebih kecil), data ter-mask.|
+| prod        | Operasional                     | HA penuh, DR aktif, kontrol perubahan ketat.     |
+
+* **Environment parity**: konfigurasi seragam via GitOps (BAB 10) untuk mengurangi *drift*.
+* Data produksi tidak digunakan di non-prod tanpa *masking* (kepatuhan UU PDP, BAB 7).
+
+---
+
+## 8.5 Network Architecture
+
+| Aspek                    | Kontrol                                                                 |
+| ------------------------ | ---------------------------------------------------------------------- |
+| Ingress                  | Load balancer + Kong sebagai *single entry point* (TLS termination).   |
+| Segmentasi jaringan      | **Network Policies** Kubernetes: isolasi antar-namespace & tier.        |
+| Zero Trust internal      | Komunikasi antar-layanan terenkripsi (mTLS); default *deny*.           |
+| Data zone                | PostgreSQL & Kafka pada segmen terbatas; akses hanya dari layanan berhak.|
+| Service discovery        | DNS internal Kubernetes; (opsional *service mesh* untuk mTLS & traffic policy). |
+
+---
+
+## 8.6 Scalability and Resource Management
+
+| Mekanisme                | Penerapan                                                              | Referensi        |
+| ------------------------ | --------------------------------------------------------------------- | ---------------- |
+| Horizontal Pod Autoscaler| Skala layanan Go *stateless* berdasarkan CPU/RPS/lag.                  | NFR-010, ARC-002 |
+| Requests/Limits          | Alokasi CPU/memori per *pod* untuk prediktabilitas.                    | NFR-012          |
+| Resource Quota per tenant| Kuota namespace/tenant mencegah *noisy neighbor*.                       | NFR-012, ARC-004 |
+| Kafka scaling            | Penambahan *partition* & *consumer group* tanpa perubahan kode.        | NFR-011          |
+| PostgreSQL scaling       | *Read replica* + partisi untuk beban baca/historis.                    | NFR-011          |
+
+---
+
+## 8.7 High Availability and Failover
+
+| Kapabilitas              | Realisasi                                                              | Target NFR       |
+| ------------------------ | --------------------------------------------------------------------- | ---------------- |
+| Multi-replica services   | Minimum 2 replika per layanan kritikal; *anti-affinity* antar-node.   | NFR-005          |
+| Multi-AZ (bila tersedia) | Distribusi node/broker lintas *availability zone*.                    | NFR-005          |
+| Pod Disruption Budget    | Menjaga jumlah replika minimum saat *maintenance*.                     | NFR-006          |
+| Database failover        | *Automatic failover* primary→standby < 60 detik.                      | NFR-004, NFR-005 |
+| Kafka resilience         | RF≥3, `min.insync.replicas=2`.                                        | NFR-009          |
+| Self-healing             | Restart otomatis Kubernetes pada kegagalan *pod*.                     | NFR-004          |
+
+Tidak ada *single point of failure* pada komponen kritikal (NFR-005, ARC-003).
+
+---
+
+## 8.8 Disaster Recovery Topology
+
+| Elemen                   | Realisasi                                                              | Target NFR       |
+| ------------------------ | --------------------------------------------------------------------- | ---------------- |
+| DR site                  | Region/lokasi terpisah secara geografis (geo-redundant).              | NFR-028, NFR-030 |
+| Replikasi data           | PostgreSQL streaming/async replication + *WAL archiving* ke DR.        | NFR-028          |
+| Replikasi event          | **Kafka MirrorMaker** antar-region.                                   | NFR-030          |
+| Failover DR              | Aktivasi *DR site* semi-otomatis; RTO ≤ 4 jam.                        | NFR-028          |
+| DR drill                 | Uji *failover* menyeluruh minimum 1×/tahun.                            | NFR-030          |
+
+RPO ≤ 15 menit (NFR-028) dijaga melalui frekuensi replikasi/backup (BAB 6.9).
+
+---
+
+## 8.9 Capacity Planning
+
+* Baseline kapasitas mengacu pada target NFR-002 (≥ 500 transaksi tulis/detik) dan NFR-011 (pertumbuhan hingga 10× baseline dengan degradasi < 15%).
+* *Sizing* awal per komponen (jumlah replika, partisi Kafka, ukuran node, IOPS PostgreSQL) ditetapkan pada artefak Deployment, ditinjau berkala melalui data observability (BAB 9).
+* Batasan kapasitas mengikuti kontrak/lisensi (CONS-005); penambahan kapasitas melalui proses pengadaan.
+
+---
+
+## 8.10 Deployment Traceability
+
+| Kebutuhan (BRD)          | Realisasi Infrastruktur (SAD)                  | Bagian     |
+| ------------------------ | ---------------------------------------------- | ---------- |
+| NFR-004/005 (HA)         | Multi-replica, failover, self-healing          | §8.7       |
+| NFR-006 (maintenance)    | PDB, rolling update, blue-green/canary          | §8.7, BAB 10 |
+| NFR-010/011 (scaling)    | HPA, Kafka/PostgreSQL scaling                   | §8.6       |
+| NFR-012 (isolation)      | Resource quota, network policies                | §8.5, §8.6 |
+| NFR-028/030 (DR)         | DR site, MirrorMaker, drill                     | §8.8       |
+| CONS-005 (kapasitas)     | Capacity planning berbasis kontrak              | §8.9       |
+| ADR-004 (self-managed)   | Operator-managed stateful services              | §8.3       |
+
+---
+
+## 8.11 Summary
+
+Bab ini menetapkan topologi deployment **self-managed** di atas Kubernetes: layanan *stateless* (Go & SPA) yang diskalakan HPA, komponen *stateful* (PostgreSQL, Kafka, Kong, Apicurio) dikelola *operator*, strategi lingkungan dev/staging/prod dengan parity, segmentasi jaringan zero-trust, mekanisme HA/failover tanpa *single point of failure*, serta topologi DR geo-redundant yang memenuhi RTO/RPO. Arsitektur ini merealisasikan ADR-004 dan memenuhi kebutuhan ketersediaan, skalabilitas, isolasi, dan pemulihan bencana pada BRD.
+
+---

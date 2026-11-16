@@ -1,0 +1,17 @@
+# Dependencies & build artifacts
+node_modules/
+dist/
+.tanstack/
+.pnpm-store/
+*.tsbuildinfo
+coverage/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor / local tooling state
+.DS_Store
+*.log
+.codebase-memory/

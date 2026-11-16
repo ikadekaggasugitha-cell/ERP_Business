@@ -1,0 +1,104 @@
+# BAB 7. Security: Authentication, Authorization, and RLS Enforcement
+
+## 7.1 Overview
+
+Keamanan ditegakkan **berlapis** (Defense-in-Depth, SAD BAB 7): Kong memvalidasi identitas & scope kasar, layanan Go menegakkan RBAC + hak operasi halus, dan PostgreSQL RLS menyaring baris per organisasi. Rantai kepercayaan (Zero Trust internal):
+
+```text
+[Internet] ──TLS──► [Kong Gateway] ──mTLS/JWT──► [Go Services] ──TLS──► [PostgreSQL / Kafka]
+```
+
+Tiga lapis penegakan otorisasi (SAD 7.4):
+
+| Lapis          | Tingkat | Yang dicek                                              |
+| -------------- | ------- | ------------------------------------------------------- |
+| Kong Gateway   | Kasar   | Validasi token, scope kasar (BAB 7.2).                  |
+| Layanan Go     | Halus   | RBAC (peran→hak operasi) + subset scope (BAB 7.3).      |
+| PostgreSQL RLS | Baris   | Isolasi per `organization_id`/scope (BAB 7.4).          |
+
+## 7.2 Authentication (OAuth2/OIDC at Kong)
+
+* **OAuth2/OIDC** via Kong, terfederasi ke Identity Provider (Azure AD / Google / LDAP) untuk SSO (INT-012). **MFA** untuk akses sensitif/admin (BR-032, NFR-016).
+* Klien mengirim **`Authorization: Bearer <JWT>`**; token divalidasi **di Kong** (INT-015). Token absen/invalid ditolak **401** sebelum menyentuh layanan.
+* Token **berumur pendek** + refresh token. Layanan Go menerima request yang sudah terautentikasi dan membaca klaim dari JWT (diteruskan Kong).
+
+Klaim token yang relevan (ilustratif, API Spec 2.4):
+
+```json
+{
+  "sub": "user-uuid",
+  "org_scope": ["<org-uuid>", "..."],
+  "roles": ["ap_officer"],
+  "permissions": ["ap.invoice.create", "ap.invoice.read"]
+}
+```
+
+## 7.3 Authorization (RBAC + Scope)
+
+Otorisasi menggabungkan **RBAC** dan **Scope-Based Access** (Organization Tree). Peran didefinisikan di `security-service` (SVC-003, BR-031); pemetaan peran→hak dapat dikonfigurasi (data, bukan kode). Di layanan Go, middleware memeriksa `permissions` klaim terhadap hak yang diminta endpoint:
+
+```go
+func requirePermission(perm string) Middleware {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            if !hasPermission(r.Context(), perm) { // dari klaim JWT
+                writeError(w, r, ErrForbidden("FORBIDDEN_SCOPE")) // 403
+                return
+            }
+            next.ServeHTTP(w, r)
+        })
+    }
+}
+// mis. requirePermission("gl.journal.post") pada POST /journal-entries/{id}/post
+```
+
+* **Separation of Duties** via approval matrix (maker ≠ approver) — diterapkan `workflow-service` (SVC-004) dan aturan konfigurasi per-org.
+* Permission kurang → **403**; baris di luar scope → **404** (BAB 4.6, tidak membocorkan eksistensi).
+
+## 7.4 Organization Scope Propagation (Token → `app.org_scope`)
+
+Ini adalah **jantung multi-tenancy** dan menghubungkan token ke RLS DB (DBDD BAB 2.8):
+
+1. Kong meneruskan JWT; layanan mengekstrak klaim **`org_scope`** (array UUID).
+2. Bila ada header **`X-Organization-Id`**, ia **menyempitkan** scope — dan **wajib subset** dari `org_scope` token (bukan superset; mencegah eskalasi). `organization_id` **tidak** diterima dari body (API Spec 2.5).
+3. Scope efektif (path Organization Tree pemanggil + org sistem `0000…0000` untuk data referensi bersama) diteruskan ke repository sebagai `[]uuid.UUID`.
+4. `WithOrgScope` menyuntik scope ke sesi DB via `set_config('app.org_scope', $1, true)` (transaction-local). PostgreSQL RLS mengevaluasi `public.current_org_scope()` untuk menyaring baris.
+
+```text
+JWT.org_scope  ──(∩ X-Organization-Id)──►  scope []uuid.UUID
+     └─► WithOrgScope: SET LOCAL app.org_scope = '{uuids}'
+          └─► RLS policy: USING (organization_id = ANY(current_org_scope()))
+```
+
+> **SDD-040 — Deny-by-default.** Scope kosong ⇒ `current_org_scope()` NULL ⇒ RLS menolak semua baris. Middleware **wajib** menolak (401/403) request tanpa scope valid sebelum menyentuh repository; tidak ada jalur "tanpa scope" ke tabel ber-RLS. Satu-satunya operasi tanpa scope adalah relay outbox (tabel teknis, BAB 6.3).
+
+## 7.5 Database Role Model and Least Privilege
+
+Model peran (dari `db/ops/roles.sql`, menutup REVIEW O1) — semua **NOSUPERUSER, NOBYPASSRLS** (invarian defense-in-depth):
+
+| Role           | Login  | Peran                                                  |
+| -------------- | ------ | ------------------------------------------------------ |
+| `erp_migrator` | NOLOGIN| **Owner** objek; menjalankan migrasi (BAB 9.2).       |
+| `erp_app_rw`   | NOLOGIN| Aplikasi read/write — **RLS berlaku**.                 |
+| `erp_app_ro`   | NOLOGIN| Reporting/read-only — **RLS berlaku**.                 |
+
+Role login per-environment dibuat sebagai anggota (mis. `CREATE ROLE gl_app LOGIN PASSWORD … IN ROLE erp_app_rw`) sehingga tetap non-owner → RLS tetap aktif. Grant (dari `db/ops/apply_grants.sql`):
+
+* `REVOKE ALL ... FROM PUBLIC` pada skema & tabel; `GRANT USAGE` skema ke app roles.
+* `GRANT SELECT,INSERT,UPDATE,DELETE` ke `erp_app_rw`, `GRANT SELECT` ke `erp_app_ro` — **hanya pada parent/tabel reguler, bukan child partition** (REVIEW M1). Akses tabel terpartisi hanya via parent → ganda-proteksi (tanpa privilege + policy per-partisi).
+* `ALTER DEFAULT PRIVILEGES` agar tabel baru mewarisi grant; `GRANT EXECUTE ON FUNCTION public.current_org_scope()` ke app roles.
+
+> **SDD-041 — Pool app = non-owner.** `DATABASE_URL` layanan menunjuk role app (`erp_app_rw`), **bukan** `erp_migrator`. Ini yang membuat RLS benar-benar ditegakkan (owner akan mem-bypass policy pada tabelnya sendiri). Verifikasi ada di `db/tests/` (RLS enforced + partition access denied + RO read-only).
+
+## 7.6 PII Handling and Service-to-Service Auth
+
+* **PII (SAD 7.5, UU PDP No. 27/2022):** enkripsi in-transit TLS 1.2+; at-rest pada volume PostgreSQL/Kafka; **field-level encryption** untuk data kritis (mis. **NIK**, data gaji di `hr_db`/`payroll_db`). Masking/tokenization; hak subjek data (akses/koreksi/hapus) dikoordinasikan lintas layanan via event. **PII tidak di-log** plaintext (BAB 8.3).
+* **Service-to-service (Zero Trust):** panggilan internal (gRPC/REST, ADR-007) memakai **mTLS** dan/atau service token berumur pendek; tidak ada kepercayaan implisit antar-layanan.
+* **Secrets (SAD 7.9):** kredensial DB, API key pihak-3, token dikelola secret manager (Vault / sealed-secrets) — tidak pernah di kode/image; rotasi otomatis; pemisahan per-environment; sertifikat TLS internal via cert-manager (auto-renew).
+* **Audit (SAD 7.7):** `audit-service` (SVC-018) mengonsumsi `erp.audit.event.recorded` sebagai jejak audit *immutable* berisi user, organisasi, waktu, jenis aksi, nilai before/after, dan `correlation_id`.
+
+## 7.7 Summary
+
+Keamanan berlapis: Kong (401 token, scope kasar) → Go (403 RBAC/scope halus) → RLS (404/isolasi baris via `app.org_scope`). Multi-tenancy bertumpu pada rantai `JWT.org_scope → WithOrgScope → current_org_scope()` dengan deny-by-default, ditopang model role non-owner tanpa BYPASSRLS. PII dienkripsi field-level & tak di-log; komunikasi internal mTLS; secret via manajer khusus.
+
+---

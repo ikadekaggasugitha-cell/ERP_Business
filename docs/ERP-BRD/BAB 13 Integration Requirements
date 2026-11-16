@@ -1,0 +1,565 @@
+# BAB 13. Integration Requirements
+
+## 13.1 Overview
+
+Bab ini mendefinisikan kebutuhan integrasi ERP, baik integrasi antar modul di dalam satu platform (internal) maupun integrasi dengan sistem eksternal dan layanan pihak ketiga (external). Tujuan bab ini adalah memastikan seluruh aliran data lintas modul dan lintas sistem berjalan konsisten, andal, aman, dan dapat ditelusuri.
+
+Integration Requirements disusun berdasarkan prinsip **API First**, yaitu setiap kapabilitas fungsional ERP harus terlebih dahulu tersedia sebagai API sebelum diimplementasikan pada antarmuka pengguna. Prinsip ini memastikan ERP dapat diintegrasikan dengan sistem lain tanpa bergantung pada implementasi antarmuka tertentu, mendukung arsitektur Cloud Ready, serta memudahkan pengembangan Configuration over Customization di masa mendatang.
+
+Setiap kebutuhan integrasi pada bab ini menggunakan **Requirement ID (INT-xxx)** yang independen dari skema BR-xxx pada BAB 9, namun tetap dapat ditelusuri ke modul, Business Requirement, dan Functional Requirement terkait.
+
+Ruang lingkup bab ini mencakup empat kategori:
+
+1. **Internal Integration** — integrasi antar modul dalam satu platform ERP.
+2. **External Integration** — integrasi dengan sistem pihak eksternal seperti perbankan, otoritas pajak, dan lembaga jaminan sosial.
+3. **Third-Party Services** — integrasi dengan layanan pendukung seperti notifikasi dan identity provider.
+4. **API Strategy** — standar teknis yang mengatur bagaimana seluruh integrasi di atas diimplementasikan secara konsisten.
+
+---
+
+## 13.2 Internal Integration
+
+### INT-001 – Sales to Inventory to AR to GL Integration
+
+| Attribute           | Description                                                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-001                                                                                                                                                          |
+| Requirement Name     | Sales to Inventory to AR to GL Integration                                                                                                                      |
+| Priority             | Critical                                                                                                                                                         |
+| Description          | Sistem harus mengintegrasikan proses Sales Order, pengurangan stok pada Inventory, penerbitan invoice pada Accounts Receivable, hingga posting jurnal ke General Ledger secara otomatis dan berurutan. |
+| Acceptance Criteria  | Setiap transaksi penjualan yang telah dikonfirmasi menghasilkan pergerakan stok, dokumen piutang, dan jurnal akuntansi yang konsisten tanpa input data ulang.    |
+
+---
+
+### INT-002 – Procurement to AP to GL Integration
+
+| Attribute           | Description                                                                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-002                                                                                                                                                    |
+| Requirement Name     | Procurement to AP to GL Integration                                                                                                                       |
+| Priority             | Critical                                                                                                                                                   |
+| Description          | Sistem harus mengintegrasikan proses Purchase Order, Goods/Service Receipt, pencatatan hutang pada Accounts Payable, hingga posting jurnal ke General Ledger. |
+| Acceptance Criteria  | Penerimaan barang/jasa yang telah diverifikasi secara otomatis membentuk kewajiban hutang dan jurnal akuntansi yang sesuai dengan Chart of Account.        |
+
+---
+
+### INT-003 – HR to Payroll to GL Integration
+
+| Attribute           | Description                                                                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-003                                                                                                                                              |
+| Requirement Name     | HR to Payroll to GL Integration                                                                                                                     |
+| Priority             | Critical                                                                                                                                             |
+| Description          | Sistem harus mengintegrasikan data kepegawaian, kehadiran, dan perubahan status karyawan dari modul HR ke Payroll, serta hasil perhitungan gaji ke General Ledger. |
+| Acceptance Criteria  | Perubahan data pegawai pada HR tercermin pada perhitungan payroll periode berjalan, dan hasil payroll menghasilkan jurnal biaya gaji secara otomatis. |
+
+---
+
+### INT-004 – Event-Driven Inter-Module Integration
+
+| Attribute           | Description                                                                                                                                                      |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-004                                                                                                                                                          |
+| Requirement Name     | Event-Driven Inter-Module Integration                                                                                                                            |
+| Priority             | High                                                                                                                                                             |
+| Description          | Sistem harus mendukung mekanisme event-driven (publish/subscribe) antar modul untuk peristiwa bisnis seperti perubahan status dokumen, approval, dan pembaruan master data, tanpa ketergantungan langsung antar modul (loose coupling). Mekanisme ini diimplementasikan menggunakan **Apache Kafka** sebagai *event streaming platform*, dengan pola **Transactional Outbox** pada sisi produsen (layanan Go) untuk menjamin *event* diterbitkan secara konsisten dengan perubahan basis data. Katalog *topic* dan *event* dirinci pada BAB 13.10. |
+| Acceptance Criteria  | Modul penerima event dapat memproses peristiwa secara asinkron (*at-least-once delivery*) dan modul lain tetap dapat berfungsi normal apabila salah satu modul mengalami gangguan sementara; *event* yang gagal diproses diarahkan ke *Dead Letter Topic* untuk penanganan lebih lanjut. |
+
+---
+
+## 13.3 External Integration
+
+### INT-005 – Bank and Payment Gateway Integration
+
+| Attribute           | Description                                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-005                                                                                                                                            |
+| Requirement Name     | Bank and Payment Gateway Integration                                                                                                               |
+| Priority             | Critical                                                                                                                                           |
+| Description          | Sistem harus terintegrasi dengan layanan perbankan (host-to-host) dan payment gateway untuk mendukung proses pembayaran, penerimaan, dan rekonsiliasi transaksi keuangan secara elektronik. |
+| Acceptance Criteria  | Transaksi pembayaran/penerimaan yang diproses melalui bank atau payment gateway dapat direkonsiliasi secara otomatis dengan Cash & Bank Management. |
+
+---
+
+### INT-006 – e-Faktur / Direktorat Jenderal Pajak Integration
+
+| Attribute           | Description                                                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-006                                                                                                                                        |
+| Requirement Name     | e-Faktur / Direktorat Jenderal Pajak Integration                                                                                              |
+| Priority             | Critical                                                                                                                                       |
+| Description          | Sistem harus terintegrasi dengan layanan e-Faktur Direktorat Jenderal Pajak untuk penerbitan, pelaporan, dan validasi faktur pajak elektronik sesuai regulasi perpajakan yang berlaku. |
+| Acceptance Criteria  | Faktur pajak yang diterbitkan pada modul Tax Management sesuai dengan format dan status yang diakui oleh sistem e-Faktur.                      |
+
+---
+
+### INT-007 – BPJS Ketenagakerjaan dan Kesehatan Integration
+
+| Attribute           | Description                                                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-007                                                                                                                                        |
+| Requirement Name     | BPJS Ketenagakerjaan dan Kesehatan Integration                                                                                                 |
+| Priority             | High                                                                                                                                            |
+| Description          | Sistem harus mendukung pertukaran data kepesertaan dan iuran karyawan dengan BPJS Ketenagakerjaan dan BPJS Kesehatan sesuai format yang dipersyaratkan oleh masing-masing lembaga. |
+| Acceptance Criteria  | Data iuran yang dihasilkan dari modul Payroll dapat diekspor/dipertukarkan sesuai format pelaporan BPJS tanpa input ulang secara manual.        |
+
+---
+
+### INT-008 – Legacy System Integration
+
+| Attribute           | Description                                                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-008                                                                                                                                  |
+| Requirement Name     | Legacy System Integration                                                                                                                |
+| Priority             | Medium                                                                                                                                   |
+| Description          | Sistem harus menyediakan mekanisme integrasi (API, file-based, atau middleware) dengan sistem legacy perusahaan selama masa transisi atau untuk sistem yang belum dapat digantikan sepenuhnya. |
+| Acceptance Criteria  | Data master dan transaksi dapat dipertukarkan dengan sistem legacy secara terjadwal maupun on-demand tanpa duplikasi data.               |
+
+---
+
+## 13.4 Third-Party Services
+
+### INT-009 – SMS Gateway Integration
+
+| Attribute           | Description                                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-009                                                                                                                 |
+| Requirement Name     | SMS Gateway Integration                                                                                                |
+| Priority             | Medium                                                                                                                  |
+| Description          | Sistem harus terintegrasi dengan penyedia layanan SMS Gateway untuk mengirimkan notifikasi transaksional kepada pengguna atau pelanggan. |
+| Acceptance Criteria  | Notifikasi penting (misalnya approval, reminder, OTP) dapat dikirim melalui SMS Gateway secara real-time.              |
+
+---
+
+### INT-010 – WhatsApp Notification Integration
+
+| Attribute           | Description                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-010                                                                                                                           |
+| Requirement Name     | WhatsApp Notification Integration                                                                                                |
+| Priority             | Medium                                                                                                                            |
+| Description          | Sistem harus terintegrasi dengan layanan WhatsApp Business API untuk mengirimkan notifikasi, reminder, atau informasi transaksional kepada pengguna maupun pelanggan. |
+| Acceptance Criteria  | Notifikasi WhatsApp terkirim sesuai template yang disetujui dan tercatat statusnya (terkirim, gagal, dibaca).                    |
+
+---
+
+### INT-011 – Email Server Integration
+
+| Attribute           | Description                                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-011                                                                                                                  |
+| Requirement Name     | Email Server Integration                                                                                               |
+| Priority             | High                                                                                                                     |
+| Description          | Sistem harus terintegrasi dengan Email Server (SMTP/API) untuk mengirimkan notifikasi, laporan, dan dokumen elektronik kepada pengguna secara otomatis. |
+| Acceptance Criteria  | Email notifikasi dan laporan terjadwal terkirim sesuai konfigurasi tanpa kegagalan pengiriman yang tidak tercatat.      |
+
+---
+
+### INT-012 – Identity Provider / SSO Integration
+
+| Attribute           | Description                                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID       | INT-012                                                                                                                              |
+| Requirement Name     | Identity Provider / SSO Integration                                                                                                 |
+| Priority             | Critical                                                                                                                             |
+| Description          | Sistem harus mendukung integrasi dengan Identity Provider eksternal (misalnya Azure AD, Google Workspace, atau LDAP) untuk mendukung Single Sign-On (SSO) sesuai kebijakan Security modul. |
+| Acceptance Criteria  | Pengguna dapat melakukan autentikasi menggunakan kredensial Identity Provider tanpa perlu akun terpisah pada ERP.                    |
+
+---
+
+## 13.5 API Strategy
+
+### INT-013 – REST API as Primary Integration Standard
+
+| Attribute           | Description                                                                                                       |
+| -------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-013                                                                                                           |
+| Requirement Name     | REST API as Primary Integration Standard                                                                        |
+| Priority             | Critical                                                                                                          |
+| Description          | Sistem harus menyediakan REST API (didokumentasikan dengan **OpenAPI**) sebagai standar utama integrasi eksternal dan antarmuka pengguna, sejalan dengan prinsip API First. Seluruh layanan diimplementasikan dalam **Go (Golang)**; komunikasi antar-layanan internal yang sinkron dapat menggunakan **gRPC** untuk efisiensi, sedangkan komunikasi asinkron menggunakan **Apache Kafka** (INT-004). |
+| Acceptance Criteria  | Setiap kapabilitas fungsional utama modul tersedia dalam bentuk REST API yang terdokumentasi (OpenAPI) dan dapat diuji secara independen.                     |
+
+---
+
+### INT-014 – API Versioning
+
+| Attribute           | Description                                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-014                                                                                                                  |
+| Requirement Name     | API Versioning                                                                                                          |
+| Priority             | High                                                                                                                     |
+| Description          | Sistem harus menerapkan mekanisme API versioning agar perubahan atau pengembangan API tidak mengganggu konsumen API yang sudah berjalan (backward compatible). |
+| Acceptance Criteria  | Perubahan pada API baru diterbitkan dengan versi baru tanpa memutus fungsi API versi sebelumnya yang masih didukung.    |
+
+---
+
+### INT-015 – API Authentication / OAuth2
+
+| Attribute           | Description                                                                                                             |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-015                                                                                                                 |
+| Requirement Name     | API Authentication / OAuth2                                                                                            |
+| Priority             | Critical                                                                                                                |
+| Description          | Sistem harus menerapkan mekanisme autentikasi dan otorisasi API menggunakan standar OAuth2 untuk memastikan hanya klien terverifikasi yang dapat mengakses API. |
+| Acceptance Criteria  | Seluruh permintaan API tanpa token akses yang valid ditolak oleh sistem.                                               |
+
+---
+
+### INT-016 – API Rate Limiting and Throttling
+
+| Attribute           | Description                                                                                                                    |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID       | INT-016                                                                                                                         |
+| Requirement Name     | API Rate Limiting and Throttling                                                                                              |
+| Priority             | High                                                                                                                            |
+| Description          | Sistem harus menerapkan mekanisme rate limiting dan throttling pada API Gateway untuk mencegah penyalahgunaan sumber daya dan menjaga stabilitas layanan. |
+| Acceptance Criteria  | Permintaan API yang melampaui batas yang dikonfigurasi ditolak dengan kode respons yang sesuai, tanpa mengganggu klien lain.   |
+
+---
+
+## 13.6 Integration Architecture Principles
+
+Seluruh kebutuhan integrasi pada bab ini mengacu pada prinsip arsitektur berikut:
+
+- **API First** — setiap fungsi bisnis harus tersedia sebagai API sebelum diimplementasikan pada antarmuka pengguna, memastikan konsistensi dan kemudahan integrasi.
+- **Event-Driven where Applicable** — integrasi antar modul yang bersifat asinkron menggunakan pola publish/subscribe untuk menjaga loose coupling.
+- **Idempotency** — setiap operasi integrasi harus dapat diulang tanpa menimbulkan efek ganda pada data (idempotent).
+- **Retry & Circuit Breaker** — mekanisme retry otomatis dan circuit breaker diterapkan untuk menangani kegagalan sementara pada sistem eksternal maupun internal.
+- **API Gateway sebagai Single Entry Point** — seluruh lalu lintas API, baik internal maupun eksternal, melewati API Gateway untuk keperluan keamanan, monitoring, dan pengendalian akses secara terpusat.
+
+---
+
+## 13.7 Technology Stack Overview and Rationale
+
+Bagian ini dan seterusnya (BAB 13.7 s.d. BAB 13.13) menjabarkan **cetak biru arsitektur teknologi** yang merealisasikan kebutuhan integrasi (INT-xxx), Non-Functional Requirements (NFR-xxx), serta prinsip arsitektur (BAB 3) ke dalam tumpukan teknologi standar yang ditetapkan pada BAB 4.6.1. Tingkat kedalaman adalah **High-Level Design (HLD)** dengan elemen **Low-Level Design ringkas (LLD-lite)**, sebagai jembatan menuju dokumen Software Architecture Document (SAD) dan Technical Design turunan.
+
+| Layer / Peran                 | Teknologi Standar                       | Baseline Versi (minimum) | Rasional Pemilihan                                                                                          |
+| ----------------------------- | ---------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Backend / Microservices       | **Go (Golang)**                         | Go 1.22+                 | Kinerja tinggi & latensi rendah (NFR-001), konkurensi *goroutine* untuk *throughput* (NFR-002), *binary* ringan yang ideal untuk *container* (NFR-010, NFR-013). |
+| Frontend / Presentation       | **React 19 (Vite SPA)**                | React 19 + TanStack      | Kinerja render tinggi (NFR-003), arsitektur modular, i18n bawaan (NFR-022), dukungan aksesibilitas (NFR-025). |
+| Event Streaming / Messaging   | **Apache Kafka**                        | Kafka 3.x (KRaft)        | *Event backbone* durabel & skalabel untuk pola *event-driven* (INT-004), *decoupling* antar-modul (NFR-009), *replay* & *audit stream*. |
+| Database / System of Record   | **PostgreSQL**                          | PostgreSQL 15+           | ACID penuh (NFR-008), integritas relasional (NFR-007), *partitioning* & *RLS* untuk skala dan multi-tenant (NFR-011, NFR-012), PITR untuk DR (NFR-028). |
+| Schema Registry               | **Apicurio Registry**                   | —                        | Tata kelola skema *event* (Avro/Protobuf) & kompatibilitas versi (NFR-014); *self-managed*.                  |
+| API Gateway                   | **Kong API Gateway**                    | —                        | *Single entry point*, OAuth2/OIDC (INT-015), *rate limiting* (INT-016), *API versioning* (INT-014).         |
+| Container Runtime & Orchestration | **Docker + Kubernetes** (*self-managed*) | —                    | Cloud Ready (BO-026), *self-healing*, *horizontal auto-scaling* (NFR-010), *independent deployment* (NFR-013). |
+
+**Catatan keputusan arsitektur.** Tumpukan ini mengadopsi gaya arsitektur **microservices berorientasi domain (Domain-Driven Microservices)** dengan pola **database-per-service** dan **event-driven integration**. Alternatif *monolith modular* dipertimbangkan namun tidak dipilih karena kebutuhan *independent deployment* per modul (NFR-013) dan *scaling* selektif per domain (NFR-010, NFR-012). Produk inti dan komponen platform yang telah **ditetapkan** — **Go, React 19, Apache Kafka, PostgreSQL, Kong API Gateway, Apicurio Registry, dan Kubernetes** — bersifat **mengikat**. Produk pendukung lain (mis. *operator* Strimzi/CloudNativePG, Debezium, Prometheus) bersifat **rujukan** dan dapat disubstitusi dengan produk setara melalui persetujuan *architecture review*.
+
+### 13.7.1 Keputusan Arsitektur Utama (Key Architecture Decisions)
+
+Keputusan arsitektur berikut telah **disetujui** dan menjadi acuan mengikat bagi seluruh dokumen turunan (Software Architecture Document/SAD dan Database Design). Setiap perubahan tunduk pada mekanisme **Change Request (CR)** sesuai CONS-013.
+
+| ADR ID  | Keputusan                                   | Ringkasan Penetapan                                                                                                                                                              | Rasional / NFR Terkait                              |
+| ------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| ADR-001 | Domain-Driven Microservices + database-per-service | Setiap *bounded context* menjadi layanan Go independen dengan basis data PostgreSQL sendiri; tidak ada akses lintas-basis-data langsung.                                     | NFR-010, NFR-012, NFR-013                            |
+| ADR-002 | **Hybrid Multi-Tenancy**                     | *Schema-per-tenant* untuk tenant/Holding yang memerlukan isolasi kuat atau segregasi data regulatorik; *shared-schema* + `organization_id` + **Row-Level Security** untuk selebihnya. | NFR-012, Organization Tree First, Multi-Tenant Ready |
+| ADR-003 | **API Gateway: Kong; Schema Registry: Apicurio** | Kong sebagai *single entry point* (OAuth2/OIDC, *rate limiting*, *versioning*); Apicurio sebagai registri skema *event* (Avro/Protobuf).                                     | INT-014, INT-015, INT-016, NFR-014                   |
+| ADR-004 | **Infrastruktur Self-Managed**               | PostgreSQL, Apache Kafka, Kong, Apicurio, dan komponen pendukung dijalankan **self-managed** melalui *operator* pada klaster Kubernetes milik organisasi (bukan *managed service*). | Kendali penuh, kepatuhan/kedaulatan data, CONS-005   |
+| ADR-005 | **Selective Exactly-Once Delivery**          | **Exactly-Once Semantics (EOS)** hanya untuk proses finansial berkonsistensi absolut — **General Ledger, Journal Posting, Payment, Inventory Reservation**; **At-Least-Once + idempotensi** untuk Reporting, Dashboard, Notification, Audit Log, dan mayoritas *event* operasional. | NFR-008 (keseimbangan konsistensi, performa, kompleksitas) |
+
+---
+
+## 13.8 System Architecture (Component View)
+
+Diagram komponen berikut menyajikan pandangan runtime tingkat tinggi. Klien mengakses sistem melalui API Gateway; layanan **Go** mengeksekusi logika bisnis, memiliki basis data **PostgreSQL** masing-masing, dan berkomunikasi asinkron melalui **Apache Kafka**.
+
+```mermaid
+flowchart TB
+  subgraph Client["Presentation — React 19 SPA (Vite)"]
+    WEB["Web App / Dashboard / Portal"]
+    MOB["Mobile / 3rd-Party Clients"]
+  end
+
+  GW["API Gateway\n(OAuth2/OIDC, Routing, Rate Limiting, Versioning)"]
+
+  subgraph SVC["Business Logic — Go Microservices"]
+    CORE["Core Services\n(Org, User, Security, Workflow,\nMaster Data, Audit, Reporting)"]
+    FIN["Financial Domain Services\n(GL, AP, AR, Tax, Treasury, ...)"]
+    OPS["Operational Services\n(Procurement, Inventory, Sales,\nManufacturing, HR, Payroll, ...)"]
+  end
+
+  KAFKA["Apache Kafka — Event Backbone\n(topics, schema registry, DLQ)"]
+  PG[("PostgreSQL\ndatabase-per-service\nHA + PITR")]
+  EXT["External Systems\n(Bank, e-Faktur, BPJS, IdP, SMS/WA/Email)"]
+
+  WEB --> GW
+  MOB --> GW
+  GW --> CORE
+  GW --> FIN
+  GW --> OPS
+  CORE <--> KAFKA
+  FIN <--> KAFKA
+  OPS <--> KAFKA
+  CORE --> PG
+  FIN --> PG
+  OPS --> PG
+  OPS <--> EXT
+  FIN <--> EXT
+  KAFKA <--> EXT
+```
+
+Prinsip yang ditegakkan pada pandangan ini: (1) **API Gateway sebagai single entry point** (BAB 13.6); (2) **loose coupling** melalui Kafka — tidak ada pemanggilan langsung antar-basis data; (3) **database-per-service** — setiap layanan hanya mengakses basis datanya sendiri, pertukaran data lintas layanan melalui API atau *event*; (4) **Organization Tree & Scope-Based Access** dipropagasikan sebagai *context* pada setiap permintaan dan *event*.
+
+---
+
+## 13.9 Backend Service Architecture — Go (Golang)
+
+### 13.9.1 Dekomposisi Layanan (Service Decomposition)
+
+Setiap modul/sub-domain pada BAB 9 dan BAB 11 dipetakan ke satu **bounded context** yang direalisasikan sebagai layanan Go independen dengan basis data PostgreSQL sendiri. Tabel berikut bersifat indikatif dan menjadi dasar penyusunan *service catalog* pada dokumen desain teknis.
+
+| Layanan (Go)              | Bounded Context / Modul (BAB 9)          | Basis Data (PostgreSQL) | Contoh Event Diterbitkan (Kafka)              | Contoh Event Dikonsumsi                         |
+| ------------------------- | ----------------------------------------- | ----------------------- | ---------------------------------------------- | ------------------------------------------------ |
+| `org-service`             | Organization Management (9.1)             | `org_db`                | `org.unit.upserted`                            | —                                                |
+| `user-service`            | User Management (9.2)                     | `user_db`               | `user.account.upserted`                        | `org.unit.upserted`                              |
+| `workflow-service`        | Workflow Management (9.3)                 | `workflow_db`           | `workflow.approval.requested/completed`        | *event* dari seluruh modul transaksional         |
+| `security-service`        | Security Management (9.4)                 | `security_db`           | `security.access.denied`                       | `user.account.upserted`                          |
+| `masterdata-service`      | Master Data Management (9.18)             | `masterdata_db`         | `masterdata.{customer,vendor,item}.upserted`   | `org.unit.upserted`                              |
+| `coa-service`             | Chart of Accounts (9.6)                   | `coa_db`                | `coa.account.upserted`, `coa.posting_rule.upserted` | —                                           |
+| `gl-service`              | General Ledger (9.5.4)                    | `gl_db`                 | `gl.journal.posted`                            | `ar.invoice.issued`, `ap.invoice.recorded`, `payroll.run.completed` |
+| `ap-service`              | Accounts Payable (9.5.5)                  | `ap_db`                 | `ap.invoice.recorded`                          | `procurement.goods.received`                     |
+| `ar-service`              | Accounts Receivable (9.5.6)               | `ar_db`                 | `ar.invoice.issued`                            | `inventory.goods.issued`                         |
+| `tax-service`             | Tax Management (9.5.13)                   | `tax_db`                | `tax.invoice.issued`                           | `ar.invoice.issued`, `ap.invoice.recorded`       |
+| `treasury-cashbank-service` | Treasury, Cash & Bank (9.5.8–9.5.9)    | `treasury_db`           | `cashbank.payment.settled`                     | `ap.invoice.recorded`, `ar.invoice.issued`       |
+| `procurement-service`     | Procurement (9.7)                         | `procurement_db`        | `procurement.po.approved`, `procurement.goods.received` | `masterdata.vendor.upserted`, `workflow.approval.completed` |
+| `inventory-service`       | Inventory (9.8)                           | `inventory_db`          | `inventory.stock.reserved`, `inventory.goods.issued/received` | `sales.order.confirmed`, `procurement.goods.received` |
+| `manufacturing-service`   | Manufacturing (9.9)                       | `manufacturing_db`      | `manufacturing.workorder.completed`            | `sales.order.confirmed`, `inventory.stock.reserved` |
+| `sales-service`           | Sales Management (9.14)                   | `sales_db`              | `sales.order.confirmed`                        | `masterdata.customer.upserted`, `inventory.stock.reserved` |
+| `hr-service`              | Human Resource Management (9.12)          | `hr_db`                 | `hr.employee.updated`                          | `org.unit.upserted`                              |
+| `payroll-service`         | Payroll Management (9.17)                 | `payroll_db`            | `payroll.run.completed`                        | `hr.employee.updated`                            |
+| `audit-service`           | Audit Trail (9.20)                        | `audit_db`              | —                                              | **seluruh** `*.*.*` (via *wildcard subscription*) |
+| `reporting-service`       | Dashboard & Executive Reporting (9.13)    | `reporting_db` (read model) | —                                          | *event* lintas domain untuk membangun *read model* (CQRS) |
+
+Modul lain (Fixed Asset, Cost/Profit Center, Budget, Financial Close, Consolidation, Currency, Project, Asset, Maintenance, CRM, Localization) mengikuti pola yang sama dan diperinci pada dokumen desain teknis.
+
+### 13.9.2 Struktur Internal Layanan (Clean/Hexagonal Architecture)
+
+Setiap layanan Go menerapkan pemisahan lapisan yang konsisten agar mudah diuji dan dipelihara (NFR-013, NFR-015):
+
+```text
+cmd/            → entrypoint (main), wiring dependency injection
+internal/
+  handler/      → adapter masuk: REST (net/http + chi/gin) & gRPC
+  usecase/      → application service (orkestrasi logika bisnis)
+  domain/       → entity, value object, business rule (murni, tanpa I/O)
+  repository/   → adapter keluar: akses PostgreSQL (sqlc/pgx)
+  event/        → producer & consumer Kafka (outbox, handler)
+  middleware/   → authn/authz, scope-based access, tracing, logging
+pkg/            → utilitas lintas layanan (config, errors, telemetry)
+migrations/     → skema PostgreSQL berversi (golang-migrate)
+api/            → kontrak OpenAPI & definisi Protobuf/Avro
+```
+
+Pustaka rujukan (indikatif): *router* `chi`/`gin`, akses data `pgx`+`sqlc` atau `GORM`, klien Kafka `franz-go`/`segmentio/kafka-go`, validasi `go-playground/validator`, konfigurasi `viper`, telemetri `OpenTelemetry`.
+
+### 13.9.3 Pola Komunikasi
+
+- **Sinkron (permintaan pengguna):** klien → API Gateway → REST (Go) untuk operasi *query/command* interaktif; antar-layanan internal yang membutuhkan respons segera menggunakan **gRPC**.
+- **Asinkron (integrasi antar-modul):** melalui **Kafka** (INT-004) untuk menjaga *loose coupling* dan ketahanan terhadap kegagalan sementara (NFR-009).
+- **Propagasi konteks organisasi:** `organization_id`, `scope`, dan `correlation_id` dibawa pada *header* HTTP/gRPC dan *header event* Kafka untuk konsistensi Scope-Based Access dan *tracing*.
+
+---
+
+## 13.10 Event Streaming Architecture — Apache Kafka
+
+### 13.10.1 Konfigurasi Klaster
+
+- **Broker:** minimum 3 broker (mode KRaft) untuk kuorum dan ketiadaan *single point of failure* (NFR-005).
+- **Replikasi:** `replication.factor = 3`, `min.insync.replicas = 2`, `acks = all` pada produsen untuk menjamin durabilitas (tidak ada kehilangan *event* — NFR-009).
+- **Retensi:** *topic* transaksional bisnis retensi 7–30 hari; *topic* audit/*event-sourcing* dapat *log compaction* atau retensi panjang untuk *replay*.
+
+### 13.10.2 Konvensi Penamaan Topic
+
+Format: `erp.<domain>.<entity>.<event>.v<versi>` — contoh: `erp.sales.order.confirmed.v1`. Skema *dead letter* dan *retry*: `erp.<domain>.<entity>.<event>.v<versi>.dlq` dan `.retry`.
+
+### 13.10.3 Katalog Topic (indikatif)
+
+| Topic                                | Produsen             | Konsumen Utama                    | Kunci Partisi (*key*)   | Partisi (baseline) | Tujuan / Alur Terkait               |
+| ------------------------------------ | -------------------- | ---------------------------------- | ----------------------- | ------------------ | ----------------------------------- |
+| `erp.sales.order.confirmed.v1`       | `sales-service`      | `inventory-service`, `reporting-service` | `organization_id`  | 12                 | INT-001 (Sales→Inventory→AR→GL)     |
+| `erp.inventory.stock.reserved.v1`    | `inventory-service`  | `sales-service`, `manufacturing-service` | `organization_id`  | 12                 | INT-001                              |
+| `erp.inventory.goods.issued.v1`      | `inventory-service`  | `ar-service`, `gl-service`         | `organization_id`       | 12                 | INT-001                              |
+| `erp.ar.invoice.issued.v1`           | `ar-service`         | `gl-service`, `tax-service`        | `organization_id`       | 12                 | INT-001                              |
+| `erp.procurement.po.approved.v1`     | `procurement-service`| `inventory-service`                | `organization_id`       | 8                  | INT-002 (Procurement→AP→GL)         |
+| `erp.procurement.goods.received.v1`  | `procurement-service`| `ap-service`, `inventory-service`  | `organization_id`       | 8                  | INT-002                              |
+| `erp.ap.invoice.recorded.v1`         | `ap-service`         | `gl-service`, `treasury-cashbank-service` | `organization_id`| 8                  | INT-002                              |
+| `erp.hr.employee.updated.v1`         | `hr-service`         | `payroll-service`                  | `employee_id`           | 6                  | INT-003 (HR→Payroll→GL)             |
+| `erp.payroll.run.completed.v1`       | `payroll-service`    | `gl-service`, `treasury-cashbank-service` | `organization_id`| 6                  | INT-003                              |
+| `erp.gl.journal.posted.v1`           | `gl-service`         | `reporting-service`, `audit-service` | `organization_id`     | 12                 | Muara seluruh alur ke GL            |
+| `erp.masterdata.*.upserted.v1`       | `masterdata-service` | seluruh modul konsumen master data | `entity_id`             | 6                  | Sinkronisasi master data (BO-010)   |
+| `erp.workflow.approval.completed.v1` | `workflow-service`   | modul asal dokumen                 | `document_id`           | 8                  | INT-004 (approval lintas modul)     |
+| `erp.audit.event.recorded.v1`        | seluruh layanan      | `audit-service`                    | `correlation_id`        | 12                 | Audit Trail (9.20)                  |
+
+### 13.10.4 Semantik Pengiriman, Idempotensi, dan Skema
+
+- **Delivery (Selective Exactly-Once, ADR-005):** arsitektur menerapkan strategi *delivery* dua tingkat sesuai kritikalitas proses, guna menyeimbangkan konsistensi, performa, dan kompleksitas:
+  - **Exactly-Once Semantics (EOS)** — menggunakan *Kafka transactions* (produsen transaksional + `isolation.level=read_committed` pada konsumen) — diterapkan **hanya** pada proses finansial yang menuntut konsistensi absolut: **General Ledger**, **Journal Posting**, **Payment**, dan **Inventory Reservation**.
+  - **At-Least-Once + Idempotensi** — untuk seluruh proses lain (Reporting, Dashboard, Notification, Audit Log, dan mayoritas *event* operasional); konsumen wajib **idempoten** (deduplikasi berbasis `event_id`/`correlation_id`).
+- **Ordering:** *ordering* dijamin per-partisi; pemilihan *key* = `organization_id`/*aggregate id* menjaga urutan *event* per entitas.
+- **Schema Registry:** seluruh *event* menggunakan skema **Avro/Protobuf** yang terdaftar pada **Apicurio Registry**, dengan aturan kompatibilitas *backward/forward* untuk mendukung *API/schema versioning* (NFR-014).
+
+### 13.10.5 Pola Transactional Outbox dan Dead Letter
+
+Untuk menjamin *event* konsisten dengan perubahan basis data (menghindari *dual-write*), produsen menerapkan **Transactional Outbox**: perubahan data dan baris *outbox* ditulis dalam satu transaksi PostgreSQL, lalu dipublikasikan ke Kafka oleh *relay* (mis. Debezium CDC atau *poller*). *Event* yang gagal diproses setelah *retry* diarahkan ke *Dead Letter Topic* (`.dlq`) untuk investigasi (NFR-009).
+
+### 13.10.6 Saga untuk Konsistensi Lintas-Modul
+
+Transaksi bisnis lintas layanan (mis. INT-001) dijalankan sebagai **Saga** berbasis *choreography* melalui *event*, dengan *compensating action* bila salah satu langkah gagal — memenuhi klausul *compensating transaction* pada NFR-008.
+
+```mermaid
+sequenceDiagram
+  participant S as sales-service
+  participant I as inventory-service
+  participant AR as ar-service
+  participant GL as gl-service
+  S->>S: Simpan Sales Order (PostgreSQL, tx + outbox)
+  S-->>I: erp.sales.order.confirmed.v1
+  I->>I: Reservasi & keluarkan stok (tx + outbox)
+  I-->>AR: erp.inventory.goods.issued.v1
+  AR->>AR: Terbitkan invoice piutang (tx + outbox)
+  AR-->>GL: erp.ar.invoice.issued.v1
+  GL->>GL: Posting jurnal piutang & pendapatan (tx)
+  GL-->>S: erp.gl.journal.posted.v1 (konfirmasi)
+  Note over I,GL: Bila stok tidak tersedia → event kompensasi<br/>erp.inventory.reservation.failed.v1 → Sales membatalkan order
+```
+
+---
+
+## 13.11 Data Architecture — PostgreSQL
+
+### 13.11.1 Kepemilikan Data (Database-per-Service)
+
+Setiap layanan memiliki basis data/skema PostgreSQL sendiri (BAB 13.9.1). **Tidak ada akses langsung lintas-basis-data**; pertukaran data melalui API sinkron atau *event* Kafka. Hal ini menjaga *decoupling*, *independent deployment* (NFR-013), dan *bounded context*.
+
+### 13.11.2 Strategi Multi-Tenancy dan Scope-Based Access
+
+Selaras dengan prinsip **Multi-Tenant Ready** dan **Organization Tree First**, strategi yang **ditetapkan** adalah **Hybrid Multi-Tenancy** (ADR-002) — mengombinasikan isolasi kuat dan efisiensi sumber daya berdasarkan kebutuhan tiap tenant:
+
+- **Schema-per-tenant (isolasi kuat):** diterapkan bagi tenant/Holding yang memerlukan isolasi tinggi atau segregasi data karena kepatuhan regulatorik (mis. entitas di bawah pengawasan OJK, NFR-020), memberikan batas keamanan dan *backup/restore* per tenant (NFR-012).
+- **Shared-schema + `organization_id` (efisiensi):** diterapkan bagi mayoritas tenant/unit organisasi, dengan pemisahan logis melalui kolom `organization_id`.
+- **Row-Level Security (RLS) PostgreSQL:** pada mode *shared-schema*, kebijakan RLS menegakkan **Scope-Based Access Control** pada level basis data sebagai *defense-in-depth*, melengkapi filter di Data Access Layer (BAB 11.2).
+
+Penetapan mode per tenant merupakan keputusan konfigurasi (bukan perubahan *source code*), sehingga perpindahan tenant antar-mode dapat dilakukan melalui prosedur migrasi terkelola tanpa memengaruhi tenant lain.
+
+### 13.11.3 Partitioning dan Kinerja
+
+- **Range partitioning** berdasarkan periode fiskal/tanggal pada tabel bervolume tinggi (jurnal GL, pergerakan stok, log) untuk menjaga kinerja seiring pertumbuhan data historis (NFR-011).
+- **List/hash partitioning** berdasarkan `organization_id` bila diperlukan isolasi beban antar-organisasi.
+- *Indexing* selektif (B-tree, partial, BRIN untuk data *time-series*), *materialized view* untuk agregasi dashboard (NFR-003), dan **PgBouncer** untuk *connection pooling* (NFR-001, NFR-002).
+
+### 13.11.4 Ketersediaan Tinggi dan Disaster Recovery
+
+- **High Availability:** replikasi *streaming* *primary–standby* dengan *automatic failover* (mis. Patroni), memenuhi NFR-004/NFR-005 (failover < 60 detik) dan *read replica* untuk beban baca/pelaporan.
+- **Backup & DR:** *WAL archiving* + *Point-in-Time Recovery (PITR)*, *base backup* harian dan *incremental* setiap 4 jam ke lokasi *geo-redundant* — memenuhi NFR-028 (RPO ≤ 15 menit) dan NFR-029.
+
+### 13.11.5 Manajemen Skema
+
+Perubahan skema dikelola sebagai **migrasi berversi** (mis. `golang-migrate`) yang dijalankan pada pipeline CI/CD, mendukung *backward compatibility* dan strategi *expand–contract* agar tidak menimbulkan *breaking change* (NFR-014) saat *rolling deployment*.
+
+---
+
+## 13.12 Frontend Presentation Architecture — Decoupled SPA (React 19 + Vite) (ADR-011)
+
+- **Decoupled Architecture:** Pemisahan tegas antara aplikasi backoffice transaksional dan portal publik:
+  - **Backoffice Transactional SPA:** Aplikasi Single-Page Application (SPA) murni berbasis React 19 + Vite yang disajikan melalui Edge/CDN. Menggunakan **TanStack Router** (routing type-safe berbasis berkas, preloading loader, validasi search parameters untuk tautan filter transaksi yang dapat dibagikan), **TanStack Query v5** (caching server state, deduplikasi request, optimistic updates), dan **Zustand** (client UI state).
+  - **Public Portal & Landing:** Antarmuka statis teroptimasi CDN disajikan tanpa overhead server compute (NFR-003).
+- **High-Performance Data Grid:** Menerapkan virtual scrolling (`@tanstack/react-virtual` / virtual scroller) pada seluruh tabel transaksi (jurnal GL, kartu stok, daftar piutang/utang) sehingga mampu me-render hingga 100.000 baris data tanpa penurunan frame rate browser.
+- **Kanal Pembaruan Real-Time:** Integrasi **Server-Sent Events (SSE)** dan WebSockets melalui Kong API Gateway untuk menyiarkan event status transaksi (`erp.gl.journal.posted`, `erp.workflow.approval.requested`) secara instan ke layar pengguna tanpa polling agresif.
+- **Autentikasi & Keamanan:** Integrasi **OIDC dengan alur Authorization Code + PKCE** (INT-012, INT-015); token disimpan aman di memori browser dengan silent token refresh.
+- **Lokalisasi:** Dukungan multi-bahasa (Bahasa Indonesia & Inggris) dan format moneter/angka regional (NFR-022 s.d. NFR-024).
+- **Aksesibilitas & Responsif:** Komponen mematuhi **WCAG 2.1 AA**, *ARIA*, navigasi keyboard penuh, dan tata letak responsif lintas layar desktop dan tablet (NFR-025 s.d. NFR-027).
+
+---
+
+## 13.13 Deployment, CI/CD, and Observability
+
+### 13.13.1 Deployment Topology
+
+- **Kontainerisasi:** setiap layanan Go dan aplikasi frontend SPA dikemas sebagai *image* **Docker** dan dijalankan pada **Kubernetes**.
+- **Skalabilitas:** *Horizontal Pod Autoscaler* untuk layanan *stateless* (NFR-010); *namespace* terpisah per lingkungan (dev/staging/prod).
+- **Stateful services (self-managed, ADR-004):** PostgreSQL, Apache Kafka, Kong, dan Apicurio dijalankan secara **self-managed** melalui *operator* Kubernetes pada infrastruktur milik organisasi (mis. **Strimzi** untuk Kafka, **CloudNativePG/Zalando Postgres Operator** untuk PostgreSQL), dengan *persistent volume*, *anti-affinity*, dan otomasi *backup/failover*. Pendekatan self-managed dipilih untuk kendali penuh dan kedaulatan data, dengan konsekuensi tanggung jawab operasional (*patching*, *tuning*, *capacity planning*) berada pada Platform Team.
+- **Strategi rilis:** *rolling update* baseline; *blue-green*/*canary* untuk modul kritikal guna meminimalkan *downtime* (NFR-006, NFR-013).
+
+```text
+[ Ingress/API Gateway ] → [ K8s Cluster ]
+   ├── namespace: prod
+   │     ├── Deployments: go-services (HPA), web-spa
+   │     ├── StatefulSets: postgresql (primary+standby), kafka (3 broker)
+   │     └── Operators: schema-registry, monitoring stack
+   ├── namespace: staging  (mirror prod, skala lebih kecil)
+   └── namespace: dev
+```
+
+### 13.13.2 CI/CD Pipeline
+
+Setiap layanan memiliki pipeline independen (mendukung *independent deployment*, NFR-013) dengan tahap:
+
+1. **Build & Unit Test** — kompilasi Go / build web-spa, uji unit, *coverage gate*.
+2. **Static Analysis & Security Scan** — *linting*, **SAST**, *dependency/CVE scan*, *secret scan* (mendukung NFR-016/017).
+3. **Containerize** — build & *push* *image* Docker, *image signing*.
+4. **Deploy** — penerapan berbasis **GitOps** (mis. Argo CD) ke Kubernetes; migrasi basis data dijalankan sebagai *job* pra-deploy (*expand–contract*).
+5. **Post-Deploy Verification** — *smoke test*, *health check*, *automated rollback* bila gagal.
+
+### 13.13.3 Observability
+
+- **Metrics:** **Prometheus** + **Grafana** (SLA/SLO NFR-001, NFR-004; *lag* konsumen Kafka).
+- **Logging:** log terstruktur (JSON) diaruskan via **Kafka** ke penyimpanan terpusat (mis. Loki/ELK).
+- **Tracing:** **OpenTelemetry** *end-to-end* dengan *correlation_id* melintasi REST/gRPC dan *event* Kafka (mis. Jaeger/Tempo).
+- **Alerting:** **Alertmanager** dengan eskalasi sesuai NFR-018 (deteksi < 1 jam, respons < 4 jam).
+- **Audit & Security Monitoring:** *stream* `erp.audit.event.recorded.v1` (BAB 13.10.3) menjadi sumber forensik utama (NFR-018, BAB 9.20).
+
+---
+
+## 13.14 Integration Requirement Traceability
+
+| INT ID  | Category              | Priority | Related Module                          |
+| ------- | --------------------- | -------- | ---------------------------------------- |
+| INT-001 | Internal Integration  | Critical | Sales, Inventory, AR, General Ledger     |
+| INT-002 | Internal Integration  | Critical | Procurement, AP, General Ledger          |
+| INT-003 | Internal Integration  | Critical | HR, Payroll, General Ledger              |
+| INT-004 | Internal Integration  | High     | Workflow, All Modules                    |
+| INT-005 | External Integration  | Critical | Treasury, Cash & Bank Management         |
+| INT-006 | External Integration  | Critical | Tax Management                           |
+| INT-007 | External Integration  | High     | Payroll, HR                              |
+| INT-008 | External Integration  | Medium   | Master Data Management, All Modules      |
+| INT-009 | Third-Party Services   | Medium   | Dashboard, Workflow                      |
+| INT-010 | Third-Party Services   | Medium   | Dashboard, Workflow                      |
+| INT-011 | Third-Party Services   | High     | Dashboard, Workflow, Audit Trail         |
+| INT-012 | Third-Party Services   | Critical | User, Security                           |
+| INT-013 | API Strategy           | Critical | All Modules                              |
+| INT-014 | API Strategy           | High     | All Modules                              |
+| INT-015 | API Strategy           | Critical | Security, User                           |
+| INT-016 | API Strategy           | High     | Security, All Modules                    |
+
+---
+
+## 13.15 Enterprise Chrome Extension Companion (Manifest V3, ADR-012)
+
+- **In-Context Regulatory Helper:** Menyediakan modul ekstensi browser resmi (Manifest V3) untuk membantu staf perpajakan dan treasury berinteraksi dengan portal eksternal:
+  - Otomasi pengisian dan validasi data e-Faktur di portal resmi DJP Online / CoreTax tanpa copy-paste manual, serta penarikan nomor faktur/NTTE kembali ke ERP.
+  - Ekstraksi mutasi rekening koran dari internet banking korporasi secara aman untuk auto-rekonsiliasi kas/bank di `treasury-cashbank-service`.
+- **Side Panel Quick Approvals:** Antarmuka *Side Panel* (`chrome.sidePanel`) untuk eksekutif dan manajer cabang guna meninjau dan menyetujui dokumen penting (Purchase Order, Journal, Payroll Run) dalam 1-klik tanpa meninggalkan tab pekerjaan aktif.
+- **Hardware Web-Bridge:** Menjembatani perangkat pemindai barcode USB/Bluetooth dan reader RFID gudang melalui Web Serial/HID API langsung ke form ERP.
+- **Arsitektur Keamanan:** Ephemeral service worker (state di `chrome.storage.session`), otentikasi OAuth2 PKCE via `chrome.identity`, host permission ter-whitelist ketat, dan pelacakan metadata rilis melalui `CHROMEWEBSTORE.md`.
+
+---
+
+## 13.16 Cortex Framework Data Products & SAP Coexistence (ADR-013)
+
+- **Legacy & SAP Coexistence (CONS-006):** Mendukung koeksistensi jangka panjang dengan sistem SAP (ECC 6.0 dan S/4HANA) di anak perusahaan melalui replikasi tabel kamus data SAP (SAP DDIC: `BKPF`, `BSEG`, `ACDOCA`, `MARC`) ke lakehouse BigQuery.
+- **Arsitektur Data Products 3-Lapisan:** Penerapan standar Cortex Framework V7:
+  - *Data Foundations*: Tabel raw data SAP dan stream event Kafka ERP.
+  - *Annotations*: Standardisasi semantik dan resolusi perbedaan struktur ECC vs S/4HANA.
+  - *Data Products*: Model dimensi skema bintang (`dim_organization`, `dim_currency`, `dim_fiscal_period`, `fact_gl_transaction`) berbasis Dataform (.js).
+- **Proteksi Transaksional OLTP:** Query analitik eksekutif, audit konsolidasi holding, dan BI reporting dilayani langsung oleh Data Products di BigQuery, mengisolasi pod PostgreSQL transaksional dari kelebihan beban query berat.
+- **Tata Kelola Namespace:** Seluruh data model kustom wajib berada pada namespace `custom` atau `sinergi` guna mencegah tertimpa pembaruan pustaka Cortex upstream.
+
+---
+
+## 13.17 Summary
+
+Bab Integration Requirements ini menetapkan 16 kebutuhan integrasi inti (INT-001 s.d. INT-016) serta arsitektur integrasi modern: Decoupled SPA (ADR-011), Enterprise Chrome Extension Companion (ADR-012), dan Cortex Data Products untuk koeksistensi SAP (ADR-013). Kebutuhan ini menjadi acuan bagi tim arsitektur dan pengembangan untuk memastikan ERP dapat terintegrasi secara konsisten dengan seluruh modul internal, sistem eksternal, dan layanan pihak ketiga, sejalan dengan prinsip Configuration over Customization, Organization Tree First, API First, dan Cloud Ready.
+
+Selain kebutuhan integrasi, bab ini melengkapi cetak biru arsitektur teknologi pada tingkat HLD/LLD-lite yang merealisasikan tumpukan teknologi standar: *microservices* **Go 1.23+** dengan pola *database-per-service*, **Apache Kafka KRaft** sebagai *event backbone* (Transactional Outbox, Selective Exactly-Once, Saga, Apicurio Schema Registry), **PostgreSQL 16** sebagai *system of record* (multi-tenancy, composite partitioning, HA/PITR), **Decoupled SPA** pada Presentation Layer, **Chrome Extension MV3** sebagai pendamping lapangan, serta praktik deployment Kubernetes, CI/CD GitOps, dan observability OpenTelemetry.
+
+Kebutuhan integrasi dan arsitektur teknologi ini bersifat komplementer terhadap Business Requirement (BR-xxx) pada BAB 9 dan menjadi dasar penyusunan Software Architecture Document (SAD), Database Design, API Specification, serta Test Case pada dokumen turunan berikutnya.

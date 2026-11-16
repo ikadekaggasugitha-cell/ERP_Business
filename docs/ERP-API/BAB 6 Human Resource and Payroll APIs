@@ -1,0 +1,91 @@
+# BAB 6. Human Resource and Payroll APIs
+
+## 6.1 Overview
+
+Bab ini mendefinisikan kontrak REST domain **HR** dan **Payroll**. API ini menangani **data pribadi (PII)** sehingga tunduk pada kontrol tambahan (BAB 6.4, SAD BAB 7.5, NFR-019). Payroll menghasilkan *event* Exactly-Once yang memicu posting GL (INT-003). Resource memetakan ke DBDD BAB 7.
+
+---
+
+## 6.2 Human Resource API — API-020
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/employees`, `/v1/positions` |
+| Layanan | SVC-016 hr-service |
+| Tabel | `hr.employee`, `hr.position`, `hr.employment`, `hr.employee_compensation` |
+| Referensi | 9.12, INT-003 |
+
+**Endpoint kunci:**
+
+| Method & Path                                        | Deskripsi                                      |
+| ---------------------------------------------------- | ---------------------------------------------- |
+| `POST /v1/employees`                                  | Daftarkan karyawan → `hr.employee.updated.v1`. |
+| `GET /v1/employees/{id}`                              | Detail karyawan (PII sesuai izin).             |
+| `POST /v1/employees/{id}/employments`                | Tambah/ubah penempatan (efektif berjangka).    |
+| `PUT /v1/employees/{id}/compensation`                | Set komponen kompensasi (PII sensitif).        |
+| `GET /v1/positions?organizationId=…`                 | Struktur jabatan per unit.                     |
+
+**Skema `Employee` (response, PII terkontrol):**
+
+```json
+{
+  "id": "uuid",
+  "employeeNo": "EMP-0001",
+  "fullName": "Budi Santoso",
+  "nationalId": "***masked***",
+  "email": "b***@example.com",
+  "hireDate": "2024-03-01",
+  "status": "Active",
+  "rowVersion": 2
+}
+```
+
+> Field PII (mis. `nationalId`) dikembalikan **ter-mask** kecuali pemanggil memiliki izin khusus (BAB 6.4).
+
+---
+
+## 6.3 Payroll API — API-021
+
+| Atribut | Nilai |
+| --- | --- |
+| Base path | `/v1/payroll-runs` |
+| Layanan | SVC-017 payroll-service |
+| Tabel | `pay.payroll_run`, `pay.payroll_result`, `pay.statutory_contribution` |
+| Referensi | 9.17, INT-003/007 |
+
+**Endpoint kunci:**
+
+| Method & Path                                        | Deskripsi                                      | Catatan |
+| ---------------------------------------------------- | ---------------------------------------------- | ------- |
+| `POST /v1/payroll-runs`                               | Buat periode penggajian.                       | 201     |
+| `POST /v1/payroll-runs/{id}/calculate`               | Hitung payroll (proses asinkron).              | 202     |
+| `GET /v1/payroll-runs/{id}`                          | Status & ringkasan run.                        |         |
+| `POST /v1/payroll-runs/{id}/approve`                 | Setujui hasil perhitungan.                     |         |
+| `POST /v1/payroll-runs/{id}/post`                    | Posting ke GL → `payroll.run.completed.v1`.    | **EOS** |
+| `GET /v1/payroll-runs/{id}/results?employeeId=…`     | Rincian hasil per karyawan (PII sensitif).     |         |
+| `GET /v1/payroll-runs/{id}/statutory-contributions` | Iuran BPJS untuk pelaporan (INT-007).          |         |
+
+* `calculate` bersifat **asinkron** (`202 Accepted`) karena volume; status dipantau via `GET`.
+* `post` menghasilkan *event* Exactly-Once → GL & Treasury (INT-003).
+
+---
+
+## 6.4 PII Handling in APIs
+
+Kontrol PII pada lapis API (melengkapi DBDD BAB 7.4, SAD BAB 7.5):
+
+| Kontrol                | Penerapan API                                                         |
+| ---------------------- | --------------------------------------------------------------------- |
+| Masking default        | Field PII (NIK, gaji) dikembalikan ter-mask kecuali izin `hr.pii.read`.|
+| Least privilege        | Endpoint kompensasi/hasil payroll dibatasi peran HR/Payroll berwenang.|
+| Audit akses            | Setiap akses data PII tercatat di audit trail (NFR-018).             |
+| Right to erasure       | `DELETE /v1/employees/{id}` memicu anonymization terkoordinasi (UU PDP).|
+| Scope isolation        | Data karyawan lintas Company/Business Unit dibatasi RLS (BR-031).    |
+
+---
+
+## 6.5 Summary
+
+Bab ini mendefinisikan kontrak REST domain **HR** (employee/position/employment/compensation, dengan masking PII) dan **Payroll** (run→calculate asinkron→approve→post Exactly-Once ke GL, serta kontribusi BPJS). Kontrol PII pada lapis API — masking, least privilege, audit akses, right-to-erasure, scope isolation — menegakkan kepatuhan UU PDP. Resource memetakan ke DBDD BAB 7 dan layanan SVC-016–017 (INT-003/007).
+
+---

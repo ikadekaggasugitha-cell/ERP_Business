@@ -1,0 +1,175 @@
+# 9.5.10 Cost Center Requirements
+
+---
+
+# 9.5.10.1 Overview
+
+Cost Center merupakan dimensi pelaporan yang digunakan untuk mengalokasikan, mengendalikan, dan memantau biaya operasional pada level unit organisasi, proyek, departemen, atau aktivitas tertentu, terlepas dari struktur legal maupun struktur organisasi operasional.
+
+Cost Center digunakan berdampingan dengan Financial Dimension dan Segment pada Chart of Accounts sebagai kombinasi dimensi analitis, sehingga setiap transaksi keuangan dapat ditelusuri tidak hanya berdasarkan akun (account), tetapi juga berdasarkan pusat biaya yang bertanggung jawab atas transaksi tersebut.
+
+Sejalan dengan prinsip Configuration over Customization dan Organization Tree First, Cost Center harus dapat dikonfigurasi sebagai struktur hierarki tanpa batas level, dipetakan secara fleksibel ke unit organisasi (Holding, Sub Holding, Company, Business Unit, Branch, Department, Warehouse, Project Site), dan digunakan secara konsisten oleh seluruh modul keuangan maupun operasional sebagai satu sumber kebenaran (single source of truth) untuk analisis biaya.
+
+---
+
+# 9.5.10.2 Business Requirement Catalogue
+
+## BR-616 – Cost Center Master
+
+| Attribute           | Description                                                                                                                                                                            |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID      | BR-616                                                                                                                                                                                 |
+| Requirement Name    | Cost Center Master                                                                                                                                                                    |
+| Category            | Cost Center                                                                                                                                                                            |
+| Priority            | Critical                                                                                                                                                                               |
+| Business Objective  | BO-004, BO-014                                                                                                                                                                         |
+| Stakeholder Owner   | SH-003 (Chief Financial Officer)                                                                                                                                                       |
+| Description         | Sistem harus menyediakan master data Cost Center terpusat yang mendefinisikan kode, nama, deskripsi, dan status sebagai dimensi pelaporan biaya yang independen dari struktur akun.   |
+| Business Rationale  | Tanpa master Cost Center yang terpusat dan terstandarisasi, pencatatan biaya berpotensi tersebar dengan definisi yang tidak konsisten antar unit organisasi maupun antar modul.       |
+| Business Value      | Menjadikan Cost Center sebagai satu sumber kebenaran (single source of truth) untuk dimensi biaya, sehingga konsisten digunakan oleh seluruh modul keuangan dan operasional.          |
+| Acceptance Criteria | Administrator dapat membuat, mengubah, mengaktifkan, dan menonaktifkan Cost Center pada satu master data terpusat, serta setiap Cost Center memiliki kode unik yang tidak dapat diduplikasi. |
+
+---
+
+## BR-617 – Cost Center Hierarchy
+
+| Attribute       | Description                                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID  | BR-617                                                                                                                                                                   |
+| Requirement Name| Cost Center Hierarchy                                                                                                                                                    |
+| Priority        | Critical                                                                                                                                                                 |
+| Description     | Sistem harus mendukung penyusunan Cost Center dalam struktur hierarki parent-child tanpa batas level untuk mendukung konsolidasi dan roll-up pelaporan biaya.          |
+| Acceptance Criteria | Administrator dapat mendefinisikan Cost Center induk dan Cost Center turunan pada jumlah level yang tidak dibatasi melalui konfigurasi, tanpa perubahan source code. |
+
+---
+
+## BR-618 – Cost Center Code & Numbering Structure
+
+| Attribute       | Description                                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID  | BR-618                                                                                                                                                            |
+| Requirement Name| Cost Center Code & Numbering Structure                                                                                                                           |
+| Priority        | High                                                                                                                                                              |
+| Description     | Sistem harus menyediakan struktur penomoran (numbering structure) Cost Center yang dapat dikonfigurasi, termasuk panjang kode, segmentasi, dan pola penamaan.   |
+| Business Value  | Memastikan konsistensi format kode Cost Center antar entitas dalam grup perusahaan serta memudahkan identifikasi hierarki melalui pola kode.                   |
+
+---
+
+## BR-619 – Cost Center Assignment to Organization Scope
+
+| Attribute       | Description                                                                                                                                                                    |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID  | BR-619                                                                                                                                                                        |
+| Requirement Name| Cost Center Assignment to Organization Scope                                                                                                                                  |
+| Priority        | Critical                                                                                                                                                                      |
+| Description     | Sistem harus memungkinkan setiap Cost Center dipetakan ke satu atau lebih unit organisasi (Company, Business Unit, Branch, Department, Warehouse, Project Site) sesuai scope. |
+| Acceptance Criteria | Cost Center dapat digunakan lintas unit organisasi sesuai konfigurasi scope, tanpa harus dibuat ulang pada masing-masing unit organisasi.                                |
+
+---
+
+## BR-620 – Cost Center Mapping to Financial Dimension & Segment
+
+| Attribute       | Description                                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID  | BR-620                                                                                                                                                                  |
+| Requirement Name| Cost Center Mapping to Financial Dimension & Segment                                                                                                                    |
+| Priority        | Critical                                                                                                                                                                |
+| Description     | Sistem harus mendukung penggunaan Cost Center secara bersamaan dengan Financial Dimension dan Segment lain pada Chart of Accounts sebagai kombinasi dimensi pelaporan. |
+| Business Value  | Memungkinkan analisis biaya multidimensi (per akun, per Cost Center, per Segment) tanpa duplikasi struktur akun.                                                       |
+
+---
+
+## BR-621 – Cost Center Status Lifecycle
+
+| Attribute       | Description                                                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID  | BR-621                                                                                                                                                        |
+| Requirement Name| Cost Center Status Lifecycle                                                                                                                                  |
+| Priority        | High                                                                                                                                                           |
+| Description     | Sistem harus mengelola siklus status Cost Center (Draft, Active, Inactive, Closed) beserta aturan transisi status yang dapat dikonfigurasi.                 |
+| Acceptance Criteria | Cost Center berstatus Inactive atau Closed tidak dapat dipilih pada transaksi baru, namun tetap tersedia untuk kebutuhan pelaporan historis.              |
+
+---
+
+## BR-622 – Cost Center Ownership & Responsible Person
+
+| Attribute       | Description                                                                                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID  | BR-622                                                                                                                                    |
+| Requirement Name| Cost Center Ownership & Responsible Person                                                                                                |
+| Priority        | Medium                                                                                                                                    |
+| Description     | Sistem harus memungkinkan penetapan pemilik (owner) atau penanggung jawab pada setiap Cost Center untuk kebutuhan akuntabilitas biaya.  |
+| Business Value  | Memperjelas akuntabilitas atas realisasi biaya per Cost Center dan mendukung proses persetujuan anggaran berbasis penanggung jawab.     |
+
+---
+
+## BR-623 – Cost Center Budget Linkage
+
+| Attribute       | Description                                                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID  | BR-623                                                                                                                                                          |
+| Requirement Name| Cost Center Budget Linkage                                                                                                                                     |
+| Priority        | High                                                                                                                                                            |
+| Description     | Sistem harus menyediakan keterkaitan antara Cost Center dengan modul Budget Management sehingga anggaran dapat disusun dan dipantau per Cost Center.          |
+| Acceptance Criteria | Sistem dapat menampilkan perbandingan anggaran versus realisasi biaya per Cost Center pada periode fiskal yang ditentukan.                                 |
+
+---
+
+## BR-624 – Cost Center Allocation Rules
+
+| Attribute       | Description                                                                                                                                                                  |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID  | BR-624                                                                                                                                                                        |
+| Requirement Name| Cost Center Allocation Rules                                                                                                                                                  |
+| Priority        | High                                                                                                                                                                          |
+| Description     | Sistem harus mendukung konfigurasi aturan alokasi biaya dari satu Cost Center sumber ke satu atau lebih Cost Center tujuan berdasarkan basis alokasi yang dapat ditentukan. |
+| Business Value  | Memungkinkan distribusi biaya bersama (shared cost) secara proporsional dan konsisten antar unit organisasi tanpa proses manual berulang.                                   |
+
+---
+
+## BR-625 – Cost Center Reporting & Analytics
+
+| Attribute       | Description                                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Requirement ID  | BR-625                                                                                                                                                          |
+| Requirement Name| Cost Center Reporting & Analytics                                                                                                                               |
+| Priority        | Critical                                                                                                                                                         |
+| Description     | Sistem harus menyediakan pelaporan biaya berbasis Cost Center yang dapat dikombinasikan dengan Financial Dimension dan Segment lain secara real-time.          |
+| Acceptance Criteria | Pengguna dapat menghasilkan laporan biaya per Cost Center, per periode, dan per kombinasi dimensi lain tanpa memerlukan pengembangan laporan khusus (custom). |
+
+---
+
+# 9.5.10.3 Business Rules Reference
+
+| Business Rule ID | Description                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| BRule-CC-001      | Cost Center merupakan dimensi pelaporan yang bersifat independen dari struktur akun (Chart of Accounts) maupun struktur organisasi operasional. |
+| BRule-CC-002      | Setiap transaksi keuangan yang bersifat cost-relevant wajib memiliki Cost Center yang valid dan berstatus Active.                              |
+| BRule-CC-003      | Cost Center dapat disusun dalam struktur hierarki parent-child tanpa batas level untuk mendukung roll-up dan konsolidasi pelaporan.            |
+| BRule-CC-004      | Kode Cost Center bersifat unik dalam lingkup yang dikonfigurasi dan tidak dapat diduplikasi.                                                   |
+| BRule-CC-005      | Cost Center berstatus Inactive atau Closed tidak dapat digunakan pada transaksi baru, namun tetap tersedia untuk pelaporan historis.           |
+| BRule-CC-006      | Perubahan struktur, mapping, atau status Cost Center tidak menghapus atau mengubah data transaksi historis yang telah tercatat.                |
+| BRule-CC-007      | Cost Center dapat digunakan bersama Financial Dimension dan Segment lain pada Chart of Accounts sebagai kombinasi dimensi pelaporan.           |
+
+---
+
+# 9.5.10.4 Requirement Traceability
+
+| Requirement ID | Business Objective | Stakeholder | Future Process                          |
+| -------------- | ------------------- | ----------- | ---------------------------------------- |
+| BR-616         | BO-004, BO-014       | SH-003      | Cost Center Master Administration        |
+| BR-617         | BO-004, BO-014       | SH-003      | Cost Center Hierarchy Configuration       |
+| BR-618         | BO-014               | SH-003      | Cost Center Numbering Configuration       |
+| BR-619         | BO-004, BO-014       | SH-003      | Cost Center Scope Assignment              |
+| BR-620         | BO-004, BO-014       | SH-003      | Cost Center & Dimension Mapping           |
+| BR-621         | BO-014               | SH-003      | Cost Center Status Administration         |
+| BR-622         | BO-014               | SH-003      | Cost Center Ownership Assignment          |
+| BR-623         | BO-004               | SH-003      | Cost Center Budget Planning & Monitoring  |
+| BR-624         | BO-004, BO-014       | SH-003      | Cost Center Cost Allocation Processing    |
+| BR-625         | BO-004, BO-014       | SH-003      | Cost Center Reporting & Analytics         |
+
+---
+
+# 9.5.10.5 Summary
+
+Cost Center Requirements menetapkan fondasi bagi pengelolaan pusat biaya sebagai dimensi pelaporan yang terpisah dari struktur akun maupun struktur organisasi operasional, namun terintegrasi penuh dengan keduanya melalui konfigurasi. Dengan dukungan hierarki tanpa batas level, mapping fleksibel ke unit organisasi, keterkaitan dengan anggaran, serta kemampuan alokasi dan pelaporan multidimensi bersama Financial Dimension dan Segment, Cost Center menjadi instrumen kunci untuk memastikan konsistensi data biaya (single source of truth) di seluruh modul ERP. Seluruh requirement pada bagian ini akan menjadi dasar bagi desain lanjutan pada dokumen berikutnya.

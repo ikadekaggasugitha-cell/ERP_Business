@@ -1,0 +1,130 @@
+# BAB 11. Cross-Cutting Concerns
+
+## 11.1 Overview
+
+Bab ini mendefinisikan *cross-cutting concerns* — kapabilitas dan pola yang berlaku seragam di seluruh layanan, bukan milik satu domain. Penerapan yang konsisten menjaga koherensi keamanan, keterlacakan, resiliensi, dan pengalaman pengguna lintas modul, serta mengurangi duplikasi logika (mendukung NFR-013/015 dan RISK-013/014). Beberapa konsern telah disinggung pada BAB 4.7; bab ini mengelaborasi pola implementasinya secara menyeluruh.
+
+---
+
+## 11.2 Configuration Management
+
+Selaras prinsip **Configuration over Customization**:
+
+| Aspek                    | Pola                                                                   | Referensi        |
+| ------------------------ | --------------------------------------------------------------------- | ---------------- |
+| Konfigurasi perilaku bisnis | Disimpan sebagai data di PostgreSQL (per organisasi), bukan di kode.| BO-002, CONS-013 |
+| Konfigurasi teknis/lingkungan | Dipisahkan dari image (env/ConfigMap/Secret), per environment.   | BAB 10.9         |
+| Konfigurasi per-tenant   | Aturan approval, posting rule, format regional bervariasi per organisasi.| BR-.., BAB 6.3   |
+| Feature configuration    | Aktivasi modul/fitur per organisasi via konfigurasi (Modular & Extensible).| BO-024/027       |
+
+Perubahan konfigurasi bisnis tidak memerlukan *redeploy*; perubahan konfigurasi teknis mengikuti GitOps (BAB 10.3).
+
+---
+
+## 11.3 Organization Tree and Scope Context Propagation
+
+* Konteks organisasi (`organization_id`, *path* scope, peran) dibawa pada **header** setiap request REST/gRPC dan **header** setiap *event* Kafka.
+* Konteks disuntikkan ke sesi basis data untuk evaluasi **RLS** (BAB 6.4).
+* Propagasi konsisten memastikan **Scope-Based Everything** ditegakkan pada seluruh layer tanpa logika ad-hoc per modul.
+* Middleware standar (BAB 4.4) mengekstrak & memvalidasi konteks pada titik masuk layanan.
+
+---
+
+## 11.4 Idempotency and Deduplication
+
+| Kanal            | Mekanisme Idempotensi                                                  | Referensi        |
+| ---------------- | --------------------------------------------------------------------- | ---------------- |
+| API command      | Header `Idempotency-Key` divalidasi & disimpan; permintaan berulang menghasilkan hasil sama. | BAB 5.2          |
+| Event consumer   | Deduplikasi berbasis `event_id`/`correlation_id` (tabel `processed_events`). | ADR-005          |
+| Retry            | Operasi *retry* aman diulang tanpa efek ganda (INT: idempotency principle).| INT-004          |
+
+Idempotensi bersifat **wajib** pada seluruh konsumen event sebagai *safety net*, khususnya untuk mode At-Least-Once (BAB 5.5).
+
+---
+
+## 11.5 Error Handling and Resilience
+
+| Pola                     | Penerapan                                                              | Referensi        |
+| ------------------------ | --------------------------------------------------------------------- | ---------------- |
+| Retry with backoff       | Kegagalan transien (DB/eksternal) dicoba ulang dengan *exponential backoff*.| NFR-009          |
+| Circuit breaker          | Memutus panggilan ke dependensi yang gagal berkepanjangan; *fail fast*.| NFR-009, ARC-006 |
+| Timeout                  | Batas waktu pada setiap panggilan sinkron (REST/gRPC/eksternal).       | NFR-001          |
+| Bulkhead                 | Isolasi *thread/connection pool* agar kegagalan satu dependensi tidak menjalar.| ARC-006          |
+| Dead Letter & retry topic| Event gagal → `.retry` → `.dlq` untuk investigasi.                     | BAB 5.5          |
+| Graceful degradation     | Fitur non-kritikal *degrade* tanpa menghentikan proses inti.          | NFR-009          |
+
+Model error API distandarisasi (BAB 5.2.1) dengan `code`, `message`, dan `correlation_id`.
+
+---
+
+## 11.6 Correlation and Traceability
+
+* Setiap permintaan menghasilkan/melanjutkan **`correlation_id`** yang mengalir melintasi seluruh layer (Kong → Go → Kafka → konsumen).
+* `correlation_id` disematkan pada log (BAB 9.4), *trace* (BAB 9.5), audit (BAB 7.7), dan model error.
+* Memungkinkan rekonstruksi alur bisnis *end-to-end* (mis. Saga INT-001) untuk diagnosis & audit.
+
+---
+
+## 11.7 Internationalization and Localization
+
+| Aspek                    | Realisasi                                                              | Referensi        |
+| ------------------------ | --------------------------------------------------------------------- | ---------------- |
+| Multi bahasa UI          | **React i18n** (Bahasa Indonesia & Inggris minimum).                  | NFR-022          |
+| Manajemen terjemahan     | Tabel terjemahan di PostgreSQL; aktivasi bahasa via konfigurasi tanpa *downtime*.| NFR-024, BR-817  |
+| Format regional          | Tanggal, angka, mata uang per *locale* pengguna/organisasi.           | NFR-023          |
+| Konsistensi data         | Perubahan *locale* tidak mengubah data tersimpan (pemisahan presentasi vs data).| NFR-023          |
+
+---
+
+## 11.8 Caching Strategy
+
+| Lapis            | Pola Cache                                                             | Catatan          |
+| ---------------- | --------------------------------------------------------------------- | ---------------- |
+| Gateway (Kong)   | Cache respons untuk endpoint yang jarang berubah.                      | NFR-001          |
+| Service          | Cache data referensi/master lokal (invalidasi via event master data). | BAB 6.7          |
+| Read model       | *Materialized view* untuk agregasi dashboard (CQRS).                   | ADR-009, NFR-003 |
+
+Invalidasi cache data master dipicu oleh *event* `erp.masterdata.*.upserted` untuk menjaga kesegaran (*eventual*).
+
+---
+
+## 11.9 Time, Currency, and Precision Handling
+
+| Aspek                    | Kebijakan                                                              | Referensi        |
+| ------------------------ | --------------------------------------------------------------------- | ---------------- |
+| Waktu                    | Penyimpanan UTC; penyajian sesuai *timezone* pengguna/entitas.        | NFR-004 (lintas zona) |
+| Multi-currency           | Nilai transaksi, fungsional, presentasi, pelaporan sesuai Currency Management (BRD 9.5.3). | BO-021           |
+| Presisi & pembulatan     | Aturan presisi/pembulatan per mata uang (Currency Precision/Rounding Rule) diterapkan konsisten. | BRD 9.5.3        |
+| Kalender fiskal          | Periode akuntansi per entitas (Fiscal Calendar) sebagai basis partisi & tutup buku. | BRD 9.5.2, BAB 6.5 |
+
+Konsistensi penanganan angka finansial krusial untuk integritas GL (NFR-007/008).
+
+---
+
+## 11.10 Feature Flags and Progressive Delivery
+
+* **Feature flags** memisahkan *deploy* dari *release*: kode dirilis dalam keadaan nonaktif dan diaktifkan bertahap.
+* Mendukung *canary*/*progressive rollout* (BAB 10.5) dan aktivasi fitur per organisasi (Configuration over Customization).
+* Flag dikelola terpusat & dapat dinonaktifkan cepat (*kill switch*) saat insiden.
+
+---
+
+## 11.11 Cross-Cutting Traceability
+
+| Concern                  | Kebutuhan/Keputusan Terkait                    | Bagian     |
+| ------------------------ | ---------------------------------------------- | ---------- |
+| Configuration            | BO-002, CONS-013, Configuration over Customization | §11.2  |
+| Scope propagation        | BR-031, ARC-004/008                            | §11.3      |
+| Idempotency              | ADR-005, INT-004                               | §11.4      |
+| Resilience               | NFR-009, ARC-006                               | §11.5      |
+| Correlation/tracing      | ADR-010, NFR-018                               | §11.6      |
+| Localization             | NFR-022–024                                    | §11.7      |
+| Currency/precision       | BO-021, NFR-007/008                            | §11.9      |
+
+---
+
+## 11.12 Summary
+
+Bab ini menetapkan pola *cross-cutting* yang diterapkan seragam lintas seluruh layanan: manajemen konfigurasi (Configuration over Customization), propagasi konteks Organization Tree & scope, idempotensi, error handling & resilience (retry/circuit breaker/timeout/bulkhead), korelasi & traceability, lokalisasi, caching, penanganan waktu/mata uang/presisi, serta feature flags. Konsistensi penerapan ini menjadi fondasi kualitas sistem (keamanan, resiliensi, keterlacakan, dan pengalaman) tanpa duplikasi logika per modul.
+
+---

@@ -1,0 +1,248 @@
+# BAB 14. Reporting Requirements
+
+## 14.1 Overview
+
+Bab ini mendefinisikan kebutuhan pelaporan (*reporting requirements*) yang bersifat lintas modul (*cross-cutting*) pada platform ERP modular, configurable, dan multi-organisasi. Berbeda dengan requirement pelaporan yang telah dibahas secara mendalam pada masing-masing modul fungsional, bab ini menyajikan sudut pandang pelaporan sebagai kebutuhan menyeluruh yang berlaku di seluruh modul — mulai dari laporan transaksi harian tingkat operasional, ringkasan kinerja tingkat eksekutif, laporan keuangan standar, laporan audit dan kepatuhan, hingga kebutuhan dashboard interaktif.
+
+Kebutuhan pelaporan yang diuraikan pada bab ini bersifat **melengkapi (complementary)**, bukan menggantikan, requirement pelaporan yang telah ditetapkan secara rinci pada:
+
+- **Dashboard and Executive Reporting** (BR-756 s.d. BR-765), yang mengatur kebutuhan dashboard eksekutif, widget KPI real-time, dan personalisasi tampilan berbasis role dan organization scope.
+- **Financial Reporting** (BR-676 s.d. BR-685), yang mengatur penyusunan laporan keuangan standar (Neraca, Laba Rugi, Arus Kas, Perubahan Ekuitas), konsolidasi, dan pelaporan regulasi.
+- **Financial Analytics** (BR-686 s.d. BR-695), yang mengatur kebutuhan analisis keuangan lanjutan, forecasting, dan analisis rasio.
+- **Audit Trail** (BR-826 s.d. BR-835), yang mengatur kebutuhan pencatatan aktivitas terpusat, immutability log, dan pelaporan kepatuhan.
+
+Untuk menghindari duplikasi, setiap requirement pada bab ini yang beririsan langsung dengan modul-modul di atas disajikan sebagai **pointer (cross-reference)** terhadap Requirement ID terkait, dan tidak menguraikan ulang detail teknis yang telah dibahas pada bab modul masing-masing. Bab ini menggunakan skema penomoran requirement tersendiri, yaitu **REP-xxx**, untuk membedakan kebutuhan pelaporan tingkat BRD (cross-module reporting framework) dari kebutuhan spesifik modul (BR-xxx).
+
+Tujuan utama bab ini adalah memastikan bahwa:
+
+1. Setiap modul transaksional memiliki standar laporan operasional harian yang konsisten.
+2. Manajemen memiliki laporan ringkasan kinerja lintas perusahaan yang dapat diandalkan.
+3. Laporan keuangan, laporan audit, dan dashboard yang telah didefinisikan pada bab modul terkait tetap tercakup dalam kerangka pelaporan menyeluruh (*overall reporting framework*) di tingkat BRD.
+4. Standar teknis pelaporan (format ekspor, penjadwalan, distribusi) berlaku seragam di seluruh modul.
+
+---
+
+## 14.2 Operational Reports
+
+Operational Reports merupakan laporan transaksi harian yang dihasilkan oleh masing-masing modul operasional untuk mendukung kebutuhan pemantauan dan pengendalian proses bisnis sehari-hari.
+
+### REP-001 – Purchase Order Report
+
+| Attribute        | Description                                                                                                                                                                        |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-001                                                                                                                                                                              |
+| Requirement Name  | Purchase Order Report                                                                                                                                                               |
+| Priority          | High                                                                                                                                                                                |
+| Description       | Sistem harus menyediakan laporan transaksi Purchase Order (PO) harian yang mencakup status PO (draft, approved, sent, partially received, closed), nilai PO, vendor, dan organization scope terkait, guna mendukung pemantauan aktivitas pengadaan secara operasional. |
+
+---
+
+### REP-002 – Stock Movement Report
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-002                                                                                                                                                                          |
+| Requirement Name  | Stock Movement Report                                                                                                                                                           |
+| Priority          | High                                                                                                                                                                             |
+| Description       | Sistem harus menyediakan laporan mutasi persediaan (stock in, stock out, transfer antar gudang, penyesuaian stok) harian per lokasi/warehouse, untuk mendukung pengendalian persediaan dan rekonsiliasi fisik secara operasional. |
+
+---
+
+### REP-003 – Sales Order Report
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-003                                                                                                                                                                          |
+| Requirement Name  | Sales Order Report                                                                                                                                                              |
+| Priority          | High                                                                                                                                                                             |
+| Description       | Sistem harus menyediakan laporan transaksi Sales Order (SO) harian yang mencakup status SO (draft, confirmed, fulfilled, invoiced, cancelled), nilai penjualan, pelanggan, dan organization scope terkait, guna mendukung pemantauan aktivitas penjualan secara operasional. |
+
+---
+
+## 14.3 Executive Reports
+
+Executive Reports merupakan laporan ringkasan kinerja lintas perusahaan yang ditujukan bagi manajemen untuk mendukung pengambilan keputusan strategis, melengkapi widget dashboard yang telah diatur pada BR-756 s.d. BR-765.
+
+### REP-004 – Executive Summary Report
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-004                                                                                                                                                                          |
+| Requirement Name  | Executive Summary Report                                                                                                                                                        |
+| Priority          | Critical                                                                                                                                                                         |
+| Description       | Sistem harus menyediakan laporan ringkasan eksekutif berkala (harian/mingguan/bulanan) yang merangkum indikator kinerja utama lintas modul (Finance, Sales, Procurement, Inventory, HR, Project) dalam satu dokumen laporan, sebagai versi cetak/ekspor dari ringkasan yang ditampilkan pada dashboard eksekutif (lihat BR-756). |
+
+---
+
+### REP-005 – Consolidated Performance Report
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-005                                                                                                                                                                          |
+| Requirement Name  | Consolidated Performance Report                                                                                                                                                 |
+| Priority          | Critical                                                                                                                                                                         |
+| Description       | Sistem harus menyediakan laporan kinerja konsolidasi lintas entitas/perusahaan dalam satu grup usaha (Holding, Sub Holding, Company), yang menyajikan perbandingan kinerja antar entitas dan agregasi kinerja tingkat grup untuk mendukung evaluasi manajemen tingkat korporat. |
+
+---
+
+### REP-006 – KPI Report
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-006                                                                                                                                                                          |
+| Requirement Name  | KPI Report                                                                                                                                                                       |
+| Priority          | High                                                                                                                                                                             |
+| Description       | Sistem harus menyediakan laporan capaian Key Performance Indicator (KPI) periodik yang membandingkan nilai aktual terhadap target yang telah ditetapkan per organization scope, sebagai laporan pendukung bagi Real-Time KPI Widget Engine pada dashboard (lihat BR-759). |
+
+---
+
+## 14.4 Financial Reports
+
+Kebutuhan laporan keuangan standar telah diatur secara rinci pada modul **Financial Reporting (BR-676 s.d. BR-685)**. Bagian ini menegaskan bahwa ketiga laporan keuangan utama berikut wajib tersedia sebagai output standar dalam kerangka pelaporan menyeluruh ERP, dengan detail teknis mengacu sepenuhnya pada BR terkait.
+
+### REP-007 – Neraca (Balance Sheet)
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-007                                                                                                                                                                          |
+| Requirement Name  | Neraca (Balance Sheet)                                                                                                                                                           |
+| Priority          | Critical                                                                                                                                                                         |
+| Description       | Neraca merupakan output laporan keuangan standar wajib pada kerangka pelaporan ERP. Detail requirement, struktur, dan aturan penyusunan mengacu pada **BR-677 – Balance Sheet (Neraca) Report** pada modul Financial Reporting. |
+
+---
+
+### REP-008 – Laporan Laba Rugi (Income Statement)
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-008                                                                                                                                                                          |
+| Requirement Name  | Laporan Laba Rugi (Income Statement)                                                                                                                                             |
+| Priority          | Critical                                                                                                                                                                         |
+| Description       | Laporan Laba Rugi merupakan output laporan keuangan standar wajib pada kerangka pelaporan ERP. Detail requirement, format single-step/multi-step, dan perbandingan periode mengacu pada **BR-678 – Income Statement (Laporan Laba Rugi)** pada modul Financial Reporting. |
+
+---
+
+### REP-009 – Laporan Arus Kas (Cash Flow Statement)
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-009                                                                                                                                                                          |
+| Requirement Name  | Laporan Arus Kas (Cash Flow Statement)                                                                                                                                           |
+| Priority          | High                                                                                                                                                                             |
+| Description       | Laporan Arus Kas merupakan output laporan keuangan standar wajib pada kerangka pelaporan ERP. Detail requirement, metode direct/indirect, dan klasifikasi aktivitas mengacu pada **BR-679 – Cash Flow Statement (Laporan Arus Kas)** pada modul Financial Reporting. |
+
+---
+
+## 14.5 Audit Reports
+
+Kebutuhan pelaporan audit telah diatur secara rinci pada modul **Audit Trail (BR-826 s.d. BR-835)**. Bagian ini menegaskan bahwa ketiga jenis laporan audit berikut wajib tersedia sebagai output pelaporan kepatuhan dalam kerangka pelaporan menyeluruh ERP.
+
+### REP-010 – Audit Log Report
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-010                                                                                                                                                                          |
+| Requirement Name  | Audit Log Report                                                                                                                                                                 |
+| Priority          | Critical                                                                                                                                                                         |
+| Description       | Audit Log Report merupakan output pelaporan wajib atas catatan aktivitas terpusat pada seluruh modul ERP. Detail requirement, struktur pencatatan, dan mekanisme ekspor mengacu pada **BR-826 – Centralized Audit Logging Service** dan **BR-835 – Audit Trail Reporting and Compliance Export** pada modul Audit Trail. |
+
+---
+
+### REP-011 – User Activity Report
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-011                                                                                                                                                                          |
+| Requirement Name  | User Activity Report                                                                                                                                                             |
+| Priority          | High                                                                                                                                                                             |
+| Description       | User Activity Report merupakan output pelaporan atas riwayat login, logout, dan aktivitas akses pengguna pada seluruh modul ERP. Detail requirement mengacu pada **BR-833 – Login/Logout and Access Audit** pada modul Audit Trail. |
+
+---
+
+### REP-012 – Data Change History Report
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-012                                                                                                                                                                          |
+| Requirement Name  | Data Change History Report                                                                                                                                                      |
+| Priority          | High                                                                                                                                                                             |
+| Description       | Data Change History Report merupakan output pelaporan atas riwayat perubahan data kritikal, termasuk nilai before/after dan alasan perubahan. Detail requirement mengacu pada **BR-827 – Before/After Value Capture** dan **BR-829 – Change Reason and Remarks Capture** pada modul Audit Trail. |
+
+---
+
+## 14.6 Dashboard Requirements
+
+Kebutuhan dashboard interaktif telah diatur secara rinci pada modul **Dashboard and Executive Reporting (BR-756 s.d. BR-765)**. Bagian ini menegaskan bahwa ketiga elemen dashboard berikut wajib tersedia sebagai bagian dari kerangka pelaporan menyeluruh ERP.
+
+### REP-013 – Role-Based Dashboard
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-013                                                                                                                                                                          |
+| Requirement Name  | Role-Based Dashboard                                                                                                                                                             |
+| Priority          | Critical                                                                                                                                                                         |
+| Description       | Role-Based Dashboard merupakan elemen pelaporan visual wajib yang dipersonalisasi sesuai role dan organization scope pengguna. Detail requirement mengacu pada **BR-757 – Role-Based Dashboard Personalization** dan **BR-758 – Organization Scope-Based Data Filtering** pada modul Dashboard and Executive Reporting. |
+
+---
+
+### REP-014 – Real-Time KPI Widget
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-014                                                                                                                                                                          |
+| Requirement Name  | Real-Time KPI Widget                                                                                                                                                             |
+| Priority          | Critical                                                                                                                                                                         |
+| Description       | Real-Time KPI Widget merupakan elemen pelaporan visual wajib yang menampilkan indikator kinerja secara real-time atau near real-time. Detail requirement mengacu pada **BR-759 – Real-Time KPI Widget Engine** pada modul Dashboard and Executive Reporting. |
+
+---
+
+### REP-015 – Drill-Down Report
+
+| Attribute        | Description                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement ID    | REP-015                                                                                                                                                                          |
+| Requirement Name  | Drill-Down Report                                                                                                                                                                |
+| Priority          | High                                                                                                                                                                             |
+| Description       | Drill-Down Report merupakan kemampuan navigasi dari ringkasan laporan/widget menuju data detail atau dokumen transaksi sumber. Detail requirement mengacu pada **BR-762 – Drill-Down Navigation to Source Detail** pada modul Dashboard and Executive Reporting. |
+
+---
+
+## 14.7 Reporting Standards
+
+Seluruh laporan yang dihasilkan oleh modul-modul ERP, baik laporan operasional, eksekutif, keuangan, audit, maupun dashboard, wajib tunduk pada standar teknis pelaporan berikut agar konsisten di seluruh platform:
+
+- **Format Ekspor**: Setiap laporan harus dapat diekspor minimal ke dalam format **PDF**, **Excel (XLSX)**, dan **CSV**, tanpa kehilangan struktur data (grouping, subtotal, header/footer) pada saat konversi.
+- **Penjadwalan Laporan Otomatis (Scheduled Report)**: Sistem harus mendukung penjadwalan pembuatan laporan secara otomatis (harian, mingguan, bulanan, atau kustom) berdasarkan konfigurasi pengguna, tanpa memerlukan intervensi manual berulang.
+- **Distribusi Laporan via Email**: Sistem harus mendukung distribusi laporan yang telah dijadwalkan kepada daftar penerima tertentu melalui email secara otomatis, dilengkapi dengan mekanisme notifikasi apabila proses distribusi gagal.
+- **Konsistensi Organization Scope**: Setiap laporan wajib menerapkan penyaringan data berbasis organization scope dan role-based access control, sejalan dengan prinsip yang telah ditetapkan pada modul Dashboard dan Security.
+- **Traceability**: Setiap angka atau nilai agregat pada laporan harus dapat ditelusuri (drill-down) ke transaksi sumber, sejalan dengan prinsip yang ditetapkan pada BRule-FREP-002 dan BR-762.
+
+---
+
+## 14.8 Reporting Requirement Traceability
+
+| REP ID   | Category            | Priority | Related Module                                    |
+| -------- | -------------------- | -------- | --------------------------------------------------- |
+| REP-001  | Operational Report   | High     | Procurement                                          |
+| REP-002  | Operational Report   | High     | Inventory                                            |
+| REP-003  | Operational Report   | High     | Sales                                                |
+| REP-004  | Executive Report      | Critical | Dashboard and Executive Reporting (BR-756)           |
+| REP-005  | Executive Report      | Critical | Organization, Financial Consolidation                |
+| REP-006  | Executive Report      | High     | Dashboard and Executive Reporting (BR-759)           |
+| REP-007  | Financial Report      | Critical | Financial Reporting (BR-677)                         |
+| REP-008  | Financial Report      | Critical | Financial Reporting (BR-678)                         |
+| REP-009  | Financial Report      | High     | Financial Reporting (BR-679)                         |
+| REP-010  | Audit Report          | Critical | Audit Trail (BR-826, BR-835)                         |
+| REP-011  | Audit Report          | High     | Audit Trail (BR-833)                                 |
+| REP-012  | Audit Report          | High     | Audit Trail (BR-827, BR-829)                         |
+| REP-013  | Dashboard Requirement | Critical | Dashboard and Executive Reporting (BR-757, BR-758)   |
+| REP-014  | Dashboard Requirement | Critical | Dashboard and Executive Reporting (BR-759)           |
+| REP-015  | Dashboard Requirement | High     | Dashboard and Executive Reporting (BR-762)           |
+
+---
+
+## 14.9 Summary
+
+Bab **Reporting Requirements** menetapkan kerangka kebutuhan pelaporan lintas modul yang bersifat menyeluruh, mencakup laporan operasional harian, laporan eksekutif tingkat manajemen, laporan keuangan standar, laporan audit dan kepatuhan, serta kebutuhan dashboard interaktif. Requirement pada bagian Financial Reports (REP-007 s.d. REP-009), Audit Reports (REP-010 s.d. REP-012), dan Dashboard Requirements (REP-013 s.d. REP-015) merupakan pointer terhadap Business Requirement yang telah didefinisikan secara rinci pada modul **Financial Reporting**, **Audit Trail**, dan **Dashboard and Executive Reporting**, sehingga tidak terjadi duplikasi requirement antar bab.
+
+Standar teknis pelaporan yang seragam — format ekspor, penjadwalan otomatis, dan distribusi via email — memastikan seluruh laporan pada platform ERP, apa pun modul asalnya, memiliki pengalaman dan kualitas penyajian yang konsisten. Seluruh requirement pada bab ini menjadi acuan bagi penyusunan Functional Requirements, spesifikasi report engine, dan skenario pengujian pelaporan pada dokumen lanjutan.
