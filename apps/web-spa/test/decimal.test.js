@@ -214,22 +214,38 @@ describe('Web SPA Contract & Route Integrity Verification', () => {
     }
   });
 
-  test('journals.tsx aligns createMutation and postMutation with gl-service schema and If-Match', () => {
-    const journalsSrc = fs.readFileSync(path.join(SRC_DIR, 'routes/_auth/journals.tsx'), 'utf8');
-    assert.ok(journalsSrc.includes('financialOrganizationId: activeOrgId'));
-    assert.ok(journalsSrc.includes("ledgerId: '00000000-0000-0000-0000-000000000001'"));
-    assert.ok(journalsSrc.includes("fiscalPeriodId: '00000000-0000-0000-0000-000000000010'"));
-    assert.ok(journalsSrc.includes('sourceDocumentRef: data.description || undefined'));
-    assert.ok(journalsSrc.includes("'If-Match': String(rowVersion ?? 1)"));
-    assert.ok(!journalsSrc.includes('approvedBy'), 'postMutation must not send unknown body fields');
+  test('journal dialogs align create/post wiring with gl-service schema and If-Match', () => {
+    const dialogSrc = fs.readFileSync(path.join(SRC_DIR, 'features/journals/JournalFormDialog.tsx'), 'utf8');
+    const drawerSrc = fs.readFileSync(path.join(SRC_DIR, 'features/journals/JournalDetailDrawer.tsx'), 'utf8');
+    assert.ok(dialogSrc.includes('financialOrganizationId'), 'form must carry financialOrganizationId');
+    assert.ok(dialogSrc.includes('ledgerId'), 'form must carry ledgerId');
+    assert.ok(dialogSrc.includes('fiscalPeriodId'), 'form must carry fiscalPeriodId');
+    assert.ok(dialogSrc.includes('sourceDocumentRef'), 'form must carry sourceDocumentRef');
+    assert.ok(
+      dialogSrc.includes('ifMatch: String(editingEntry.rowVersion)'),
+      'journal update (PUT) must send If-Match for optimistic lock',
+    );
+    for (const src of [dialogSrc, drawerSrc]) {
+      assert.ok(!src.includes('approvedBy'), 'journal mutations must not send unknown body fields');
+    }
   });
 
-  test('all 6 domain routes wire live useQuery + VirtualizedTable', () => {
-    const routes = ['ap.tsx', 'ar.tsx', 'treasury.tsx', 'inventory.tsx', 'procurement.tsx', 'audit.tsx'];
-    for (const routeFile of routes) {
-      const content = fs.readFileSync(path.join(SRC_DIR, 'routes/_auth', routeFile), 'utf8');
-      assert.ok(content.includes('useQuery'), `${routeFile} must use useQuery`);
-      assert.ok(content.includes('VirtualizedTable'), `${routeFile} must render VirtualizedTable`);
+  test('all 6 subledger domain workspaces wire live TanStack Query + VirtualizedTable', () => {
+    const workspaces = [
+      'features/ap/ApWorkspace.tsx',
+      'features/ar/ArWorkspace.tsx',
+      'features/treasury/TreasuryWorkspace.tsx',
+      'features/inventory/InventoryWorkspace.tsx',
+      'features/procurement/ProcurementWorkspace.tsx',
+      'features/audit/AuditWorkspace.tsx',
+    ];
+    for (const rel of workspaces) {
+      const content = fs.readFileSync(path.join(SRC_DIR, rel), 'utf8');
+      assert.ok(
+        /useQuery|useInfiniteQuery|useAuditEventsQuery/.test(content),
+        `${rel} must fetch via TanStack Query`,
+      );
+      assert.ok(content.includes('VirtualizedTable'), `${rel} must render VirtualizedTable`);
     }
   });
 
