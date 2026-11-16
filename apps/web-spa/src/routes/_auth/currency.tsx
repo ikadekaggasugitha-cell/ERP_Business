@@ -3,7 +3,7 @@ import { DomainErrorBoundary } from '../../components/ui/DomainErrorBoundary';
 import { CurrencyWorkspace } from '../../features/currency/CurrencyWorkspace';
 import { useAuthStore } from '../../store/auth-store';
 
-export const Route = createFileRoute('/_auth/currency' as unknown as '/_auth/ap')({
+export const Route = createFileRoute('/_auth/currency')({
   component: CurrencyPage,
 });
 

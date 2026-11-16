@@ -15,11 +15,23 @@ import { Route as AuthIndexRouteImport } from './routes/_auth/index'
 import { Route as AuthApRouteImport } from './routes/_auth/ap'
 import { Route as AuthArRouteImport } from './routes/_auth/ar'
 import { Route as AuthAuditRouteImport } from './routes/_auth/audit'
+import { Route as AuthCoaRouteImport } from './routes/_auth/coa'
+import { Route as AuthCurrencyRouteImport } from './routes/_auth/currency'
+import { Route as AuthHrRouteImport } from './routes/_auth/hr'
 import { Route as AuthInventoryRouteImport } from './routes/_auth/inventory'
 import { Route as AuthJournalsRouteImport } from './routes/_auth/journals'
+import { Route as AuthManufacturingRouteImport } from './routes/_auth/manufacturing'
+import { Route as AuthMasterdataRouteImport } from './routes/_auth/masterdata'
+import { Route as AuthOrganizationsRouteImport } from './routes/_auth/organizations'
+import { Route as AuthPayrollRouteImport } from './routes/_auth/payroll'
 import { Route as AuthProcurementRouteImport } from './routes/_auth/procurement'
+import { Route as AuthReportsRouteImport } from './routes/_auth/reports'
+import { Route as AuthSalesRouteImport } from './routes/_auth/sales'
+import { Route as AuthSecurityRouteImport } from './routes/_auth/security'
 import { Route as AuthSettingsRouteImport } from './routes/_auth/settings'
+import { Route as AuthTaxRouteImport } from './routes/_auth/tax'
 import { Route as AuthTreasuryRouteImport } from './routes/_auth/treasury'
+import { Route as AuthUsersRouteImport } from './routes/_auth/users'
 import { Route as AuthWorkflowRouteImport } from './routes/_auth/workflow'
 import { Route as PublicLoginRouteImport } from './routes/_public/login'
 
@@ -51,6 +63,21 @@ const AuthAuditRoute = AuthAuditRouteImport.update({
   path: '/audit',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthCoaRoute = AuthCoaRouteImport.update({
+  id: '/coa',
+  path: '/coa',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthCurrencyRoute = AuthCurrencyRouteImport.update({
+  id: '/currency',
+  path: '/currency',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthHrRoute = AuthHrRouteImport.update({
+  id: '/hr',
+  path: '/hr',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthInventoryRoute = AuthInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
@@ -61,9 +88,44 @@ const AuthJournalsRoute = AuthJournalsRouteImport.update({
   path: '/journals',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthManufacturingRoute = AuthManufacturingRouteImport.update({
+  id: '/manufacturing',
+  path: '/manufacturing',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthMasterdataRoute = AuthMasterdataRouteImport.update({
+  id: '/masterdata',
+  path: '/masterdata',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthOrganizationsRoute = AuthOrganizationsRouteImport.update({
+  id: '/organizations',
+  path: '/organizations',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthPayrollRoute = AuthPayrollRouteImport.update({
+  id: '/payroll',
+  path: '/payroll',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthProcurementRoute = AuthProcurementRouteImport.update({
   id: '/procurement',
   path: '/procurement',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthReportsRoute = AuthReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthSalesRoute = AuthSalesRouteImport.update({
+  id: '/sales',
+  path: '/sales',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthSecurityRoute = AuthSecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthSettingsRoute = AuthSettingsRouteImport.update({
@@ -71,9 +133,19 @@ const AuthSettingsRoute = AuthSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthTaxRoute = AuthTaxRouteImport.update({
+  id: '/tax',
+  path: '/tax',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthTreasuryRoute = AuthTreasuryRouteImport.update({
   id: '/treasury',
   path: '/treasury',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthUsersRoute = AuthUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthWorkflowRoute = AuthWorkflowRouteImport.update({
@@ -92,11 +164,23 @@ export interface FileRoutesByFullPath {
   '/ap': typeof AuthApRoute
   '/ar': typeof AuthArRoute
   '/audit': typeof AuthAuditRoute
+  '/coa': typeof AuthCoaRoute
+  '/currency': typeof AuthCurrencyRoute
+  '/hr': typeof AuthHrRoute
   '/inventory': typeof AuthInventoryRoute
   '/journals': typeof AuthJournalsRoute
+  '/manufacturing': typeof AuthManufacturingRoute
+  '/masterdata': typeof AuthMasterdataRoute
+  '/organizations': typeof AuthOrganizationsRoute
+  '/payroll': typeof AuthPayrollRoute
   '/procurement': typeof AuthProcurementRoute
+  '/reports': typeof AuthReportsRoute
+  '/sales': typeof AuthSalesRoute
+  '/security': typeof AuthSecurityRoute
   '/settings': typeof AuthSettingsRoute
+  '/tax': typeof AuthTaxRoute
   '/treasury': typeof AuthTreasuryRoute
+  '/users': typeof AuthUsersRoute
   '/workflow': typeof AuthWorkflowRoute
   '/login': typeof PublicLoginRoute
 }
@@ -105,11 +189,23 @@ export interface FileRoutesByTo {
   '/ap': typeof AuthApRoute
   '/ar': typeof AuthArRoute
   '/audit': typeof AuthAuditRoute
+  '/coa': typeof AuthCoaRoute
+  '/currency': typeof AuthCurrencyRoute
+  '/hr': typeof AuthHrRoute
   '/inventory': typeof AuthInventoryRoute
   '/journals': typeof AuthJournalsRoute
+  '/manufacturing': typeof AuthManufacturingRoute
+  '/masterdata': typeof AuthMasterdataRoute
+  '/organizations': typeof AuthOrganizationsRoute
+  '/payroll': typeof AuthPayrollRoute
   '/procurement': typeof AuthProcurementRoute
+  '/reports': typeof AuthReportsRoute
+  '/sales': typeof AuthSalesRoute
+  '/security': typeof AuthSecurityRoute
   '/settings': typeof AuthSettingsRoute
+  '/tax': typeof AuthTaxRoute
   '/treasury': typeof AuthTreasuryRoute
+  '/users': typeof AuthUsersRoute
   '/workflow': typeof AuthWorkflowRoute
   '/login': typeof PublicLoginRoute
 }
@@ -120,11 +216,23 @@ export interface FileRoutesById {
   '/_auth/ap': typeof AuthApRoute
   '/_auth/ar': typeof AuthArRoute
   '/_auth/audit': typeof AuthAuditRoute
+  '/_auth/coa': typeof AuthCoaRoute
+  '/_auth/currency': typeof AuthCurrencyRoute
+  '/_auth/hr': typeof AuthHrRoute
   '/_auth/inventory': typeof AuthInventoryRoute
   '/_auth/journals': typeof AuthJournalsRoute
+  '/_auth/manufacturing': typeof AuthManufacturingRoute
+  '/_auth/masterdata': typeof AuthMasterdataRoute
+  '/_auth/organizations': typeof AuthOrganizationsRoute
+  '/_auth/payroll': typeof AuthPayrollRoute
   '/_auth/procurement': typeof AuthProcurementRoute
+  '/_auth/reports': typeof AuthReportsRoute
+  '/_auth/sales': typeof AuthSalesRoute
+  '/_auth/security': typeof AuthSecurityRoute
   '/_auth/settings': typeof AuthSettingsRoute
+  '/_auth/tax': typeof AuthTaxRoute
   '/_auth/treasury': typeof AuthTreasuryRoute
+  '/_auth/users': typeof AuthUsersRoute
   '/_auth/workflow': typeof AuthWorkflowRoute
   '/_public/login': typeof PublicLoginRoute
   '/_auth/': typeof AuthIndexRoute
@@ -136,11 +244,23 @@ export interface FileRouteTypes {
     | '/ap'
     | '/ar'
     | '/audit'
+    | '/coa'
+    | '/currency'
+    | '/hr'
     | '/inventory'
     | '/journals'
+    | '/manufacturing'
+    | '/masterdata'
+    | '/organizations'
+    | '/payroll'
     | '/procurement'
+    | '/reports'
+    | '/sales'
+    | '/security'
     | '/settings'
+    | '/tax'
     | '/treasury'
+    | '/users'
     | '/workflow'
     | '/login'
   fileRoutesByTo: FileRoutesByTo
@@ -149,11 +269,23 @@ export interface FileRouteTypes {
     | '/ap'
     | '/ar'
     | '/audit'
+    | '/coa'
+    | '/currency'
+    | '/hr'
     | '/inventory'
     | '/journals'
+    | '/manufacturing'
+    | '/masterdata'
+    | '/organizations'
+    | '/payroll'
     | '/procurement'
+    | '/reports'
+    | '/sales'
+    | '/security'
     | '/settings'
+    | '/tax'
     | '/treasury'
+    | '/users'
     | '/workflow'
     | '/login'
   id:
@@ -163,11 +295,23 @@ export interface FileRouteTypes {
     | '/_auth/ap'
     | '/_auth/ar'
     | '/_auth/audit'
+    | '/_auth/coa'
+    | '/_auth/currency'
+    | '/_auth/hr'
     | '/_auth/inventory'
     | '/_auth/journals'
+    | '/_auth/manufacturing'
+    | '/_auth/masterdata'
+    | '/_auth/organizations'
+    | '/_auth/payroll'
     | '/_auth/procurement'
+    | '/_auth/reports'
+    | '/_auth/sales'
+    | '/_auth/security'
     | '/_auth/settings'
+    | '/_auth/tax'
     | '/_auth/treasury'
+    | '/_auth/users'
     | '/_auth/workflow'
     | '/_public/login'
     | '/_auth/'
@@ -222,6 +366,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthAuditRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/coa': {
+      id: '/_auth/coa'
+      path: '/coa'
+      fullPath: '/coa'
+      preLoaderRoute: typeof AuthCoaRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/currency': {
+      id: '/_auth/currency'
+      path: '/currency'
+      fullPath: '/currency'
+      preLoaderRoute: typeof AuthCurrencyRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/hr': {
+      id: '/_auth/hr'
+      path: '/hr'
+      fullPath: '/hr'
+      preLoaderRoute: typeof AuthHrRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/inventory': {
       id: '/_auth/inventory'
       path: '/inventory'
@@ -236,11 +401,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthJournalsRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/manufacturing': {
+      id: '/_auth/manufacturing'
+      path: '/manufacturing'
+      fullPath: '/manufacturing'
+      preLoaderRoute: typeof AuthManufacturingRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/masterdata': {
+      id: '/_auth/masterdata'
+      path: '/masterdata'
+      fullPath: '/masterdata'
+      preLoaderRoute: typeof AuthMasterdataRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/organizations': {
+      id: '/_auth/organizations'
+      path: '/organizations'
+      fullPath: '/organizations'
+      preLoaderRoute: typeof AuthOrganizationsRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/payroll': {
+      id: '/_auth/payroll'
+      path: '/payroll'
+      fullPath: '/payroll'
+      preLoaderRoute: typeof AuthPayrollRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/procurement': {
       id: '/_auth/procurement'
       path: '/procurement'
       fullPath: '/procurement'
       preLoaderRoute: typeof AuthProcurementRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/reports': {
+      id: '/_auth/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof AuthReportsRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/sales': {
+      id: '/_auth/sales'
+      path: '/sales'
+      fullPath: '/sales'
+      preLoaderRoute: typeof AuthSalesRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/security': {
+      id: '/_auth/security'
+      path: '/security'
+      fullPath: '/security'
+      preLoaderRoute: typeof AuthSecurityRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/settings': {
@@ -250,11 +464,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSettingsRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/tax': {
+      id: '/_auth/tax'
+      path: '/tax'
+      fullPath: '/tax'
+      preLoaderRoute: typeof AuthTaxRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/treasury': {
       id: '/_auth/treasury'
       path: '/treasury'
       fullPath: '/treasury'
       preLoaderRoute: typeof AuthTreasuryRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/users': {
+      id: '/_auth/users'
+      path: '/users'
+      fullPath: '/users'
+      preLoaderRoute: typeof AuthUsersRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/workflow': {
@@ -278,11 +506,23 @@ interface AuthRouteChildren {
   AuthApRoute: typeof AuthApRoute
   AuthArRoute: typeof AuthArRoute
   AuthAuditRoute: typeof AuthAuditRoute
+  AuthCoaRoute: typeof AuthCoaRoute
+  AuthCurrencyRoute: typeof AuthCurrencyRoute
+  AuthHrRoute: typeof AuthHrRoute
   AuthInventoryRoute: typeof AuthInventoryRoute
   AuthJournalsRoute: typeof AuthJournalsRoute
+  AuthManufacturingRoute: typeof AuthManufacturingRoute
+  AuthMasterdataRoute: typeof AuthMasterdataRoute
+  AuthOrganizationsRoute: typeof AuthOrganizationsRoute
+  AuthPayrollRoute: typeof AuthPayrollRoute
   AuthProcurementRoute: typeof AuthProcurementRoute
+  AuthReportsRoute: typeof AuthReportsRoute
+  AuthSalesRoute: typeof AuthSalesRoute
+  AuthSecurityRoute: typeof AuthSecurityRoute
   AuthSettingsRoute: typeof AuthSettingsRoute
+  AuthTaxRoute: typeof AuthTaxRoute
   AuthTreasuryRoute: typeof AuthTreasuryRoute
+  AuthUsersRoute: typeof AuthUsersRoute
   AuthWorkflowRoute: typeof AuthWorkflowRoute
   AuthIndexRoute: typeof AuthIndexRoute
 }
@@ -291,11 +531,23 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthApRoute: AuthApRoute,
   AuthArRoute: AuthArRoute,
   AuthAuditRoute: AuthAuditRoute,
+  AuthCoaRoute: AuthCoaRoute,
+  AuthCurrencyRoute: AuthCurrencyRoute,
+  AuthHrRoute: AuthHrRoute,
   AuthInventoryRoute: AuthInventoryRoute,
   AuthJournalsRoute: AuthJournalsRoute,
+  AuthManufacturingRoute: AuthManufacturingRoute,
+  AuthMasterdataRoute: AuthMasterdataRoute,
+  AuthOrganizationsRoute: AuthOrganizationsRoute,
+  AuthPayrollRoute: AuthPayrollRoute,
   AuthProcurementRoute: AuthProcurementRoute,
+  AuthReportsRoute: AuthReportsRoute,
+  AuthSalesRoute: AuthSalesRoute,
+  AuthSecurityRoute: AuthSecurityRoute,
   AuthSettingsRoute: AuthSettingsRoute,
+  AuthTaxRoute: AuthTaxRoute,
   AuthTreasuryRoute: AuthTreasuryRoute,
+  AuthUsersRoute: AuthUsersRoute,
   AuthWorkflowRoute: AuthWorkflowRoute,
   AuthIndexRoute: AuthIndexRoute,
 }

@@ -3,7 +3,7 @@ import { DomainErrorBoundary } from '../../components/ui/DomainErrorBoundary';
 import { TaxWorkspace } from '../../features/tax/TaxWorkspace';
 import { useAuthStore } from '../../store/auth-store';
 
-export const Route = createFileRoute('/_auth/tax' as unknown as '/_auth/ap')({
+export const Route = createFileRoute('/_auth/tax')({
   component: TaxPage,
 });
 
