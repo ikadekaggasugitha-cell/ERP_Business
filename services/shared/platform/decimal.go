@@ -9,6 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// maxNumericExp bounds decimal exponents to prevent big.Int.Exp CPU/memory DoS on pathological inputs.
+const maxNumericExp = 100
+
 // ParseNumeric strictly parses a fixed-point decimal string into pgtype.Numeric.
 // Never silently zeroes invalid input.
 func ParseNumeric(raw string) (pgtype.Numeric, error) {
@@ -19,6 +22,9 @@ func ParseNumeric(raw string) (pgtype.Numeric, error) {
 	var n pgtype.Numeric
 	if err := n.Scan(s); err != nil || !n.Valid || n.NaN || n.InfinityModifier != pgtype.Finite {
 		return pgtype.Numeric{}, fmt.Errorf("invalid finite decimal: %q", raw)
+	}
+	if n.Exp > maxNumericExp || n.Exp < -maxNumericExp {
+		return pgtype.Numeric{}, fmt.Errorf("decimal exponent out of bounds: %q", raw)
 	}
 	return n, nil
 }
@@ -31,14 +37,24 @@ func ParseOptionalNumeric(raw string) (pgtype.Numeric, error) {
 	return ParseNumeric(raw)
 }
 
+func zeroDecimalString(scale int) string {
+	if scale <= 0 {
+		return "0"
+	}
+	return "0." + strings.Repeat("0", scale)
+}
+
 // FormatNumeric converts pgtype.Numeric into a fixed-scale canonical decimal string (e.g. "1000.0000").
 func FormatNumeric(n pgtype.Numeric, scale int) string {
-	if !n.Valid || n.NaN {
-		return fmt.Sprintf("0.%s", strings.Repeat("0", scale))
+	if scale < 0 {
+		scale = 0
+	}
+	if !n.Valid || n.NaN || n.InfinityModifier != pgtype.Finite {
+		return zeroDecimalString(scale)
 	}
 	r := NumericToRat(n)
 	if r == nil {
-		return fmt.Sprintf("0.%s", strings.Repeat("0", scale))
+		return zeroDecimalString(scale)
 	}
 	return r.FloatString(scale)
 }
@@ -46,6 +62,9 @@ func FormatNumeric(n pgtype.Numeric, scale int) string {
 // NumericToRat returns exact *big.Rat representation of pgtype.Numeric.
 func NumericToRat(n pgtype.Numeric) *big.Rat {
 	if !n.Valid || n.NaN || n.InfinityModifier != pgtype.Finite || n.Int == nil {
+		return big.NewRat(0, 1)
+	}
+	if n.Exp > maxNumericExp || n.Exp < -maxNumericExp {
 		return big.NewRat(0, 1)
 	}
 	num := new(big.Int).Set(n.Int)

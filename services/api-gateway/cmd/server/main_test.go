@@ -471,5 +471,57 @@ func TestGatewayRejectsSystemOrgAsActiveTenant(t *testing.T) {
 	}
 }
 
+func TestGatewayProductionConfigAndMutationScopeAndHMAC(t *testing.T) {
+	if err := validateProductionConfig("production", "dev-erp-jwt-secret-change-in-prod", false, false); err == nil {
+		t.Fatal("expected error for default JWT_SECRET in production")
+	}
+	if err := validateProductionConfig("production", "strong-production-secret-at-least-32-bytes", true, false); err == nil {
+		t.Fatal("expected error for DEV_AUTH_MODE=true in production")
+	}
+	if err := validateProductionConfig("production", "strong-production-secret-at-least-32-bytes", false, false); err != nil {
+		t.Fatalf("expected valid production config, got %v", err)
+	}
+
+	t.Setenv("GL_SERVICE_URL", "http://gl-service.internal:8080")
+	router, err := proxy.NewRouter()
+	if err != nil {
+		t.Fatalf("NewRouter: %v", err)
+	}
+	var seenScope, seenSig string
+	rp, _ := router.Match("/api/v1/journal-entries")
+	rp.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		seenScope = r.Header.Get("X-Org-Scope")
+		seenSig = r.Header.Get("X-Gateway-Signature")
+		rec := httptest.NewRecorder()
+		rec.WriteHeader(http.StatusCreated)
+		return rec.Result(), nil
+	})
+
+	secret := []byte("strong-production-secret-at-least-32-bytes")
+	mux := newGatewayMux(router, sse.NewHub(), secret, true, false)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin.finance","password":"dev","orgCode":"HLD-01"}`))
+	loginRec := httptest.NewRecorder()
+	mux.ServeHTTP(loginRec, loginReq)
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(loginRec.Body.Bytes(), &loginResp)
+
+	postReq := httptest.NewRequest(http.MethodPost, "/api/v1/journal-entries", bytes.NewBufferString(`{}`))
+	postReq.Header.Set("Authorization", "Bearer "+loginResp.Token)
+	postRec := httptest.NewRecorder()
+	mux.ServeHTTP(postRec, postReq)
+	if postRec.Code != http.StatusCreated {
+		t.Fatalf("POST status = %d, want 201", postRec.Code)
+	}
+	if strings.Contains(seenScope, systemOrgID) {
+		t.Fatalf("POST request must not include systemOrgID in X-Org-Scope, got %q", seenScope)
+	}
+	if seenSig == "" {
+		t.Fatal("expected X-Gateway-Signature header on proxied request")
+	}
+}
+
 
 

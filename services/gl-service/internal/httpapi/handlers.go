@@ -371,6 +371,7 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	exRate := e.ExchangeRate
+	rateChanged := false
 	if strings.TrimSpace(req.ExchangeRate) != "" {
 		exRate, err = platform.ParseOptionalNumeric(req.ExchangeRate)
 		if err != nil {
@@ -381,9 +382,15 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, r, httpx.BadRequest("exchangeRate harus > 0"))
 			return
 		}
+		rateChanged = true
 	}
 	var lines []gldb.CreateJournalLineParams
 	if len(req.Lines) > 0 {
+		if rateChanged {
+			for i := range req.Lines {
+				req.Lines[i].FunctionalAmount = ""
+			}
+		}
 		lines, err = buildLineParams(e.OrganizationID, user, exRate, req.Lines)
 		if err != nil {
 			httpx.WriteError(w, r, err)
@@ -516,9 +523,16 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request) {
 	}
 	dr := platform.NumericToRat(tot.TotalDebit)
 	cr := platform.NumericToRat(tot.TotalCredit)
+	fDr := platform.NumericToRat(tot.TotalFunctionalDebit)
+	fCr := platform.NumericToRat(tot.TotalFunctionalCredit)
 	if tot.LineCount < 2 || dr.Sign() <= 0 || dr.Cmp(cr) != 0 {
 		httpx.WriteError(w, r, httpx.Unprocessable("GL_JOURNAL_UNBALANCED", "total debit tidak sama dengan total kredit",
 			httpx.Detail{Field: "lines", Issue: "debit=" + dr.FloatString(4) + ", credit=" + cr.FloatString(4)}))
+		return
+	}
+	if (fDr.Sign() > 0 || fCr.Sign() > 0) && fDr.Cmp(fCr) != 0 {
+		httpx.WriteError(w, r, httpx.Unprocessable("GL_JOURNAL_UNBALANCED", "total functional debit tidak sama dengan total functional kredit",
+			httpx.Detail{Field: "lines", Issue: "functionalDebit=" + fDr.FloatString(4) + ", functionalCredit=" + fCr.FloatString(4)}))
 		return
 	}
 
@@ -773,13 +787,13 @@ func toEntryDTO(e gldb.GlJournalEntry, lines []lineDTO) entryDTO {
 
 func formatExchangeRate(n pgtype.Numeric) string {
 	if !n.Valid {
-		return "1.0000"
+		return "1.00000000"
 	}
 	r := platform.NumericToRat(n)
-	if r.Sign() <= 0 {
-		return "1.0000"
+	if r == nil || r.Sign() <= 0 {
+		return "1.00000000"
 	}
-	return r.FloatString(4)
+	return platform.FormatNumeric(n, 8)
 }
 
 func sumLineDTOs(lines []lineDTO) (string, string) {

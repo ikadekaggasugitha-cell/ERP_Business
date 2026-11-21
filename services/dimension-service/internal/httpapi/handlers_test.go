@@ -11,6 +11,7 @@ import (
 
 	"github.com/sinergiinvestasiproperti/erp/services/dimension-service/internal/dimensiondb"
 	"github.com/sinergiinvestasiproperti/erp/services/dimension-service/internal/httpapi"
+	"github.com/sinergiinvestasiproperti/erp/services/dimension-service/internal/repository"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
 )
 
@@ -19,6 +20,11 @@ type mockStore struct {
 	httpapi.Store
 	createdCC  *dimensiondb.CreateCostCenterParams
 	createdARU *dimensiondb.CreateAllocationRuleParams
+	execCalls  int
+}
+
+func (m *mockStore) GetCostCenter(_ context.Context, _ []uuid.UUID, id uuid.UUID) (dimensiondb.CcCostCenter, error) {
+	return dimensiondb.CcCostCenter{ID: id, Code: "CC-100", Name: "Ops", Status: "Active", RowVersion: 3}, nil
 }
 
 func (m *mockStore) CreateCostCenter(_ context.Context, _ []uuid.UUID, a dimensiondb.CreateCostCenterParams, _ uuid.UUID) (dimensiondb.CreateCostCenterRow, error) {
@@ -32,6 +38,7 @@ func (m *mockStore) CreateAllocationRule(_ context.Context, _ []uuid.UUID, a dim
 }
 
 func (m *mockStore) ExecuteAllocationRule(_ context.Context, _ []uuid.UUID, id uuid.UUID, _ string, _ *uuid.UUID, _ uuid.UUID) (dimensiondb.CcCostAllocationRule, error) {
+	m.execCalls++
 	return dimensiondb.CcCostAllocationRule{
 		ID: id, SourceCostCenterID: uuid.New(), Name: "Overhead", AllocationBasis: "headcount",
 		Targets: []byte(`[{"costCenterId":"33333333-3333-3333-3333-333333333333","percentage":"60"},{"costCenterId":"44444444-4444-4444-4444-444444444444","percentage":"40"}]`),
@@ -169,10 +176,27 @@ func TestExecuteAllocationAndAssignments(t *testing.T) {
 	st := &mockStore{}
 	h := newMux(st)
 
-	// Execute allocation computes exact fixed-point 60/40 distribution
-	rec := do(h, "POST", "/allocation-rules/"+uuid.NewString()+"/execute", `{"amount":"1000.0000"}`, "dimension:write", nil)
+	// GET /cost-centers/{id} sets ETag header
+	getRec := do(h, "GET", "/cost-centers/"+uuid.NewString(), "", "dimension:read", nil)
+	if getRec.Code != http.StatusOK || getRec.Header().Get("ETag") != `"3"` {
+		t.Fatalf("expected 200 with ETag \"3\", got %d etag=%q", getRec.Code, getRec.Header().Get("ETag"))
+	}
+
+	// Execute allocation computes exact fixed-point 60/40 distribution + idempotency replay
+	ruleID := uuid.NewString()
+	rec := do(h, "POST", "/allocation-rules/"+ruleID+"/execute", `{"amount":"1000.0000"}`, "dimension:write", map[string]string{"Idempotency-Key": "exec-1"})
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"600.0000"`) || !strings.Contains(rec.Body.String(), `"400.0000"`) {
 		t.Fatalf("unexpected execute allocation response: %d %s", rec.Code, rec.Body.String())
+	}
+	replay := do(h, "POST", "/allocation-rules/"+ruleID+"/execute", `{"amount":"1000.0000"}`, "dimension:write", map[string]string{"Idempotency-Key": "exec-1"})
+	if replay.Code != http.StatusOK || replay.Header().Get("Idempotency-Replayed") != "true" || st.execCalls != 1 {
+		t.Fatalf("expected idempotent replay on executeAllocationRule, got %d calls=%d", replay.Code, st.execCalls)
+	}
+
+	// Verify rounding remainder assigned to final target so sum == totalAmount
+	dists := repository.ComputeDistributions([]byte(`[{"costCenterId":"11111111-1111-1111-1111-111111111111","percentage":"33.3333"},{"costCenterId":"22222222-2222-2222-2222-222222222222","percentage":"33.3333"},{"costCenterId":"33333333-3333-3333-3333-333333333333","percentage":"33.3334"}]`), "100.0000")
+	if len(dists) != 3 || dists[0]["amount"] != "33.3333" || dists[1]["amount"] != "33.3333" || dists[2]["amount"] != "33.3334" {
+		t.Fatalf("unexpected rounding remainder distribution: %+v", dists)
 	}
 
 	// Create cost center & profit center assignments

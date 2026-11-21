@@ -439,7 +439,7 @@ func (q *Queries) MarkOutboxPublished(ctx context.Context, arg MarkOutboxPublish
 
 const updateRole = `-- name: UpdateRole :one
 UPDATE sec.role
-SET name = $3, is_system = $4, updated_by = $5
+SET name = $3, updated_by = $4
 WHERE id = $1 AND row_version = $2 AND is_system = false AND deleted_at IS NULL
   AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
@@ -449,7 +449,6 @@ type UpdateRoleParams struct {
 	ID         uuid.UUID  `json:"id"`
 	RowVersion int32      `json:"row_version"`
 	Name       string     `json:"name"`
-	IsSystem   bool       `json:"is_system"`
 	UpdatedBy  *uuid.UUID `json:"updated_by"`
 }
 
@@ -458,7 +457,6 @@ func (q *Queries) UpdateRole(ctx context.Context, arg UpdateRoleParams) (int32, 
 		arg.ID,
 		arg.RowVersion,
 		arg.Name,
-		arg.IsSystem,
 		arg.UpdatedBy,
 	)
 	var row_version int32

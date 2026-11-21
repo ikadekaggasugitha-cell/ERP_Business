@@ -7,11 +7,17 @@ DB="${1:?db}"; DUMP="${2:?dump}"; V="${DB}_verify"
 
 psql -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $V" >/dev/null
 psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE $V" >/dev/null
-pg_restore --no-owner -j 4 -d "$V" "$DUMP" >/dev/null 2>&1 || true
+pg_restore --no-owner -j 4 -d "$V" "$DUMP" >/dev/null
 
-# compare per-table counts (exclude partitions; compare parents/regular tables)
-SQL="SELECT format('%s.%s', schemaname, relname) FROM pg_stat_user_tables
-     WHERE relname !~ '_y2[0-9]{3}m[0-9]{2}\$' ORDER BY 1"
+# compare per-table counts across both regular tables ('r') and partitioned parent tables ('p'), excluding child partitions
+SQL="SELECT format('%I.%I', n.nspname, c.relname)
+     FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE c.relkind IN ('r', 'p')
+       AND NOT c.relispartition
+       AND n.nspname NOT LIKE 'pg\_%'
+       AND n.nspname NOT IN ('information_schema', 'public')
+     ORDER BY 1"
 fail=0
 while read -r t; do
   [ -z "$t" ] && continue

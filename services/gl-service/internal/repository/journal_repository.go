@@ -5,11 +5,14 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/sinergiinvestasiproperti/erp/services/gl-service/internal/gldb"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/eventbus"
@@ -118,6 +121,15 @@ func (r *JournalRepository) UpdateDraftEntry(
 					return err
 				}
 			}
+		} else {
+			if err := q.RecalculateJournalLinesFunctionalAmount(ctx, gldb.RecalculateJournalLinesFunctionalAmountParams{
+				JournalEntryID: hdr.ID,
+				PostingDate:    hdr.PostingDate,
+				UpdatedBy:      hdr.UpdatedBy,
+				ExchangeRate:   hdr.ExchangeRate,
+			}); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -144,8 +156,51 @@ func (r *JournalRepository) Totals(ctx context.Context, scope []uuid.UUID, p gld
 	return out, err
 }
 
-// PostAndEmit atomically verifies BR-556 balance, transitions Draft->Posted,
-// accumulates gl.account_balance, and appends the enriched gl.journal.posted outbox event inside the same tx.
+func checkFiscalPeriodOpen(ctx context.Context, q *gldb.Queries, orgID, periodID uuid.UUID) error {
+	if periodID == uuid.Nil {
+		return nil
+	}
+	st, err := q.GetFiscalPeriodStatus(ctx, gldb.GetFiscalPeriodStatusParams{
+		OrganizationID: orgID,
+		PeriodID:       periodID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+	if strings.EqualFold(strings.TrimSpace(st), "Closed") || strings.EqualFold(strings.TrimSpace(st), "Locked") {
+		return httpx.Unprocessable("FISCAL_PERIOD_CLOSED", "fiscal period is closed or locked")
+	}
+	return nil
+}
+
+// ConsumePeriodStatus idempotently records a fiscal period status transition in gl.fiscal_period_status.
+func (r *JournalRepository) ConsumePeriodStatus(
+	ctx context.Context,
+	scope []uuid.UUID,
+	mark gldb.MarkEventProcessedParams,
+	up gldb.UpsertFiscalPeriodStatusParams,
+) (bool, error) {
+	var applied bool
+	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		q := gldb.New(tx)
+		n, err := q.MarkEventProcessed(ctx, mark)
+		if err != nil || n == 0 {
+			return err
+		}
+		if err := q.UpsertFiscalPeriodStatus(ctx, up); err != nil {
+			return err
+		}
+		applied = true
+		return nil
+	})
+	return applied, err
+}
+
+// PostAndEmit atomically verifies fiscal period status + BR-556 balance, transitions Draft->Posted,
+// accumulates gl.account_balance in functional currency, and appends the enriched gl.journal.posted outbox event.
 func (r *JournalRepository) PostAndEmit(
 	ctx context.Context,
 	scope []uuid.UUID,
@@ -156,6 +211,9 @@ func (r *JournalRepository) PostAndEmit(
 	var n int64
 	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
 		q := gldb.New(tx)
+		if err := checkFiscalPeriodOpen(ctx, q, entry.OrganizationID, entry.FiscalPeriodID); err != nil {
+			return err
+		}
 		tot, err := q.JournalEntryTotals(ctx, gldb.JournalEntryTotalsParams{
 			JournalEntryID: entry.ID,
 			PostingDate:    entry.PostingDate,
@@ -165,9 +223,15 @@ func (r *JournalRepository) PostAndEmit(
 		}
 		dr := platform.NumericToRat(tot.TotalDebit)
 		cr := platform.NumericToRat(tot.TotalCredit)
+		fDr := platform.NumericToRat(tot.TotalFunctionalDebit)
+		fCr := platform.NumericToRat(tot.TotalFunctionalCredit)
 		if tot.LineCount < 2 || dr.Sign() <= 0 || dr.Cmp(cr) != 0 {
 			return httpx.Unprocessable("GL_JOURNAL_UNBALANCED", "total debit tidak sama dengan total kredit",
 				httpx.Detail{Field: "lines", Issue: "debit=" + dr.FloatString(4) + ", credit=" + cr.FloatString(4)})
+		}
+		if (fDr.Sign() > 0 || fCr.Sign() > 0) && fDr.Cmp(fCr) != 0 {
+			return httpx.Unprocessable("GL_JOURNAL_UNBALANCED", "total functional debit tidak sama dengan total functional kredit",
+				httpx.Detail{Field: "lines", Issue: "functionalDebit=" + fDr.FloatString(4) + ", functionalCredit=" + fCr.FloatString(4)})
 		}
 		n, err = q.PostJournalEntry(ctx, gldb.PostJournalEntryParams{
 			ID:          entry.ID,
@@ -203,6 +267,9 @@ func (r *JournalRepository) ReverseEntryAndEmit(
 	var n int64
 	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
 		q := gldb.New(tx)
+		if err := checkFiscalPeriodOpen(ctx, q, orig.OrganizationID, orig.FiscalPeriodID); err != nil {
+			return err
+		}
 		var err error
 		n, err = q.MarkJournalReversed(ctx, gldb.MarkJournalReversedParams{
 			ID:          orig.ID,
@@ -335,6 +402,9 @@ func (r *JournalRepository) ConsumeAndPost(
 	var applied bool
 	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
 		q := gldb.New(tx)
+		if err := checkFiscalPeriodOpen(ctx, q, entry.OrganizationID, entry.FiscalPeriodID); err != nil {
+			return err
+		}
 		n, err := q.MarkEventProcessed(ctx, mark)
 		if err != nil || n == 0 {
 			return err
@@ -376,6 +446,7 @@ func (r *JournalRepository) ConsumeAndPost(
 			FiscalPeriodID:          entry.FiscalPeriodID,
 			PostingDate:             row.PostingDate,
 			CurrencyCode:            entry.CurrencyCode,
+			ExchangeRate:            entry.ExchangeRate,
 			CorrelationID:           entry.CorrelationID,
 		}
 		if err := upsertBalancesAndEmitOutbox(ctx, q, fullEntry, listLines, entry.CreatedBy, srcEventType, srcDocRef); err != nil {
@@ -402,6 +473,38 @@ var wellKnownAccountCodes = map[string]string{
 	"10000000-0000-0000-0000-0000000000fc": "1110", // Cash / Asset Clearing
 }
 
+func functionalDebitCredit(l gldb.ListJournalLinesRow, exRate pgtype.Numeric) (pgtype.Numeric, pgtype.Numeric) {
+	zeroNum, _ := platform.ParseNumeric("0")
+	drRat := platform.NumericToRat(l.DebitAmount)
+	crRat := platform.NumericToRat(l.CreditAmount)
+	fn := l.FunctionalAmount
+	fnRat := platform.NumericToRat(fn)
+	if !fn.Valid || fnRat == nil || fnRat.Sign() <= 0 {
+		rateRat := platform.NumericToRat(exRate)
+		if rateRat == nil || rateRat.Sign() <= 0 {
+			rateRat = big.NewRat(1, 1)
+		}
+		base := drRat
+		if crRat != nil && crRat.Sign() > 0 {
+			base = crRat
+		}
+		if base != nil && base.Sign() > 0 {
+			if computed, err := platform.RatToNumeric(new(big.Rat).Mul(base, rateRat), 4); err == nil {
+				fn = computed
+			}
+		} else {
+			fn = zeroNum
+		}
+	}
+	if drRat != nil && drRat.Sign() > 0 {
+		return fn, zeroNum
+	}
+	if crRat != nil && crRat.Sign() > 0 {
+		return zeroNum, fn
+	}
+	return zeroNum, zeroNum
+}
+
 func upsertBalancesAndEmitOutbox(
 	ctx context.Context,
 	q *gldb.Queries,
@@ -416,13 +519,14 @@ func upsertBalancesAndEmitOutbox(
 	for _, l := range lines {
 		totDr.Add(totDr, platform.NumericToRat(l.DebitAmount))
 		totCr.Add(totCr, platform.NumericToRat(l.CreditAmount))
+		fnDr, fnCr := functionalDebitCredit(l, entry.ExchangeRate)
 		if err := q.UpsertAccountBalance(ctx, gldb.UpsertAccountBalanceParams{
 			OrganizationID: entry.OrganizationID,
 			AccountID:      l.AccountID,
 			FiscalPeriodID: entry.FiscalPeriodID,
 			LedgerID:       entry.LedgerID,
-			PeriodDebit:    l.DebitAmount,
-			PeriodCredit:   l.CreditAmount,
+			PeriodDebit:    fnDr,
+			PeriodCredit:   fnCr,
 			CreatedBy:      actor,
 		}); err != nil {
 			return err

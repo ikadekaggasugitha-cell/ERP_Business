@@ -562,10 +562,10 @@ func (q *Queries) MarkOutboxPublished(ctx context.Context, arg MarkOutboxPublish
 
 const resolveBudgetControlType = `-- name: ResolveBudgetControlType :one
 SELECT control_type FROM bud.budget_control_policy
-WHERE organization_id = $1 AND deleted_at IS NULL
+WHERE organization_id IN ($1, '00000000-0000-0000-0000-000000000000'::uuid) AND deleted_at IS NULL
   AND (account_ref IS NULL OR account_ref = $2::uuid)
   AND (transaction_type IS NULL OR transaction_type = $3::text)
-ORDER BY (account_ref IS NOT NULL) DESC, (transaction_type IS NOT NULL) DESC, created_at DESC
+ORDER BY (organization_id = $1) DESC, (account_ref IS NOT NULL) DESC, (transaction_type IS NOT NULL) DESC, created_at DESC
 LIMIT 1
 `
 

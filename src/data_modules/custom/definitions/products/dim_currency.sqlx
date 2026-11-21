@@ -62,47 +62,48 @@ direct_rates AS (
   SELECT * FROM new_erp_rates WHERE rate_date IS NOT NULL AND mid_rate IS NOT NULL AND mid_rate > 0
 ),
 
--- USD anchor triangulation for missing cross-currency pairs
-usd_anchors_raw AS (
-  -- Currency to USD (e.g. EUR -> USD, rate = 1.10 USD per EUR)
-  SELECT
-    rate_date,
-    rate_type,
-    from_currency,
-    mid_rate AS rate_to_usd,
-    priority,
-    recordstamp
-  FROM direct_rates
-  WHERE to_currency = 'USD'
-    AND mid_rate > 0
+  -- Presentation currency anchor triangulation for missing cross-currency pairs
+  usd_anchors_raw AS (
+    -- Currency to anchor (e.g. EUR -> USD, rate = 1.10 USD per EUR)
+    SELECT
+      rate_date,
+      rate_type,
+      from_currency,
+      mid_rate AS rate_to_usd,
+      priority,
+      recordstamp
+    FROM direct_rates
+    WHERE to_currency = '${dataform.projectConfig.vars.holding_presentation_currency}'
+      AND mid_rate > 0
 
-  UNION ALL
+    UNION ALL
 
-  -- USD to Currency inverted (e.g. USD -> IDR with mid_rate = 16000, so 1 IDR = 1/16000 USD)
-  SELECT
-    rate_date,
-    rate_type,
-    to_currency AS from_currency,
-    SAFE_DIVIDE(NUMERIC '1', mid_rate) AS rate_to_usd,
-    priority,
-    recordstamp
-  FROM direct_rates
-  WHERE from_currency = 'USD'
-    AND mid_rate > 0
+    -- Anchor to Currency inverted (e.g. USD -> IDR with mid_rate = 16000, so 1 IDR = 1/16000 USD)
+    SELECT
+      rate_date,
+      rate_type,
+      to_currency AS from_currency,
+      SAFE_DIVIDE(NUMERIC '1', mid_rate) AS rate_to_usd,
+      priority,
+      recordstamp
+    FROM direct_rates
+    WHERE from_currency = '${dataform.projectConfig.vars.holding_presentation_currency}'
+      AND mid_rate > 0
 
-  UNION ALL
+    UNION ALL
 
-  -- USD anchor identity (1 USD = 1 USD)
-  SELECT DISTINCT
-    rate_date,
-    rate_type,
-    'USD' AS from_currency,
-    NUMERIC '1' AS rate_to_usd,
-    0 AS priority,
-    recordstamp
-  FROM direct_rates
-  WHERE from_currency = 'USD' OR to_currency = 'USD'
-),
+    -- Anchor currency identity (1 = 1)
+    SELECT DISTINCT
+      rate_date,
+      rate_type,
+      '${dataform.projectConfig.vars.holding_presentation_currency}' AS from_currency,
+      NUMERIC '1' AS rate_to_usd,
+      0 AS priority,
+      recordstamp
+    FROM direct_rates
+    WHERE from_currency = '${dataform.projectConfig.vars.holding_presentation_currency}'
+       OR to_currency = '${dataform.projectConfig.vars.holding_presentation_currency}'
+  ),
 
 usd_anchors AS (
   SELECT

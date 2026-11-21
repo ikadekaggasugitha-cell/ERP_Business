@@ -101,6 +101,10 @@ FROM trs.payment_allocation
 WHERE payment_id = $1 AND deleted_at IS NULL
 ORDER BY created_at;
 
+-- name: DeletePaymentAllocations :exec
+DELETE FROM trs.payment_allocation
+WHERE payment_id = $1;
+
 -- Optimistic-locked Draft->Settled transition.
 -- name: SettlePayment :one
 UPDATE trs.payment

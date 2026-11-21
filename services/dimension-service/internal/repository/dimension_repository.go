@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -141,6 +143,19 @@ func (r *DimensionRepository) UpdateCostCenter(ctx context.Context, scope []uuid
 
 func (r *DimensionRepository) DeleteCostCenter(ctx context.Context, scope []uuid.UUID, arg dimensiondb.DeleteCostCenterParams) error {
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		var childCount, ruleCount int64
+		if e := tx.QueryRow(ctx, "SELECT COUNT(*) FROM cc.cost_center WHERE parent_id = $1 AND deleted_at IS NULL", arg.ID).Scan(&childCount); e != nil {
+			return e
+		}
+		if childCount > 0 {
+			return httpx.Conflict("HAS_CHILDREN", "cannot delete cost center with active child cost centers")
+		}
+		if e := tx.QueryRow(ctx, "SELECT COUNT(*) FROM cc.cost_allocation_rule WHERE source_cost_center_id = $1 AND deleted_at IS NULL", arg.ID).Scan(&ruleCount); e != nil {
+			return e
+		}
+		if ruleCount > 0 {
+			return httpx.Conflict("HAS_CHILDREN", "cannot delete cost center referenced by active allocation rules")
+		}
 		n, e := r.q.WithTx(tx).DeleteCostCenter(ctx, arg)
 		if e != nil {
 			return e
@@ -245,6 +260,13 @@ func (r *DimensionRepository) UpdateProfitCenter(ctx context.Context, scope []uu
 
 func (r *DimensionRepository) DeleteProfitCenter(ctx context.Context, scope []uuid.UUID, arg dimensiondb.DeleteProfitCenterParams) error {
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		var childCount int64
+		if e := tx.QueryRow(ctx, "SELECT COUNT(*) FROM pc.profit_center WHERE parent_id = $1 AND deleted_at IS NULL", arg.ID).Scan(&childCount); e != nil {
+			return e
+		}
+		if childCount > 0 {
+			return httpx.Conflict("HAS_CHILDREN", "cannot delete profit center with active child profit centers")
+		}
 		n, e := r.q.WithTx(tx).DeleteProfitCenter(ctx, arg)
 		if e != nil {
 			return e
@@ -262,10 +284,84 @@ func (r *DimensionRepository) DeleteProfitCenter(ctx context.Context, scope []uu
 
 // ---------------- Allocation Rule ----------------
 
+type rawTarget struct {
+	CostCenterID uuid.UUID `json:"costCenterId"`
+	Percentage   string    `json:"percentage"`
+}
+
+func validateTargetCostCentersExist(ctx context.Context, q *dimensiondb.Queries, rawTargets []byte) error {
+	var targets []rawTarget
+	if err := json.Unmarshal(rawTargets, &targets); err != nil {
+		return httpx.BadRequest("invalid allocation targets JSON")
+	}
+	for _, t := range targets {
+		cc, e := q.GetCostCenter(ctx, t.CostCenterID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.Unprocessable("TARGET_NOT_FOUND", "target cost center "+t.CostCenterID.String()+" not found")
+		}
+		if e != nil {
+			return e
+		}
+		if cc.Status == "Closed" {
+			return httpx.Unprocessable("TARGET_CLOSED", "target cost center "+cc.Code+" is closed")
+		}
+	}
+	return nil
+}
+
+// ComputeDistributions splits totalAmount across targets using exact *big.Rat math
+// and assigns any rounding remainder to the final target so sum(shares) == totalAmount.
+func ComputeDistributions(rawTargets []byte, totalAmount string) []map[string]any {
+	amtNum, err := platform.ParseNumeric(totalAmount)
+	if err != nil {
+		return []map[string]any{}
+	}
+	amtRat := platform.NumericToRat(amtNum)
+	var targets []rawTarget
+	_ = json.Unmarshal(rawTargets, &targets)
+	if len(targets) == 0 {
+		return []map[string]any{}
+	}
+	hundred := big.NewRat(100, 1)
+	distributions := make([]map[string]any, 0, len(targets))
+	allocatedSum := new(big.Rat)
+	for i, t := range targets {
+		var shareNumStr string
+		if i == len(targets)-1 {
+			rem := new(big.Rat).Sub(amtRat, allocatedSum)
+			remNum, _ := platform.RatToNumeric(rem, 4)
+			shareNumStr = platform.FormatNumeric(remNum, 4)
+		} else {
+			pct, _ := new(big.Rat).SetString(strings.TrimSpace(t.Percentage))
+			if pct == nil {
+				pct = new(big.Rat)
+			}
+			share := new(big.Rat).Quo(new(big.Rat).Mul(amtRat, pct), hundred)
+			shareNum, _ := platform.RatToNumeric(share, 4)
+			allocatedSum.Add(allocatedSum, platform.NumericToRat(shareNum))
+			shareNumStr = platform.FormatNumeric(shareNum, 4)
+		}
+		distributions = append(distributions, map[string]any{
+			"costCenterId": t.CostCenterID,
+			"percentage":   t.Percentage,
+			"amount":       shareNumStr,
+		})
+	}
+	return distributions
+}
+
 func (r *DimensionRepository) CreateAllocationRule(ctx context.Context, scope []uuid.UUID, arg dimensiondb.CreateAllocationRuleParams, corr uuid.UUID) (dimensiondb.CreateAllocationRuleRow, error) {
 	var out dimensiondb.CreateAllocationRuleRow
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
+		if _, e := q.GetCostCenter(ctx, arg.SourceCostCenterID); errors.Is(e, pgx.ErrNoRows) {
+			return httpx.Unprocessable("SOURCE_NOT_FOUND", "source cost center not found")
+		} else if e != nil {
+			return e
+		}
+		if e := validateTargetCostCentersExist(ctx, q, arg.Targets); e != nil {
+			return e
+		}
 		var e error
 		if out, e = q.CreateAllocationRule(ctx, arg); e != nil {
 			return e
@@ -311,6 +407,9 @@ func (r *DimensionRepository) UpdateAllocationRule(ctx context.Context, scope []
 	var ver int32
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
+		if e := validateTargetCostCentersExist(ctx, q, arg.Targets); e != nil {
+			return e
+		}
 		var e error
 		ver, e = q.UpdateAllocationRule(ctx, arg)
 		if errors.Is(e, pgx.ErrNoRows) {
@@ -360,6 +459,7 @@ func (r *DimensionRepository) ExecuteAllocationRule(ctx context.Context, scope [
 		if !rule.IsActive {
 			return httpx.Conflict("RULE_INACTIVE", "allocation rule is inactive")
 		}
+		distributions := ComputeDistributions(rule.Targets, amount)
 		payload := map[string]any{
 			"ruleId":             rule.ID.String(),
 			"name":               rule.Name,
@@ -367,6 +467,7 @@ func (r *DimensionRepository) ExecuteAllocationRule(ctx context.Context, scope [
 			"allocationBasis":    rule.AllocationBasis,
 			"amount":             amount,
 			"targets":            json.RawMessage(rule.Targets),
+			"distributions":      distributions,
 		}
 		if fiscalPeriodID != nil {
 			payload["fiscalPeriodId"] = fiscalPeriodID.String()

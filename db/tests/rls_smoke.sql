@@ -74,7 +74,7 @@ BEGIN
   EXECUTE format('GRANT USAGE ON SCHEMA %I TO app_role', v_tmpsch);
   EXECUTE format('GRANT SELECT ON %I._rls_candidate TO app_role', v_tmpsch);
 
-  -- (A) Catalog invariants: every tenanted parent table must be RLS-enforced.
+  -- (A) Catalog invariants: every tenanted parent table AND its child partitions must be RLS-enforced.
   FOR r IN SELECT * FROM _rls_candidate ORDER BY 1, 2 LOOP
     IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = r.reloid) THEN
       RAISE EXCEPTION 'RLS SMOKE FAIL (A): %.% has organization_id but RLS is not enabled', r.schemaname, r.tablename;
@@ -83,7 +83,28 @@ BEGIN
       RAISE EXCEPTION 'RLS SMOKE FAIL (A): %.% is RLS-enabled but has no policy', r.schemaname, r.tablename;
     END IF;
   END LOOP;
-  RAISE NOTICE 'PASS (A): RLS + policy present on all % tenanted table(s)', (SELECT count(*) FROM _rls_candidate);
+
+  FOR r IN
+    SELECT n.nspname AS schemaname, c.relname AS partname, c.oid AS partoid
+    FROM pg_inherits i
+    JOIN _rls_candidate p ON p.reloid = i.inhparent
+    JOIN pg_class c ON c.oid = i.inhrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    ORDER BY 1, 2
+  LOOP
+    IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = r.partoid) THEN
+      RAISE EXCEPTION 'RLS SMOKE FAIL (A-PART): child partition %.% does not have RLS enabled', r.schemaname, r.partname;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = r.partoid) THEN
+      RAISE EXCEPTION 'RLS SMOKE FAIL (A-PART): child partition %.% has no RLS policy', r.schemaname, r.partname;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'erp_app_rw') THEN
+      IF has_table_privilege('erp_app_rw', r.partoid, 'SELECT') THEN
+        RAISE EXCEPTION 'RLS SMOKE FAIL (A-GRANT): erp_app_rw has direct SELECT privilege on child partition %.%', r.schemaname, r.partname;
+      END IF;
+    END IF;
+  END LOOP;
+  RAISE NOTICE 'PASS (A): RLS + policy present on all % tenanted table(s) and their child partitions', (SELECT count(*) FROM _rls_candidate);
 
   -- Data calibration (as owner: sees everything) for checks B/C.
   FOR r IN SELECT * FROM _rls_candidate ORDER BY 1, 2 LOOP
@@ -111,11 +132,9 @@ BEGIN
   PERFORM set_config('role', 'app_role', true);
   PERFORM set_config('app.org_scope', '{}', true);
 
-  -- (B) Fail-closed: an empty scope must hide every non-system-org row.
+  -- (B) Fail-closed: an empty scope must hide EVERY row (including system-org rows).
   FOR r IN SELECT * FROM _rls_candidate ORDER BY 1, 2 LOOP
-    EXECUTE format(
-      'SELECT count(*) FROM %I.%I WHERE organization_id IS DISTINCT FROM %L',
-      r.schemaname, r.tablename, sys_org) INTO cnt;
+    EXECUTE format('SELECT count(*) FROM %I.%I', r.schemaname, r.tablename) INTO cnt;
     IF cnt <> 0 THEN
       RAISE EXCEPTION 'RLS SMOKE FAIL (B): % row(s) visible in %.% under empty org scope', cnt, r.schemaname, r.tablename;
     END IF;

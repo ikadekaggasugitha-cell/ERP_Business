@@ -22,6 +22,9 @@ import (
 // ErrInsufficientStock indicates requested stock exceeds available balance.
 var ErrInsufficientStock = errors.New("insufficient available stock")
 
+// ErrNoWarehouse indicates no warehouse is provisioned for the organization.
+var ErrNoWarehouse = errors.New("no warehouse provisioned for organization")
+
 // StockLineRequest identifies an item, quantity, and unit cost for stock adjustments/receipts/issues.
 type StockLineRequest struct {
 	ItemID    uuid.UUID
@@ -425,6 +428,7 @@ func (r *StockRepository) FulfillSalesOrder(ctx context.Context, org uuid.UUID, 
 			warehouseID uuid.UUID
 			itemID      uuid.UUID
 			qty         pgtype.Numeric
+			avgCost     pgtype.Numeric
 		}
 		if len(lines) == 0 {
 			return q.InsertOutbox(ctx, evFail)
@@ -438,7 +442,7 @@ func (r *StockRepository) FulfillSalesOrder(ctx context.Context, org uuid.UUID, 
 				return q.InsertOutbox(ctx, evFail)
 			}
 			var balID, whID uuid.UUID
-			var availNum pgtype.Numeric
+			var availNum, avgCostNum pgtype.Numeric
 			if warehouseID != nil {
 				row, errLock := q.LockStockBalanceForItemWarehouse(ctx, inventorydb.LockStockBalanceForItemWarehouseParams{
 					OrganizationID: org,
@@ -451,7 +455,7 @@ func (r *StockRepository) FulfillSalesOrder(ctx context.Context, org uuid.UUID, 
 				if errLock != nil {
 					return errLock
 				}
-				balID, whID, availNum = row.ID, row.WarehouseID, row.AvailableQty
+				balID, whID, availNum, avgCostNum = row.ID, row.WarehouseID, row.AvailableQty, row.AvgCost
 			} else {
 				row, errLock := q.LockBestStockBalanceForItem(ctx, inventorydb.LockBestStockBalanceForItemParams{
 					OrganizationID: org,
@@ -463,7 +467,7 @@ func (r *StockRepository) FulfillSalesOrder(ctx context.Context, org uuid.UUID, 
 				if errLock != nil {
 					return errLock
 				}
-				balID, whID, availNum = row.ID, row.WarehouseID, row.AvailableQty
+				balID, whID, availNum, avgCostNum = row.ID, row.WarehouseID, row.AvailableQty, row.AvgCost
 			}
 
 			rem, ok := remaining[balID]
@@ -479,9 +483,15 @@ func (r *StockRepository) FulfillSalesOrder(ctx context.Context, org uuid.UUID, 
 				return q.InsertOutbox(ctx, evFail)
 			}
 			rem.Sub(rem, reqRat)
-			plan = append(plan, deduction{balID: balID, warehouseID: whID, itemID: l.ItemID, qty: l.Qty})
+			if cr := platform.NumericToRat(avgCostNum); (cr == nil || cr.Sign() <= 0) && l.UnitPrice.Valid {
+				avgCostNum = l.UnitPrice
+			}
+			plan = append(plan, deduction{balID: balID, warehouseID: whID, itemID: l.ItemID, qty: l.Qty, avgCost: avgCostNum})
 		}
 
+		totalCogsRat := new(big.Rat)
+		totalIssuedRat := new(big.Rat)
+		issuedLines := make([]map[string]any, 0, len(plan))
 		for _, d := range plan {
 			if _, e := q.DeductAvailableStockBalance(ctx, inventorydb.DeductAvailableStockBalanceParams{
 				ID:        d.balID,
@@ -493,6 +503,21 @@ func (r *StockRepository) FulfillSalesOrder(ctx context.Context, org uuid.UUID, 
 				return e
 			}
 			reqRat := platform.NumericToRat(d.qty)
+			totalIssuedRat.Add(totalIssuedRat, reqRat)
+			costRat := platform.NumericToRat(d.avgCost)
+			if costRat == nil {
+				costRat = new(big.Rat)
+			}
+			lineCostRat := new(big.Rat).Mul(reqRat, costRat)
+			totalCogsRat.Add(totalCogsRat, lineCostRat)
+			lineCostNum, _ := platform.RatToNumeric(lineCostRat, 4)
+			issuedLines = append(issuedLines, map[string]any{
+				"itemId":      d.itemID.String(),
+				"warehouseId": d.warehouseID.String(),
+				"qty":         platform.FormatNumeric(d.qty, 4),
+				"unitCost":    platform.FormatNumeric(d.avgCost, 4),
+				"lineCost":    platform.FormatNumeric(lineCostNum, 4),
+			})
 			negNum, e := platform.RatToNumeric(new(big.Rat).Neg(reqRat), 4)
 			if e != nil {
 				return e
@@ -511,17 +536,66 @@ func (r *StockRepository) FulfillSalesOrder(ctx context.Context, org uuid.UUID, 
 				return e
 			}
 		}
+		var okMap map[string]any
+		if len(evOK.Payload) > 0 {
+			_ = json.Unmarshal(evOK.Payload, &okMap)
+		}
+		if okMap == nil {
+			okMap = make(map[string]any)
+		}
+		cogsNum, _ := platform.RatToNumeric(totalCogsRat, 4)
+		issuedNum, _ := platform.RatToNumeric(totalIssuedRat, 4)
+		cogsStr := platform.FormatNumeric(cogsNum, 4)
+		issuedStr := platform.FormatNumeric(issuedNum, 4)
+		okMap["cogsAmount"] = cogsStr
+		okMap["issuedQty"] = issuedStr
+		okMap["qty"] = issuedStr
+		okMap["lines"] = issuedLines
+		if len(plan) > 0 {
+			okMap["warehouseId"] = plan[0].warehouseID.String()
+			if _, has := okMap["itemId"]; !has {
+				okMap["itemId"] = plan[0].itemID.String()
+			}
+		}
+		if amt, _ := okMap["amount"].(string); amt == "" || amt == "0" || amt == "0.0000" {
+			okMap["amount"] = cogsStr
+		}
+		if tot, _ := okMap["totalAmount"].(string); tot == "" || tot == "0" || tot == "0.0000" {
+			if amt, _ := okMap["amount"].(string); amt != "" {
+				okMap["totalAmount"] = amt
+			}
+		}
+		evOK.Payload, _ = json.Marshal(okMap)
 		return q.InsertOutbox(ctx, evOK)
 	})
 	return applied, err
 }
 
 // ReceiveProcurementGoods processes procurement.goods.received idempotently, incrementing
-// stock_balance and inserting Receipt stock movements when a warehouse exists.
+// stock_balance and inserting Receipt stock movements (or deducting negative BOM lines) when a warehouse exists.
 func (r *StockRepository) ReceiveProcurementGoods(ctx context.Context, org, corr, actor uuid.UUID, moveDate pgtype.Date, ref string, warehouseID *uuid.UUID, lines []StockLineRequest, mark inventorydb.MarkEventProcessedParams) (bool, error) {
 	applied := false
 	err := r.db.WithOrgScope(ctx, []uuid.UUID{org}, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
+		var targetWH uuid.UUID
+		if len(lines) > 0 {
+			if warehouseID != nil {
+				if wh, e := q.GetWarehouse(ctx, *warehouseID); e == nil {
+					targetWH = wh.ID
+				}
+			}
+			if targetWH == uuid.Nil {
+				wh, e := q.GetDefaultWarehouse(ctx)
+				if errors.Is(e, pgx.ErrNoRows) {
+					return ErrNoWarehouse
+				}
+				if e != nil {
+					return e
+				}
+				targetWH = wh.ID
+			}
+		}
+
 		n, e := q.MarkEventProcessed(ctx, mark)
 		if e != nil || n == 0 {
 			return e
@@ -531,26 +605,51 @@ func (r *StockRepository) ReceiveProcurementGoods(ctx context.Context, org, corr
 			return nil
 		}
 
-		var targetWH uuid.UUID
-		if warehouseID != nil {
-			if wh, e := q.GetWarehouse(ctx, *warehouseID); e == nil {
-				targetWH = wh.ID
-			}
-		}
-		if targetWH == uuid.Nil {
-			wh, e := q.GetDefaultWarehouse(ctx)
-			if errors.Is(e, pgx.ErrNoRows) {
-				return nil // no warehouse provisioned yet in org; event marked processed
-			}
-			if e != nil {
-				return e
-			}
-			targetWH = wh.ID
-		}
-
 		for _, l := range lines {
 			reqRat := platform.NumericToRat(l.Qty)
-			if reqRat == nil || reqRat.Sign() <= 0 {
+			if reqRat == nil || reqRat.Sign() == 0 {
+				continue
+			}
+			if reqRat.Sign() < 0 {
+				// Negative quantity indicates a BOM raw material consumption line.
+				absQty, e := platform.RatToNumeric(new(big.Rat).Abs(reqRat), 4)
+				if e != nil {
+					return e
+				}
+				var balID, whID uuid.UUID
+				if row, errLock := q.LockStockBalanceForItemWarehouse(ctx, inventorydb.LockStockBalanceForItemWarehouseParams{
+					OrganizationID: org,
+					WarehouseID:    targetWH,
+					ItemID:         l.ItemID,
+				}); errLock == nil {
+					balID, whID = row.ID, row.WarehouseID
+				} else if row, errLock := q.LockBestStockBalanceForItem(ctx, inventorydb.LockBestStockBalanceForItemParams{
+					OrganizationID: org,
+					ItemID:         l.ItemID,
+				}); errLock == nil {
+					balID, whID = row.ID, row.WarehouseID
+				}
+				if balID != uuid.Nil {
+					if _, e := q.DeductAvailableStockBalance(ctx, inventorydb.DeductAvailableStockBalanceParams{
+						ID:        balID,
+						OnHandQty: absQty,
+						UpdatedBy: &actor,
+					}); e == nil {
+						if _, e := q.CreateStockMovement(ctx, inventorydb.CreateStockMovementParams{
+							OrganizationID:    org,
+							MovementDate:      moveDate,
+							WarehouseID:       whID,
+							ItemID:            l.ItemID,
+							MovementType:      "Issue",
+							Quantity:          l.Qty,
+							SourceDocumentRef: &ref,
+							CorrelationID:     corr,
+							CreatedBy:         actor,
+						}); e != nil {
+							return e
+						}
+					}
+				}
 				continue
 			}
 			if _, e := q.UpsertReceiptBalance(ctx, inventorydb.UpsertReceiptBalanceParams{

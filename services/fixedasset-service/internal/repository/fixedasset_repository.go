@@ -36,7 +36,7 @@ func (r *FixedAssetRepository) withOrgTx(ctx context.Context, scope []uuid.UUID,
 	if len(scope) == 0 {
 		return errors.New("org scope must not be empty")
 	}
-	return r.db.WithOrgScope(ctx, scope, fn)
+	return r.db.WithOrgScope(ctx, platform.ScopeWithSystemOrg(scope), fn)
 }
 
 func emit(ctx context.Context, q *fadb.Queries, aggType, eventType string, id, org, corr uuid.UUID, payload map[string]any) error {
@@ -52,6 +52,12 @@ func emit(ctx context.Context, q *fadb.Queries, aggType, eventType string, id, o
 // ComputeMonthlyDepreciation calculates exact monthly depreciation using *big.Rat,
 // capped so netBookValue never drops below salvageValue.
 func ComputeMonthlyDepreciation(method string, cost, salvage, currentNBV *big.Rat, usefulLifeMonths int32) (*big.Rat, *big.Rat, error) {
+	return ComputeMonthlyDepreciationWithUnits(method, cost, salvage, currentNBV, usefulLifeMonths, nil, nil)
+}
+
+// ComputeMonthlyDepreciationWithUnits calculates exact depreciation for StraightLine,
+// DecliningBalance, or UnitsOfProduction (using unitsProduced / totalEstimatedUnits when provided).
+func ComputeMonthlyDepreciationWithUnits(method string, cost, salvage, currentNBV *big.Rat, usefulLifeMonths int32, unitsProduced, totalEstimatedUnits *big.Rat) (*big.Rat, *big.Rat, error) {
 	if usefulLifeMonths <= 0 {
 		return nil, nil, httpx.Unprocessable("INVALID_LIFE", "usefulLifeMonths must be > 0")
 	}
@@ -76,7 +82,17 @@ func ComputeMonthlyDepreciation(method string, cost, salvage, currentNBV *big.Ra
 		dep = new(big.Rat).Quo(new(big.Rat).Mul(currentNBV, big.NewRat(2, 1)), life)
 	case "UnitsOfProduction":
 		depreciable := new(big.Rat).Sub(cost, salvage)
-		dep = new(big.Rat).Quo(depreciable, life)
+		if depreciable.Sign() <= 0 {
+			return big.NewRat(0, 1), new(big.Rat).Set(currentNBV), nil
+		}
+		if unitsProduced != nil && totalEstimatedUnits != nil && totalEstimatedUnits.Sign() > 0 {
+			if unitsProduced.Sign() < 0 {
+				return nil, nil, httpx.Unprocessable("INVALID_UNITS", "unitsProduced must be >= 0")
+			}
+			dep = new(big.Rat).Quo(new(big.Rat).Mul(depreciable, unitsProduced), totalEstimatedUnits)
+		} else {
+			dep = new(big.Rat).Quo(depreciable, life)
+		}
 	default:
 		return nil, nil, httpx.Unprocessable("INVALID_METHOD", "unsupported depreciation method")
 	}
@@ -97,6 +113,19 @@ func (r *FixedAssetRepository) CreateCategory(ctx context.Context, scope []uuid.
 	return out, httpx.MapDBError(err, "asset category code already exists")
 }
 
+func (r *FixedAssetRepository) GetCategory(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (fadb.FaAssetCategory, error) {
+	var out fadb.FaAssetCategory
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		var e error
+		out, e = r.q.WithTx(tx).GetAssetCategory(ctx, id)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("asset category not found")
+		}
+		return e
+	})
+	return out, err
+}
+
 func (r *FixedAssetRepository) ListCategories(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]fadb.FaAssetCategory, int64, error) {
 	var rows []fadb.FaAssetCategory
 	var total int64
@@ -110,6 +139,54 @@ func (r *FixedAssetRepository) ListCategories(ctx context.Context, scope []uuid.
 		return e
 	})
 	return rows, total, err
+}
+
+func (r *FixedAssetRepository) UpdateCategory(ctx context.Context, scope []uuid.UUID, arg fadb.UpdateAssetCategoryParams) (int32, error) {
+	var next int32
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		cur, e := q.GetAssetCategory(ctx, arg.ID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("asset category not found")
+		}
+		if e != nil {
+			return e
+		}
+		if cur.OrganizationID == platform.SystemOrgID {
+			return httpx.Forbidden("system reference data cannot be modified")
+		}
+		next, e = q.UpdateAssetCategory(ctx, arg)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.Conflict("STALE_ROW_VERSION", "rowVersion mismatch")
+		}
+		return e
+	})
+	return next, httpx.MapDBError(err, "")
+}
+
+func (r *FixedAssetRepository) DeleteCategory(ctx context.Context, scope []uuid.UUID, arg fadb.DeleteAssetCategoryParams) error {
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		cur, e := q.GetAssetCategory(ctx, arg.ID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("asset category not found")
+		}
+		if e != nil {
+			return e
+		}
+		if cur.OrganizationID == platform.SystemOrgID {
+			return httpx.Forbidden("system reference data cannot be modified")
+		}
+		n, e := q.DeleteAssetCategory(ctx, arg)
+		if e != nil {
+			return e
+		}
+		if n == 0 {
+			return httpx.Conflict("STALE_ROW_VERSION", "rowVersion mismatch")
+		}
+		return nil
+	})
+	return httpx.MapDBError(err, "")
 }
 
 func (r *FixedAssetRepository) CreateAsset(ctx context.Context, scope []uuid.UUID, arg fadb.CreateFixedAssetParams) (fadb.CreateFixedAssetRow, error) {
@@ -150,6 +227,57 @@ func (r *FixedAssetRepository) ListAssets(ctx context.Context, scope []uuid.UUID
 	return rows, total, err
 }
 
+func (r *FixedAssetRepository) UpdateAssetDraft(ctx context.Context, scope []uuid.UUID, arg fadb.UpdateFixedAssetDraftParams) (int32, error) {
+	var next int32
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		a, e := q.GetFixedAsset(ctx, arg.ID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("fixed asset not found")
+		}
+		if e != nil {
+			return e
+		}
+		if a.Status != "Draft" {
+			return httpx.Conflict("INVALID_STATE", "only Draft fixed asset can be updated")
+		}
+		if platform.NumericToRat(arg.SalvageValue).Cmp(platform.NumericToRat(a.AcquisitionCost)) > 0 {
+			return httpx.Unprocessable("INVALID_SALVAGE", "salvageValue cannot exceed acquisitionCost")
+		}
+		next, e = q.UpdateFixedAssetDraft(ctx, arg)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.Conflict("STALE_ROW_VERSION", "rowVersion mismatch")
+		}
+		return e
+	})
+	return next, httpx.MapDBError(err, "")
+}
+
+func (r *FixedAssetRepository) DeleteAssetDraft(ctx context.Context, scope []uuid.UUID, arg fadb.DeleteFixedAssetDraftParams) error {
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		a, e := q.GetFixedAsset(ctx, arg.ID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("fixed asset not found")
+		}
+		if e != nil {
+			return e
+		}
+		if a.Status != "Draft" {
+			return httpx.Conflict("INVALID_STATE", "only Draft fixed asset can be deleted")
+		}
+		n, e := q.DeleteFixedAssetDraft(ctx, arg)
+		if e != nil {
+			return e
+		}
+		if n == 0 {
+			return httpx.Conflict("STALE_ROW_VERSION", "rowVersion mismatch")
+		}
+		return nil
+	})
+	return httpx.MapDBError(err, "")
+}
+
 func (r *FixedAssetRepository) CapitalizeAndEmit(ctx context.Context, scope []uuid.UUID, id uuid.UUID, rowVer int32, txDate pgtype.Date, actor, corr uuid.UUID) (int32, error) {
 	var newVer int32
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
@@ -187,7 +315,7 @@ func (r *FixedAssetRepository) CapitalizeAndEmit(ctx context.Context, scope []uu
 	return newVer, httpx.MapDBError(err, "")
 }
 
-func (r *FixedAssetRepository) DepreciateAndEmit(ctx context.Context, scope []uuid.UUID, id uuid.UUID, rowVer int32, fiscalPeriodRef uuid.UUID, runDate pgtype.Date, actor, corr uuid.UUID) (fadb.CreateDepreciationEntryRow, string, string, int32, error) {
+func (r *FixedAssetRepository) DepreciateAndEmit(ctx context.Context, scope []uuid.UUID, id uuid.UUID, rowVer int32, fiscalPeriodRef uuid.UUID, runDate pgtype.Date, unitsProduced, totalEstimatedUnits *big.Rat, actor, corr uuid.UUID) (fadb.CreateDepreciationEntryRow, string, string, int32, error) {
 	var entryRow fadb.CreateDepreciationEntryRow
 	var depStr, nbvStr string
 	var newVer int32
@@ -206,7 +334,7 @@ func (r *FixedAssetRepository) DepreciateAndEmit(ctx context.Context, scope []uu
 		costRat := platform.NumericToRat(a.AcquisitionCost)
 		salvRat := platform.NumericToRat(a.SalvageValue)
 		nbvRat := platform.NumericToRat(a.NetBookValue)
-		depRat, newNBVRat, e := ComputeMonthlyDepreciation(a.DepreciationMethod, costRat, salvRat, nbvRat, a.UsefulLifeMonths)
+		depRat, newNBVRat, e := ComputeMonthlyDepreciationWithUnits(a.DepreciationMethod, costRat, salvRat, nbvRat, a.UsefulLifeMonths, unitsProduced, totalEstimatedUnits)
 		if e != nil {
 			return e
 		}
@@ -283,10 +411,27 @@ func (r *FixedAssetRepository) DisposeAndEmit(ctx context.Context, scope []uuid.
 		}); e != nil {
 			return e
 		}
+		proceedsStr := platform.FormatNumeric(proceeds, 4)
+		nbvStr := platform.FormatNumeric(a.NetBookValue, 4)
+		costStr := platform.FormatNumeric(a.AcquisitionCost, 4)
+		amtStr := proceedsStr
+		if platform.NumericToRat(proceeds).Sign() <= 0 {
+			if platform.NumericToRat(a.NetBookValue).Sign() > 0 {
+				amtStr = nbvStr
+			} else {
+				amtStr = costStr
+			}
+		}
 		return emit(ctx, q, "FixedAsset", "fixedasset.asset.disposed", a.ID, a.OrganizationID, corr, map[string]any{
-			"assetNo": a.AssetNo, "reference": "FA-DISP-" + a.AssetNo,
-			"amount": platform.FormatNumeric(proceeds, 4), "gainLossAmount": gainLossStr,
-			"netBookValue": platform.FormatNumeric(a.NetBookValue, 4),
+			"assetNo":         a.AssetNo,
+			"reference":       "FA-DISP-" + a.AssetNo,
+			"amount":          amtStr,
+			"proceedsAmount":  proceedsStr,
+			"acquisitionCost": costStr,
+			"netBookValue":    nbvStr,
+			"gainLossAmount":  gainLossStr,
+			"assetAccountId":  a.AssetAccountID.String(),
+			"accumAccountId":  a.AccumDepreciationAccountID.String(),
 		})
 	})
 	return newVer, gainLossStr, httpx.MapDBError(err, "")

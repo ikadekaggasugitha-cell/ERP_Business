@@ -10,6 +10,17 @@ INSERT INTO wf.workflow_step (
     $1, $2, $3, $4, $5, $6
 );
 
+-- name: GetWorkflowDefinition :one
+SELECT id, organization_id, code, document_type, version, is_active, row_version
+FROM wf.workflow_definition
+WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: ListWorkflowStepsByDefinition :many
+SELECT id, organization_id, definition_id, step_order, approver_rule, escalation_rule, row_version
+FROM wf.workflow_step
+WHERE definition_id = $1 AND deleted_at IS NULL
+ORDER BY step_order ASC;
+
 -- name: ListWorkflowDefinitions :many
 SELECT id, organization_id, code, document_type, version, is_active, row_version
 FROM wf.workflow_definition
@@ -103,6 +114,12 @@ WHERE instance_id = $1 AND decision IS NULL AND deleted_at IS NULL;
 -- name: DecideWorkflowInstance :one
 UPDATE wf.workflow_instance
 SET status = $3, updated_by = $4
+WHERE id = $1 AND status = 'Pending' AND row_version = $2 AND deleted_at IS NULL
+RETURNING row_version;
+
+-- name: AdvanceWorkflowInstanceStep :one
+UPDATE wf.workflow_instance
+SET current_step = $3, updated_by = $4
 WHERE id = $1 AND status = 'Pending' AND row_version = $2 AND deleted_at IS NULL
 RETURNING row_version;
 

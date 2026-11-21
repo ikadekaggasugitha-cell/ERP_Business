@@ -12,13 +12,15 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/sinergiinvestasiproperti/erp/services/shared/eventbus"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
 	"github.com/sinergiinvestasiproperti/erp/services/workflow-service/internal/workflowdb"
 )
 
 var (
-	ErrSoDViolation   = errors.New("segregation of duties violation: requester cannot approve own request")
-	ErrAlreadyDecided = errors.New("workflow task or instance already decided")
+	ErrSoDViolation    = errors.New("segregation of duties violation: requester cannot approve own request")
+	ErrNotAssignee     = errors.New("forbidden: actor is not the assigned approver for this workflow task")
+	ErrAlreadyDecided  = errors.New("workflow task or instance already decided")
 	ErrVersionConflict = errors.New("workflow task version conflict")
 )
 
@@ -181,6 +183,9 @@ func (r *WorkflowRepository) DecideTaskAndEmit(
 		if task.Decision != nil || inst.Status != "Pending" {
 			return ErrAlreadyDecided
 		}
+		if task.AssigneeID != uuid.Nil && actorID != task.AssigneeID && !httpx.HasRole(ctx, "SYSTEM_ADMIN") {
+			return ErrNotAssignee
+		}
 		if decision == "Approve" && (actorID == inst.CreatedBy || actorID == task.CreatedBy) {
 			return ErrSoDViolation
 		}
@@ -197,6 +202,9 @@ func (r *WorkflowRepository) DecideTaskAndEmit(
 			return err
 		}
 
+		defn, _ := q.GetWorkflowDefinition(ctx, inst.DefinitionID)
+		steps, _ := q.ListWorkflowStepsByDefinition(ctx, inst.DefinitionID)
+
 		instStatus := inst.Status
 		newInstVer := inst.RowVersion
 		shouldClose := decision == "Reject"
@@ -205,7 +213,54 @@ func (r *WorkflowRepository) DecideTaskAndEmit(
 			if err != nil {
 				return err
 			}
-			shouldClose = pendingLeft == 0
+			if pendingLeft == 0 {
+				curStep := int32(1)
+				if inst.CurrentStep != nil && *inst.CurrentStep > 0 {
+					curStep = *inst.CurrentStep
+				}
+				var nextStep *workflowdb.ListWorkflowStepsByDefinitionRow
+				for i := range steps {
+					if steps[i].StepOrder > curStep {
+						nextStep = &steps[i]
+						break
+					}
+				}
+				if nextStep != nil {
+					nextOrder := nextStep.StepOrder
+					newInstVer, err = q.AdvanceWorkflowInstanceStep(ctx, workflowdb.AdvanceWorkflowInstanceStepParams{
+						ID:          inst.ID,
+						RowVersion:  inst.RowVersion,
+						CurrentStep: &nextOrder,
+						UpdatedBy:   &actorID,
+					})
+					if err != nil {
+						if errors.Is(err, pgx.ErrNoRows) {
+							return ErrVersionConflict
+						}
+						return err
+					}
+					nextAssignee := task.AssigneeID
+					var rule struct {
+						AssigneeID string `json:"assigneeId"`
+					}
+					if len(nextStep.ApproverRule) > 0 && json.Unmarshal(nextStep.ApproverRule, &rule) == nil {
+						if parsed, perr := uuid.Parse(rule.AssigneeID); perr == nil && parsed != uuid.Nil {
+							nextAssignee = parsed
+						}
+					}
+					if _, err := q.CreateWorkflowTask(ctx, workflowdb.CreateWorkflowTaskParams{
+						OrganizationID: inst.OrganizationID,
+						InstanceID:     inst.ID,
+						AssigneeID:     nextAssignee,
+						CreatedBy:      inst.CreatedBy,
+					}); err != nil {
+						return err
+					}
+					shouldClose = false
+				} else {
+					shouldClose = true
+				}
+			}
 		}
 		if shouldClose {
 			instStatus = "Approved"
@@ -225,12 +280,14 @@ func (r *WorkflowRepository) DecideTaskAndEmit(
 				return err
 			}
 			evMap := map[string]any{
-				"taskId":      task.ID,
-				"instanceId":  inst.ID,
-				"documentRef": inst.DocumentRef,
-				"decision":    decision,
-				"status":      instStatus,
-				"approverId":  actorID,
+				"taskId":       task.ID,
+				"instanceId":   inst.ID,
+				"definitionId": inst.DefinitionID,
+				"documentType": defn.DocumentType,
+				"documentRef":  inst.DocumentRef,
+				"decision":     decision,
+				"status":       instStatus,
+				"approverId":   actorID,
 			}
 			if comment != "" {
 				evMap["comment"] = comment

@@ -305,6 +305,10 @@ func (s *Server) updateParty(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
+	if existing.OrganizationID == platform.SystemOrgID {
+		httpx.WriteError(w, r, httpx.Forbidden("system party tidak dapat dimodifikasi"))
+		return
+	}
 	if existing.RowVersion != ver {
 		httpx.WriteError(w, r, httpx.Conflict("VERSION_CONFLICT", "row_version party tidak cocok"))
 		return
@@ -374,12 +378,17 @@ func (s *Server) deleteParty(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	if _, _, err := s.repo.GetPartyWithAddresses(r.Context(), scope, id); err != nil {
+	existing, _, err := s.repo.GetPartyWithAddresses(r.Context(), scope, id)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.WriteError(w, r, httpx.NotFound("party tidak ditemukan"))
 			return
 		}
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	if existing.OrganizationID == platform.SystemOrgID {
+		httpx.WriteError(w, r, httpx.Forbidden("system party tidak dapat dihapus"))
 		return
 	}
 	n, err := s.repo.DeleteParty(r.Context(), scope, masterdatadb.DeletePartyParams{
@@ -592,6 +601,10 @@ func (s *Server) updateItem(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
+	if existing.OrganizationID == platform.SystemOrgID {
+		httpx.WriteError(w, r, httpx.Forbidden("system item tidak dapat dimodifikasi"))
+		return
+	}
 	if existing.RowVersion != ver {
 		httpx.WriteError(w, r, httpx.Conflict("VERSION_CONFLICT", "row_version item tidak cocok"))
 		return
@@ -655,12 +668,17 @@ func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	if _, _, err := s.repo.GetItemWithUOMs(r.Context(), scope, id); err != nil {
+	existing, _, err := s.repo.GetItemWithUOMs(r.Context(), scope, id)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.WriteError(w, r, httpx.NotFound("item tidak ditemukan"))
 			return
 		}
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	if existing.OrganizationID == platform.SystemOrgID {
+		httpx.WriteError(w, r, httpx.Forbidden("system item tidak dapat dihapus"))
 		return
 	}
 	n, err := s.repo.DeleteItem(r.Context(), scope, masterdatadb.DeleteItemParams{

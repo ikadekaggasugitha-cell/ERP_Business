@@ -197,6 +197,7 @@ const deleteItem = `-- name: DeleteItem :execrows
 UPDATE md.item
 SET deleted_at = now(), updated_by = $3
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type DeleteItemParams struct {
@@ -217,6 +218,7 @@ const deleteParty = `-- name: DeleteParty :execrows
 UPDATE md.party
 SET deleted_at = now(), updated_by = $3
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type DeletePartyParams struct {
@@ -586,6 +588,7 @@ const updateItem = `-- name: UpdateItem :one
 UPDATE md.item
 SET name = $3, item_type = $4, base_uom = $5, updated_by = $6
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 
@@ -616,6 +619,7 @@ const updateParty = `-- name: UpdateParty :one
 UPDATE md.party
 SET name = $3, party_type = $4, tax_id = $5, is_shared = $6, updated_by = $7
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 

@@ -17,11 +17,13 @@ SELECT COUNT(*) FROM fa.asset_category WHERE deleted_at IS NULL;
 UPDATE fa.asset_category
 SET name = $3, default_depreciation_method = $4, default_useful_life_months = $5, is_active = $6, updated_by = $7
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: DeleteAssetCategory :execrows
 UPDATE fa.asset_category SET deleted_at = now(), updated_by = $3
-WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL;
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
 
 -- name: CreateFixedAsset :one
 INSERT INTO fa.fixed_asset (

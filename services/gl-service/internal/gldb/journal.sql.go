@@ -234,6 +234,24 @@ func (q *Queries) GetAccountBalance(ctx context.Context, arg GetAccountBalancePa
 	return closing_balance, err
 }
 
+const getFiscalPeriodStatus = `-- name: GetFiscalPeriodStatus :one
+SELECT status
+FROM gl.fiscal_period_status
+WHERE organization_id = $1 AND period_id = $2
+`
+
+type GetFiscalPeriodStatusParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	PeriodID       uuid.UUID `json:"period_id"`
+}
+
+func (q *Queries) GetFiscalPeriodStatus(ctx context.Context, arg GetFiscalPeriodStatusParams) (string, error) {
+	row := q.db.QueryRow(ctx, getFiscalPeriodStatus, arg.OrganizationID, arg.PeriodID)
+	var status string
+	err := row.Scan(&status)
+	return status, err
+}
+
 const getJournalEntry = `-- name: GetJournalEntry :one
 SELECT id, organization_id, journal_no, financial_organization_id, ledger_id, fiscal_period_id, posting_date, journal_source, source_module, source_document_ref, currency_code, exchange_rate, status, reversed_entry_id, correlation_id, posted_at, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM gl.journal_entry
 WHERE id = $1 AND posting_date = $2 AND deleted_at IS NULL
@@ -339,6 +357,8 @@ func (q *Queries) InsertOutbox(ctx context.Context, arg InsertOutboxParams) erro
 const journalEntryTotals = `-- name: JournalEntryTotals :one
 SELECT COALESCE(SUM(debit_amount), 0)::numeric(20,4)  AS total_debit,
        COALESCE(SUM(credit_amount), 0)::numeric(20,4) AS total_credit,
+       COALESCE(SUM(CASE WHEN debit_amount > 0 THEN functional_amount ELSE 0 END), 0)::numeric(20,4) AS total_functional_debit,
+       COALESCE(SUM(CASE WHEN credit_amount > 0 THEN functional_amount ELSE 0 END), 0)::numeric(20,4) AS total_functional_credit,
        count(*)::bigint AS line_count
 FROM gl.journal_line
 WHERE journal_entry_id = $1 AND posting_date = $2 AND deleted_at IS NULL
@@ -350,15 +370,23 @@ type JournalEntryTotalsParams struct {
 }
 
 type JournalEntryTotalsRow struct {
-	TotalDebit  pgtype.Numeric `json:"total_debit"`
-	TotalCredit pgtype.Numeric `json:"total_credit"`
-	LineCount   int64          `json:"line_count"`
+	TotalDebit            pgtype.Numeric `json:"total_debit"`
+	TotalCredit           pgtype.Numeric `json:"total_credit"`
+	TotalFunctionalDebit  pgtype.Numeric `json:"total_functional_debit"`
+	TotalFunctionalCredit pgtype.Numeric `json:"total_functional_credit"`
+	LineCount             int64          `json:"line_count"`
 }
 
 func (q *Queries) JournalEntryTotals(ctx context.Context, arg JournalEntryTotalsParams) (JournalEntryTotalsRow, error) {
 	row := q.db.QueryRow(ctx, journalEntryTotals, arg.JournalEntryID, arg.PostingDate)
 	var i JournalEntryTotalsRow
-	err := row.Scan(&i.TotalDebit, &i.TotalCredit, &i.LineCount)
+	err := row.Scan(
+		&i.TotalDebit,
+		&i.TotalCredit,
+		&i.TotalFunctionalDebit,
+		&i.TotalFunctionalCredit,
+		&i.LineCount,
+	)
 	return i, err
 }
 
@@ -721,6 +749,30 @@ func (q *Queries) PostJournalEntry(ctx context.Context, arg PostJournalEntryPara
 	return result.RowsAffected(), nil
 }
 
+const recalculateJournalLinesFunctionalAmount = `-- name: RecalculateJournalLinesFunctionalAmount :exec
+UPDATE gl.journal_line
+SET functional_amount = ROUND((CASE WHEN debit_amount > 0 THEN debit_amount ELSE credit_amount END) * $4::numeric(20,8), 4),
+    updated_by = $3
+WHERE journal_entry_id = $1 AND posting_date = $2 AND deleted_at IS NULL
+`
+
+type RecalculateJournalLinesFunctionalAmountParams struct {
+	JournalEntryID uuid.UUID      `json:"journal_entry_id"`
+	PostingDate    pgtype.Date    `json:"posting_date"`
+	UpdatedBy      *uuid.UUID     `json:"updated_by"`
+	ExchangeRate   pgtype.Numeric `json:"exchange_rate"`
+}
+
+func (q *Queries) RecalculateJournalLinesFunctionalAmount(ctx context.Context, arg RecalculateJournalLinesFunctionalAmountParams) error {
+	_, err := q.db.Exec(ctx, recalculateJournalLinesFunctionalAmount,
+		arg.JournalEntryID,
+		arg.PostingDate,
+		arg.UpdatedBy,
+		arg.ExchangeRate,
+	)
+	return err
+}
+
 const softDeleteJournalEntry = `-- name: SoftDeleteJournalEntry :execrows
 UPDATE gl.journal_entry
 SET deleted_at = now(), updated_by = $4
@@ -817,5 +869,23 @@ func (q *Queries) UpsertAccountBalance(ctx context.Context, arg UpsertAccountBal
 		arg.PeriodCredit,
 		arg.CreatedBy,
 	)
+	return err
+}
+
+const upsertFiscalPeriodStatus = `-- name: UpsertFiscalPeriodStatus :exec
+INSERT INTO gl.fiscal_period_status (organization_id, period_id, status, updated_at)
+VALUES ($1, $2, $3, now())
+ON CONFLICT (organization_id, period_id)
+DO UPDATE SET status = EXCLUDED.status, updated_at = now()
+`
+
+type UpsertFiscalPeriodStatusParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	PeriodID       uuid.UUID `json:"period_id"`
+	Status         string    `json:"status"`
+}
+
+func (q *Queries) UpsertFiscalPeriodStatus(ctx context.Context, arg UpsertFiscalPeriodStatusParams) error {
+	_, err := q.db.Exec(ctx, upsertFiscalPeriodStatus, arg.OrganizationID, arg.PeriodID, arg.Status)
 	return err
 }

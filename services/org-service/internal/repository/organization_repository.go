@@ -29,7 +29,7 @@ func NewOrganizationRepository(db *platform.DB) *OrganizationRepository {
 
 func (r *OrganizationRepository) CreateOrganizationType(ctx context.Context, scope []uuid.UUID, arg orgdb.CreateOrganizationTypeParams) (orgdb.CreateOrganizationTypeRow, error) {
 	var out orgdb.CreateOrganizationTypeRow
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		var e error
 		out, e = r.q.WithTx(tx).CreateOrganizationType(ctx, arg)
 		return e
@@ -40,7 +40,7 @@ func (r *OrganizationRepository) CreateOrganizationType(ctx context.Context, sco
 func (r *OrganizationRepository) ListOrganizationTypesWithCount(ctx context.Context, scope []uuid.UUID, arg orgdb.ListOrganizationTypesParams) ([]orgdb.ListOrganizationTypesRow, int64, error) {
 	var rows []orgdb.ListOrganizationTypesRow
 	var total int64
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithOrgReadScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if rows, e = q.ListOrganizationTypes(ctx, arg); e != nil {
@@ -54,7 +54,7 @@ func (r *OrganizationRepository) ListOrganizationTypesWithCount(ctx context.Cont
 
 func (r *OrganizationRepository) CreateAndEmit(ctx context.Context, scope []uuid.UUID, arg orgdb.CreateOrganizationParams, ev orgdb.InsertOutboxParams) (orgdb.CreateOrganizationRow, error) {
 	var created orgdb.CreateOrganizationRow
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		arg.Path = "/" + arg.Code
 		if arg.ParentID != nil {
@@ -94,7 +94,7 @@ func (r *OrganizationRepository) CreateAndEmit(ctx context.Context, scope []uuid
 func (r *OrganizationRepository) GetWithHierarchy(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (orgdb.OrgOrganization, []orgdb.ListOrganizationDescendantsRow, error) {
 	var o orgdb.OrgOrganization
 	var desc []orgdb.ListOrganizationDescendantsRow
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithOrgReadScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if o, e = q.GetOrganization(ctx, id); e != nil {
@@ -109,7 +109,7 @@ func (r *OrganizationRepository) GetWithHierarchy(ctx context.Context, scope []u
 func (r *OrganizationRepository) ListWithCount(ctx context.Context, scope []uuid.UUID, arg orgdb.ListOrganizationsParams) ([]orgdb.ListOrganizationsRow, int64, error) {
 	var rows []orgdb.ListOrganizationsRow
 	var total int64
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithOrgReadScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if rows, e = q.ListOrganizations(ctx, arg); e != nil {
@@ -126,7 +126,7 @@ func (r *OrganizationRepository) ListWithCount(ctx context.Context, scope []uuid
 
 func (r *OrganizationRepository) UpdateAndEmit(ctx context.Context, scope []uuid.UUID, arg orgdb.UpdateOrganizationParams, ev orgdb.InsertOutboxParams) (orgdb.UpdateOrganizationRow, error) {
 	var out orgdb.UpdateOrganizationRow
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if out, e = q.UpdateOrganization(ctx, arg); e != nil {
@@ -139,7 +139,7 @@ func (r *OrganizationRepository) UpdateAndEmit(ctx context.Context, scope []uuid
 
 func (r *OrganizationRepository) ActivateAndEmit(ctx context.Context, scope []uuid.UUID, arg orgdb.ActivateOrganizationParams, ev orgdb.InsertOutboxParams) (int32, error) {
 	var ver int32
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if ver, e = q.ActivateOrganization(ctx, arg); e != nil {
@@ -152,7 +152,7 @@ func (r *OrganizationRepository) ActivateAndEmit(ctx context.Context, scope []uu
 
 func (r *OrganizationRepository) DeleteOrganization(ctx context.Context, scope []uuid.UUID, arg orgdb.DeleteOrganizationParams) (int64, error) {
 	var n int64
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		children, err := q.CountChildOrganizations(ctx, &arg.ID)
 		if err != nil {

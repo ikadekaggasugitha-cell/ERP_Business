@@ -15,8 +15,7 @@ const stagingTables = [
   "stg_fixed_assets_cdc",
   "stg_budgets_cdc",
   "stg_projects_cdc",
-  "stg_crm_opportunities_cdc",
-  "stg_maintenance_wo_cdc"
+  "stg_crm_opportunities_cdc"
 ];
 
 stagingTables.forEach((tableName) => {

@@ -408,6 +408,16 @@ func (s *Server) deleteDraft(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func requireAPApprove(r *http.Request) error {
+	if err := httpx.RequirePermission(r, "ap.approve"); err != nil {
+		if httpx.RequirePermission(r, "ap:approve") == nil {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 func (s *Server) record(w http.ResponseWriter, r *http.Request) {
 	scope, err := httpx.RequireScope(r)
 	if err != nil {
@@ -419,7 +429,7 @@ func (s *Server) record(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	if err := httpx.RequirePermission(r, "ap:write"); err != nil {
+	if err := requireAPApprove(r); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
@@ -436,6 +446,10 @@ func (s *Server) record(w http.ResponseWriter, r *http.Request) {
 	inv, err := s.repo.GetByID(r.Context(), scope, id)
 	if err != nil {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	if inv.CreatedBy != uuid.Nil && inv.CreatedBy == user && !httpx.HasRole(r.Context(), "SYSTEM_ADMIN") {
+		httpx.WriteError(w, r, httpx.Forbidden("maker-checker separation of duties: creator cannot approve own invoice"))
 		return
 	}
 	payload, _ := json.Marshal(map[string]any{

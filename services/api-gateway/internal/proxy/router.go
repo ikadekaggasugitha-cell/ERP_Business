@@ -1,12 +1,16 @@
 package proxy
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 type RouteRule struct {
@@ -60,6 +64,20 @@ func NewRouter() (*Router, error) {
 		{"CRM_SERVICE_URL", "http://crm-service:8080", []string{"/leads", "/opportunities", "/customer-segments", "/interactions", "/support-cases", "/activity-tasks"}},
 	}
 
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:          200,
+		MaxIdleConnsPerHost:   20,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+	}
+
 	rules := make([]RouteRule, 0, len(configs))
 	for _, cfg := range configs {
 		raw := os.Getenv(cfg.envKey)
@@ -70,7 +88,9 @@ func NewRouter() (*Router, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid target URL for %s (%s): %w", cfg.envKey, raw, err)
 		}
+		serviceName := cfg.envKey
 		rp := httputil.NewSingleHostReverseProxy(target)
+		rp.Transport = transport
 		origDirector := rp.Director
 		rp.Director = func(req *http.Request) {
 			origDirector(req)
@@ -84,9 +104,20 @@ func NewRouter() (*Router, error) {
 			req.Host = target.Host
 		}
 		rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-			w.Header().Set("Content-Type", "application/json")
+			cid := strings.TrimSpace(r.Header.Get("X-Correlation-Id"))
+			log.Printf("[proxy] cid=%s upstream=%s path=%s err=%v", cid, serviceName, r.URL.Path, err)
+			if cid != "" {
+				w.Header().Set("X-Correlation-Id", cid)
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusBadGateway)
-			_, _ = fmt.Fprintf(w, `{"error":{"code":"BAD_GATEWAY","message":%q}}`, err.Error())
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error": map[string]any{
+					"code":          "BAD_GATEWAY",
+					"message":       "upstream service unavailable",
+					"correlationId": cid,
+				},
+			})
 		}
 		rules = append(rules, RouteRule{
 			Prefixes: cfg.prefixes,

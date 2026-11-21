@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/eventbus"
 )
@@ -148,61 +150,65 @@ func (h *Hub) Broadcast(ev StreamEvent) {
 	}
 }
 
-// StartKafkaBridge tails domain topics from Kafka/Redpanda and pushes matching
-// events into SSE subscribers.
+// StartKafkaBridge tails domain topics from Kafka/Redpanda using a single multi-topic
+// GroupTopics reader with a per-instance fan-out GroupID so multi-replica gateway pods
+// each receive all domain events without 58-reader rebalance storms.
 func (h *Hub) StartKafkaBridge(ctx context.Context, brokers []string, groupID string) {
 	if len(brokers) == 0 {
 		log.Println("sse bridge: no KAFKA_BROKERS configured, live Kafka push disabled")
 		return
 	}
-	var wg sync.WaitGroup
-	for _, topic := range DomainTopics {
-		wg.Add(1)
-		go func(t string) {
-			defer wg.Done()
-			r := kafka.NewReader(kafka.ReaderConfig{
-				Brokers:     brokers,
-				Topic:       t,
-				GroupID:     groupID,
-				StartOffset: kafka.LastOffset,
-				MinBytes:    1,
-				MaxBytes:    10e6,
-				MaxWait:     500 * time.Millisecond,
-			})
-			defer r.Close()
-			for {
-				msg, err := r.ReadMessage(ctx)
-				if err != nil {
-					if ctx.Err() != nil {
-						return
-					}
-					time.Sleep(time.Second)
-					continue
-				}
-				var env eventbus.Envelope
-				if err := json.Unmarshal(msg.Value, &env); err != nil {
-					continue
-				}
-				ts := env.OccurredAt.UTC().Format(time.RFC3339)
-				if env.OccurredAt.IsZero() {
-					ts = time.Now().UTC().Format(time.RFC3339)
-				}
-				h.Broadcast(StreamEvent{
-					EventID:        env.EventID,
-					EventType:      env.EventType,
-					AggregateType:  env.AggregateType,
-					AggregateID:    env.AggregateID,
-					OrganizationID: env.OrganizationID,
-					CorrelationID:  env.CorrelationID,
-					Timestamp:      ts,
-					OccurredAt:     ts,
-					Payload:        env.Data,
-					Data:           env.Data,
-				})
-			}
-		}(topic)
+	instanceGroupID := strings.TrimSpace(groupID)
+	if instanceGroupID == "" {
+		instanceGroupID = "api-gateway-sse"
 	}
-	<-ctx.Done()
-	wg.Wait()
+	host, _ := os.Hostname()
+	if host = strings.TrimSpace(host); host != "" {
+		instanceGroupID = instanceGroupID + "-" + host
+	} else {
+		instanceGroupID = instanceGroupID + "-" + uuid.NewString()[:8]
+	}
+
+	r := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:     brokers,
+		GroupID:     instanceGroupID,
+		GroupTopics: DomainTopics,
+		StartOffset: kafka.LastOffset,
+		MinBytes:    1,
+		MaxBytes:    10e6,
+		MaxWait:     500 * time.Millisecond,
+	})
+	defer r.Close()
+
+	for {
+		msg, err := r.ReadMessage(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			time.Sleep(time.Second)
+			continue
+		}
+		var env eventbus.Envelope
+		if err := json.Unmarshal(msg.Value, &env); err != nil {
+			continue
+		}
+		ts := env.OccurredAt.UTC().Format(time.RFC3339)
+		if env.OccurredAt.IsZero() {
+			ts = time.Now().UTC().Format(time.RFC3339)
+		}
+		h.Broadcast(StreamEvent{
+			EventID:        env.EventID,
+			EventType:      env.EventType,
+			AggregateType:  env.AggregateType,
+			AggregateID:    env.AggregateID,
+			OrganizationID: env.OrganizationID,
+			CorrelationID:  env.CorrelationID,
+			Timestamp:      ts,
+			OccurredAt:     ts,
+			Payload:        env.Data,
+			Data:           env.Data,
+		})
+	}
 }
 

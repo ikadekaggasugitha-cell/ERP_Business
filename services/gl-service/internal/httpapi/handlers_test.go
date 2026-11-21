@@ -18,11 +18,15 @@ import (
 )
 
 type fakeStore struct {
-	entry     gldb.GlJournalEntry
-	lines     []gldb.ListJournalLinesRow
-	totDebit  string
-	totCredit string
-	totLines  int64
+	entry         gldb.GlJournalEntry
+	lines         []gldb.ListJournalLinesRow
+	updatedLines  []gldb.CreateJournalLineParams
+	totDebit      string
+	totCredit     string
+	totFuncDebit  string
+	totFuncCredit string
+	totLines      int64
+	postErr       error
 }
 
 func (f *fakeStore) CreateEntryWithLines(_ context.Context, _ []uuid.UUID, entry gldb.CreateJournalEntryParams, lines []gldb.CreateJournalLineParams) (gldb.CreateJournalEntryRow, error) {
@@ -49,7 +53,9 @@ func (f *fakeStore) ListWithCount(context.Context, []uuid.UUID, gldb.ListJournal
 		TotalDebit: dr, TotalCredit: cr,
 	}}, 1, nil
 }
-func (f *fakeStore) UpdateDraftEntry(context.Context, []uuid.UUID, gldb.UpdateJournalEntryDraftParams, []gldb.CreateJournalLineParams) (int64, error) {
+func (f *fakeStore) UpdateDraftEntry(_ context.Context, _ []uuid.UUID, hdr gldb.UpdateJournalEntryDraftParams, lines []gldb.CreateJournalLineParams) (int64, error) {
+	f.entry.ExchangeRate = hdr.ExchangeRate
+	f.updatedLines = lines
 	return 1, nil
 }
 func (f *fakeStore) SoftDeleteDraft(context.Context, []uuid.UUID, gldb.SoftDeleteJournalEntryParams) (int64, error) {
@@ -58,9 +64,26 @@ func (f *fakeStore) SoftDeleteDraft(context.Context, []uuid.UUID, gldb.SoftDelet
 func (f *fakeStore) Totals(context.Context, []uuid.UUID, gldb.JournalEntryTotalsParams) (gldb.JournalEntryTotalsRow, error) {
 	dr, _ := platform.ParseNumeric(f.totDebit)
 	cr, _ := platform.ParseNumeric(f.totCredit)
-	return gldb.JournalEntryTotalsRow{TotalDebit: dr, TotalCredit: cr, LineCount: f.totLines}, nil
+	fdr := dr
+	if f.totFuncDebit != "" {
+		fdr, _ = platform.ParseNumeric(f.totFuncDebit)
+	}
+	fcr := cr
+	if f.totFuncCredit != "" {
+		fcr, _ = platform.ParseNumeric(f.totFuncCredit)
+	}
+	return gldb.JournalEntryTotalsRow{
+		TotalDebit:            dr,
+		TotalCredit:           cr,
+		TotalFunctionalDebit:  fdr,
+		TotalFunctionalCredit: fcr,
+		LineCount:             f.totLines,
+	}, nil
 }
 func (f *fakeStore) PostAndEmit(context.Context, []uuid.UUID, gldb.GlJournalEntry, int32, uuid.UUID) (int64, error) {
+	if f.postErr != nil {
+		return 0, f.postErr
+	}
 	return 1, nil
 }
 func (f *fakeStore) ReverseEntryAndEmit(_ context.Context, _ []uuid.UUID, orig gldb.GlJournalEntry, _ int32, _, _ uuid.UUID) (gldb.CreateJournalEntryRow, int64, error) {
@@ -137,11 +160,60 @@ func TestCreateRejectsInvalidNumericAndPostEnforcesBR556(t *testing.T) {
 	if out.RowVersion != 2 || rec.Header().Get("ETag") != `"2"` {
 		t.Fatalf("unexpected rowVersion=%d etag=%q", out.RowVersion, rec.Header().Get("ETag"))
 	}
-	if out.ExchangeRate != "1.0000" || out.TotalDebit != "1000.0000" || out.TotalCredit != "1000.0000" {
+	if out.ExchangeRate != "1.00000000" || out.TotalDebit != "1000.0000" || out.TotalCredit != "1000.0000" {
 		t.Fatalf("expected post response to include exchangeRate/totalDebit/totalCredit, got %+v", out)
 	}
 
-	// GET /journal-entries returns exchangeRate, totalDebit, and totalCredit.
+	// Functional debit != functional credit returns 422 GL_JOURNAL_UNBALANCED.
+	st.totFuncDebit = "15850000.0000"
+	st.totFuncCredit = "15800000.0000"
+	req = httptest.NewRequest(http.MethodPost, "/journal-entries/"+st.entry.ID.String()+"/post", nil)
+	req.Header.Set("X-Organization-Id", uuid.NewString())
+	req.Header.Set("X-User-Id", uuid.NewString())
+	req.Header.Set("X-Roles", "FINANCE_MANAGER")
+	req.Header.Set("X-Permissions", "gl.approve")
+	req.Header.Set("If-Match", "1")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("functional unbalanced post status = %d, want 422", rec.Code)
+	}
+	st.totFuncDebit = ""
+	st.totFuncCredit = ""
+
+	// Closed fiscal period returns 422 FISCAL_PERIOD_CLOSED.
+	st.postErr = httpx.Unprocessable("FISCAL_PERIOD_CLOSED", "fiscal period is closed or locked")
+	req = httptest.NewRequest(http.MethodPost, "/journal-entries/"+st.entry.ID.String()+"/post", nil)
+	req.Header.Set("X-Organization-Id", uuid.NewString())
+	req.Header.Set("X-User-Id", uuid.NewString())
+	req.Header.Set("X-Roles", "FINANCE_MANAGER")
+	req.Header.Set("X-Permissions", "gl.approve")
+	req.Header.Set("If-Match", "1")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("closed period post status = %d, want 422", rec.Code)
+	}
+	st.postErr = nil
+
+	// PUT /journal-entries/{id} recalculates functionalAmount when exchangeRate changes.
+	updBody := `{"currencyCode":"USD","exchangeRate":"16000.00000000","lines":[{"lineNo":1,"accountId":"10000000-0000-0000-0000-00000000000a","debitAmount":"100.0000","creditAmount":"0","functionalAmount":"1500000.0000"},{"lineNo":2,"accountId":"10000000-0000-0000-0000-00000000000b","debitAmount":"0","creditAmount":"100.0000","functionalAmount":"1500000.0000"}]}`
+	req = httptest.NewRequest(http.MethodPut, "/journal-entries/"+st.entry.ID.String(), bytes.NewBufferString(updBody))
+	req.Header.Set("X-Organization-Id", uuid.NewString())
+	req.Header.Set("X-User-Id", uuid.NewString())
+	req.Header.Set("X-Permissions", "gl.update")
+	req.Header.Set("If-Match", "1")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if len(st.updatedLines) != 2 || platform.FormatNumeric(st.updatedLines[0].FunctionalAmount, 4) != "1600000.0000" {
+		t.Fatalf("expected recalculated functionalAmount=1600000.0000, got %+v", st.updatedLines)
+	}
+
+	// GET /journal-entries returns exchangeRate (8 decimals), totalDebit, and totalCredit.
+	st.entry.ExchangeRate = pgtype.Numeric{}
 	req = httptest.NewRequest(http.MethodGet, "/journal-entries", nil)
 	req.Header.Set("X-Organization-Id", uuid.NewString())
 	req.Header.Set("X-User-Id", uuid.NewString())
@@ -161,8 +233,8 @@ func TestCreateRejectsInvalidNumericAndPostEnforcesBR556(t *testing.T) {
 		t.Fatalf("expected 1 journal entry in list, got %d", len(listResp.Data))
 	}
 	row := listResp.Data[0]
-	if row.ExchangeRate != "1.0000" || row.TotalDebit != "1000.0000" || row.TotalCredit != "1000.0000" {
-		t.Fatalf("expected list item to include exchangeRate=1.0000 totalDebit=1000.0000 totalCredit=1000.0000, got %+v", row)
+	if row.ExchangeRate != "1.00000000" || row.TotalDebit != "1000.0000" || row.TotalCredit != "1000.0000" {
+		t.Fatalf("expected list item to include exchangeRate=1.00000000 totalDebit=1000.0000 totalCredit=1000.0000, got %+v", row)
 	}
 }
 

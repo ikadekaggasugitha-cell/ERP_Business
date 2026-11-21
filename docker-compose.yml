@@ -2,13 +2,15 @@ name: erp-slice
 
 x-service-base: &service-base
   restart: unless-stopped
+  environment:
+    DATABASE_MAX_OPEN_CONNS: "5"
   depends_on:
     seeds:
       condition: service_completed_successfully
     broker:
       condition: service_healthy
   healthcheck:
-    test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null 2>&1 || exit 1"]
+    test: ["CMD-SHELL", "wget -qO- http://localhost:8080/readyz >/dev/null 2>&1 || exit 1"]
     interval: 5s
     timeout: 3s
     retries: 15
@@ -22,7 +24,7 @@ services:
   db:
     image: postgres:16-alpine
     container_name: erp-slice-db-1
-    command: ["postgres", "-c", "max_connections=250"]
+    command: ["postgres", "-c", "max_connections=300"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -370,6 +372,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/gl_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8081:8080"]
 
   ap-service:
@@ -379,6 +382,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/ap_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8082:8080"]
 
   audit-service:
@@ -388,6 +392,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/audit_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8083:8080"]
 
   ar-service:
@@ -397,6 +402,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/ar_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8084:8080"]
 
   coa-service:
@@ -406,6 +412,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/coa_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8085:8080"]
 
   tax-service:
@@ -415,6 +422,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/tax_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8086:8080"]
 
   treasury-service:
@@ -424,6 +432,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/treasury_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     networks:
       default:
         aliases:
@@ -437,6 +446,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/user_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8088:8080"]
 
   security-service:
@@ -446,6 +456,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/security_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8089:8080"]
 
   masterdata-service:
@@ -455,6 +466,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/masterdata_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8090:8080"]
 
   org-service:
@@ -464,6 +476,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/org_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8091:8080"]
 
   workflow-service:
@@ -473,6 +486,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/workflow_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8092:8080"]
 
   procurement-service:
@@ -482,6 +496,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/procurement_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8093:8080"]
 
   inventory-service:
@@ -491,6 +506,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/inventory_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8094:8080"]
 
   manufacturing-service:
@@ -500,6 +516,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/manufacturing_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8095:8080"]
 
   sales-service:
@@ -509,6 +526,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/sales_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8096:8080"]
 
   hr-service:
@@ -518,6 +536,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/hr_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
       PII_ENCRYPTION_KEY: ${PII_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
     ports: ["8097:8080"]
 
@@ -528,6 +547,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/payroll_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
       PII_ENCRYPTION_KEY: ${PII_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
     ports: ["8098:8080"]
 
@@ -538,6 +558,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/reporting_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8099:8080"]
 
   currency-service:
@@ -547,6 +568,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/currency_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8100:8080"]
 
   dimension-service:
@@ -556,6 +578,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/dimension_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8102:8080"]
 
   fixedasset-service:
@@ -565,6 +588,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/fixedasset_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8101:8080"]
 
   budget-service:
@@ -574,6 +598,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/budget_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8103:8080"]
 
   financialclose-service:
@@ -583,6 +608,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/financialclose_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8104:8080"]
 
   consolidation-service:
@@ -592,6 +618,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/consolidation_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8105:8080"]
 
   project-service:
@@ -601,6 +628,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/project_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8106:8080"]
 
   asset-service:
@@ -610,6 +638,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/asset_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8107:8080"]
 
   maintenance-service:
@@ -619,6 +648,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/maintenance_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8108:8080"]
 
   crm-service:
@@ -628,6 +658,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/crm_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8109:8080"]
 
   localization-service:
@@ -637,6 +668,7 @@ services:
       DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/localization_db?sslmode=disable
       HTTP_ADDR: ":8080"
       KAFKA_BROKERS: broker:9092
+      DATABASE_MAX_OPEN_CONNS: "5"
     ports: ["8110:8080"]
 
   api-gateway:
@@ -715,7 +747,7 @@ services:
       localization-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/healthz >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/readyz >/dev/null 2>&1 || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 15

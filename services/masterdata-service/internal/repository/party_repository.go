@@ -26,7 +26,7 @@ func NewPartyRepository(db *platform.DB) *PartyRepository {
 
 func (r *PartyRepository) CreatePartyAndEmit(ctx context.Context, scope []uuid.UUID, arg masterdatadb.CreatePartyParams, addrs []masterdatadb.CreatePartyAddressParams, ev masterdatadb.InsertOutboxParams) (masterdatadb.CreatePartyRow, error) {
 	var created masterdatadb.CreatePartyRow
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if created, e = q.CreateParty(ctx, arg); e != nil {
@@ -49,7 +49,7 @@ func (r *PartyRepository) CreatePartyAndEmit(ctx context.Context, scope []uuid.U
 func (r *PartyRepository) GetPartyWithAddresses(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (masterdatadb.MdParty, []masterdatadb.ListPartyAddressesRow, error) {
 	var p masterdatadb.MdParty
 	var addrs []masterdatadb.ListPartyAddressesRow
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithOrgReadScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if p, e = q.GetParty(ctx, id); e != nil {
@@ -64,7 +64,7 @@ func (r *PartyRepository) GetPartyWithAddresses(ctx context.Context, scope []uui
 func (r *PartyRepository) ListPartiesWithCount(ctx context.Context, scope []uuid.UUID, arg masterdatadb.ListPartiesParams) ([]masterdatadb.ListPartiesRow, int64, error) {
 	var rows []masterdatadb.ListPartiesRow
 	var total int64
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithOrgReadScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if rows, e = q.ListParties(ctx, arg); e != nil {
@@ -78,7 +78,7 @@ func (r *PartyRepository) ListPartiesWithCount(ctx context.Context, scope []uuid
 
 func (r *PartyRepository) UpdatePartyAndEmit(ctx context.Context, scope []uuid.UUID, arg masterdatadb.UpdatePartyParams, events ...masterdatadb.InsertOutboxParams) (int32, error) {
 	var ver int32
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if ver, e = q.UpdateParty(ctx, arg); e != nil {
@@ -96,7 +96,7 @@ func (r *PartyRepository) UpdatePartyAndEmit(ctx context.Context, scope []uuid.U
 
 func (r *PartyRepository) DeleteParty(ctx context.Context, scope []uuid.UUID, arg masterdatadb.DeletePartyParams) (int64, error) {
 	var n int64
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		var e error
 		n, e = r.q.WithTx(tx).DeleteParty(ctx, arg)
 		return e
@@ -106,7 +106,7 @@ func (r *PartyRepository) DeleteParty(ctx context.Context, scope []uuid.UUID, ar
 
 func (r *PartyRepository) CreateItemAndEmit(ctx context.Context, scope []uuid.UUID, arg masterdatadb.CreateItemParams, ev masterdatadb.InsertOutboxParams) (masterdatadb.CreateItemRow, error) {
 	var created masterdatadb.CreateItemRow
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if created, e = q.CreateItem(ctx, arg); e != nil {
@@ -132,7 +132,7 @@ func (r *PartyRepository) CreateItemAndEmit(ctx context.Context, scope []uuid.UU
 func (r *PartyRepository) GetItemWithUOMs(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (masterdatadb.MdItem, []masterdatadb.ListItemUOMsRow, error) {
 	var item masterdatadb.MdItem
 	var uoms []masterdatadb.ListItemUOMsRow
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithOrgReadScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if item, e = q.GetItem(ctx, id); e != nil {
@@ -147,7 +147,7 @@ func (r *PartyRepository) GetItemWithUOMs(ctx context.Context, scope []uuid.UUID
 func (r *PartyRepository) ListItemsWithCount(ctx context.Context, scope []uuid.UUID, arg masterdatadb.ListItemsParams) ([]masterdatadb.ListItemsRow, int64, error) {
 	var rows []masterdatadb.ListItemsRow
 	var total int64
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithOrgReadScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if rows, e = q.ListItems(ctx, arg); e != nil {
@@ -161,7 +161,7 @@ func (r *PartyRepository) ListItemsWithCount(ctx context.Context, scope []uuid.U
 
 func (r *PartyRepository) UpdateItemAndEmit(ctx context.Context, scope []uuid.UUID, arg masterdatadb.UpdateItemParams, ev masterdatadb.InsertOutboxParams) (int32, error) {
 	var ver int32
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if ver, e = q.UpdateItem(ctx, arg); e != nil {
@@ -174,7 +174,7 @@ func (r *PartyRepository) UpdateItemAndEmit(ctx context.Context, scope []uuid.UU
 
 func (r *PartyRepository) DeleteItem(ctx context.Context, scope []uuid.UUID, arg masterdatadb.DeleteItemParams) (int64, error) {
 	var n int64
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		var e error
 		n, e = r.q.WithTx(tx).DeleteItem(ctx, arg)
 		return e

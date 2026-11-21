@@ -168,9 +168,12 @@ func (c *Consumer) Run(ctx context.Context, handle func(context.Context, Envelop
 		var env Envelope
 		if err := json.Unmarshal(m.Value, &env); err != nil {
 			log.Printf("[consumer] malformed message topic=%s offset=%d: %v (routing to DLQ)", m.Topic, m.Offset, err)
-			if derr := c.publishDLQ(ctx, m, 1, fmt.Errorf("malformed json: %w", err)); derr != nil {
-				log.Printf("[consumer] dlq write failed topic=%s offset=%d: %v (retrying)", m.Topic, m.Offset, derr)
-				continue
+			if derr := c.publishDLQWithRetry(ctx, m, 1, fmt.Errorf("malformed json: %w", err)); derr != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				// Fail-stop: never advance to message N+1 when message N could not be persisted to DLQ.
+				return fmt.Errorf("dlq publish failed topic=%s partition=%d offset=%d: %w", m.Topic, m.Partition, m.Offset, derr)
 			}
 			c.commit(ctx, m)
 			continue
@@ -198,14 +201,34 @@ func (c *Consumer) Run(ctx context.Context, handle func(context.Context, Envelop
 		}
 		if herr != nil {
 			log.Printf("[consumer] routing event=%s topic=%s to %s after %d attempts: %v", env.EventID, m.Topic, DLQTopic(m.Topic), attempts, herr)
-			if derr := c.publishDLQ(ctx, m, attempts, herr); derr != nil {
-				// Do not commit offset when DLQ itself failed; let Kafka redeliver after recovery.
-				log.Printf("[consumer] dlq write failed event=%s: %v (not committing offset)", env.EventID, derr)
-				continue
+			if derr := c.publishDLQWithRetry(ctx, m, attempts, herr); derr != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				// Fail-stop: never fetch/commit message N+1 when message N failed both handler and DLQ write.
+				log.Printf("[consumer] dlq write failed event=%s: %v (halting consumer loop to preserve offset %d)", env.EventID, derr, m.Offset)
+				return fmt.Errorf("dlq publish failed event=%s topic=%s partition=%d offset=%d: %w", env.EventID, m.Topic, m.Partition, m.Offset, derr)
 			}
 		}
 		c.commit(ctx, m)
 	}
+}
+
+func (c *Consumer) publishDLQWithRetry(ctx context.Context, m kafka.Message, attempts int, cause error) error {
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if lastErr = c.publishDLQ(ctx, m, attempts, cause); lastErr == nil {
+			return nil
+		}
+		if attempt < maxAttempts {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff(attempt)):
+			}
+		}
+	}
+	return lastErr
 }
 
 func (c *Consumer) publishDLQ(ctx context.Context, m kafka.Message, attempts int, cause error) error {

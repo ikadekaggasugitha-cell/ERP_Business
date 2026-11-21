@@ -60,10 +60,10 @@ ckc() { # ck contains: "desc" haystack needle
 
 echo "== waiting for services =="
 for p in 8081 8082 8083 8084 8085 8086 8087 8088 8089 8090 8091 8092 8093 8094 8095 8096 8097 8098 8099 8100 8101 8102 8103 8104 8105 8106 8107 8108 8109 8110 8000; do
-  for i in $(seq 1 60); do curl -fsS "localhost:$p/healthz" >/dev/null 2>&1 && break; sleep 2; done
+  for i in $(seq 1 60); do curl -fsS "localhost:$p/readyz" >/dev/null 2>&1 && break; sleep 2; done
 done
 
-AH=(-H "X-Organization-Id: $ORGA" -H "X-User-Id: $USER" -H "Content-Type: application/json")
+AH=(-H "X-Organization-Id: $ORGA" -H "X-User-Id: $USER" -H "X-Roles: SYSTEM_ADMIN" -H "Content-Type: application/json")
 
 echo "== 1. gl: create balanced journal =="
 JBODY='{"journalNo":"JV-'"$TS"'","financialOrganizationId":"'"$FINORG"'","ledgerId":"'"$LEDGER"'","fiscalPeriodId":"'"$PERIOD"'","postingDate":"2026-03-15","currencyCode":"IDR","lines":[{"lineNo":1,"accountId":"'"$ACC1"'","debitAmount":"1000.0000","creditAmount":"0","functionalAmount":"1000.0000"},{"lineNo":2,"accountId":"'"$ACC2"'","debitAmount":"0","creditAmount":"1000.0000","functionalAmount":"1000.0000"}]}'
@@ -409,8 +409,8 @@ ck "tax issued tax invoice from ar.invoice.issued" "$tax_ar" "1"
 
 echo "== 13. Currency Service & Gateway: List, Rate Creation, Triangulation Convert, SSE =="
 SYS_ORG=00000000-0000-0000-0000-000000000000
-SYS_AH=(-H "X-Organization-Id: $SYS_ORG" -H "X-User-Id: $USER" -H "Content-Type: application/json")
-CUR_AH=(-H "X-Organization-Id: $ORGA,$SYS_ORG" -H "X-User-Id: $USER" -H "Content-Type: application/json")
+SYS_AH=(-H "X-Organization-Id: $SYS_ORG" -H "X-User-Id: $USER" -H "X-Roles: SYSTEM_ADMIN" -H "Content-Type: application/json")
+CUR_AH=(-H "X-Organization-Id: $ORGA,$SYS_ORG" -H "X-User-Id: $USER" -H "X-Roles: SYSTEM_ADMIN" -H "Content-Type: application/json")
 
 # 13a. Direct port 8100 readyz & system org write protection
 cur_ready=$(curl -s -o /dev/null -w "%{http_code}" "$CUR/readyz" || true)
@@ -532,6 +532,35 @@ for pair in "fixedasset:$FA" "budget:$BDG" "financialclose:$FCL" "consolidation:
   svc="${pair%%:*}"; url="${pair#*:}"
   ck "15a. $svc /readyz" "$(curl -s -o /dev/null -w '%{http_code}' "$url/readyz" || true)" "200"
 done
+
+# 15c. End-to-end POST + idempotent replay across the 8 extended services
+FA_CAT_BODY='{"code":"FAC-'"$TS"'","name":"Kategori Smoke","defaultDepreciationMethod":"StraightLine","defaultUsefulLifeMonths":48}'
+ck "15c. fixedasset create category -> 201" "$(curl -s -o /dev/null -w '%{http_code}' "${AH[@]}" -H "Idempotency-Key: fac-$TS" -d "$FA_CAT_BODY" "$FA/asset-categories" || true)" "201"
+ck "15c. fixedasset create category idempotent replay -> 201" "$(curl -s -o /dev/null -w '%{http_code}' "${AH[@]}" -H "Idempotency-Key: fac-$TS" -d "$FA_CAT_BODY" "$FA/asset-categories" || true)" "201"
+
+BDG_BODY='{"code":"BDG-'"$TS"'","name":"Anggaran Smoke","financialOrganizationRef":"'"$FINORG"'","fiscalYearRef":"'"$PERIOD"'","version":1}'
+ck "15c. budget create -> 201" "$(curl -s -o /dev/null -w '%{http_code}' "${AH[@]}" -H "Idempotency-Key: bdg-$TS" -d "$BDG_BODY" "$BDG/budgets" || true)" "201"
+ck "15c. budget create idempotent replay -> 201" "$(curl -s -o /dev/null -w '%{http_code}' "${AH[@]}" -H "Idempotency-Key: bdg-$TS" -d "$BDG_BODY" "$BDG/budgets" || true)" "201"
+
+FCL_BODY='{"code":"FCL-'"$TS"'","name":"Template Close Smoke","financialOrganizationRef":"'"$FINORG"'","tasks":[{"taskOrder":1,"taskName":"Recon"}]}'
+ck "15c. financialclose create template -> 201" "$(curl -s -o /dev/null -w '%{http_code}' "${AH[@]}" -H "Idempotency-Key: fcl-$TS" -d "$FCL_BODY" "$FCL/closing-templates" || true)" "201"
+
+CON_BODY='{"code":"GRP-'"$TS"'","name":"Grup Smoke","presentationCurrencyCode":"IDR"}'
+ck "15c. consolidation create group -> 201" "$(curl -s -o /dev/null -w '%{http_code}' "${AH[@]}" -H "Idempotency-Key: con-$TS" -d "$CON_BODY" "$CON/consolidation-groups" || true)" "201"
+
+PRJ_BODY='{"code":"PRJ-'"$TS"'","name":"Proyek Smoke","projectType":"Capital","currencyCode":"IDR"}'
+ck "15c. project create -> 201" "$(curl -s -o /dev/null -w '%{http_code}' "${AH[@]}" -H "Idempotency-Key: prj-$TS" -d "$PRJ_BODY" "$PRJ/projects" || true)" "201"
+
+AST_RES=$(curl -sS -w $'\n%{http_code}' "${AH[@]}" -H "Idempotency-Key: ast-$TS" -d '{"assetCode":"AST-'"$TS"'","name":"Unit Smoke","category":"HVAC"}' "$AST/assets" || true)
+AST_CODE=$(printf '%s' "$AST_RES" | tail -1)
+AST_ID=$(printf '%s' "$AST_RES" | sed '$d' | jq -r '.id // empty')
+ck "15c. asset create -> 201" "$AST_CODE" "201"
+
+MNT_ASSET_ID="${AST_ID:-a55e0000-0000-4000-8000-000000000001}"
+ck "15c. maintenance create work order -> 201" "$(curl -s -o /dev/null -w '%{http_code}' "${AH[@]}" -H "Idempotency-Key: mnt-$TS" -d '{"woNo":"MWO-'"$TS"'","assetRef":"'"$MNT_ASSET_ID"'","maintenanceType":"Preventive"}' "$MNT/maintenance-work-orders" || true)" "201"
+
+ck "15c. crm create lead -> 201" "$(curl -s -o /dev/null -w '%{http_code}' "${AH[@]}" -H "Idempotency-Key: crm-$TS" -d '{"code":"LEAD-'"$TS"'","name":"Prospek Smoke","estimatedValue":"25000000.0000"}' "$CRM/leads" || true)" "201"
+
 ck "15b. gw /fixed-assets" "$(curl -s -o /dev/null -w '%{http_code}' "${GW_AH[@]}" "$GW/fixed-assets?size=5" || true)" "200"
 ck "15b. gw /budgets" "$(curl -s -o /dev/null -w '%{http_code}' "${GW_AH[@]}" "$GW/budgets?size=5" || true)" "200"
 ck "15b. gw /closing-runs" "$(curl -s -o /dev/null -w '%{http_code}' "${GW_AH[@]}" "$GW/closing-runs?size=5" || true)" "200"

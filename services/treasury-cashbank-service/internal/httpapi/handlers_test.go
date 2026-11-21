@@ -19,6 +19,9 @@ import (
 
 type fakeTreasuryStore struct {
 	settledEvents []treasurydb.InsertOutboxParams
+	createdBy     uuid.UUID
+	allocs        []treasurydb.ListPaymentAllocationsRow
+	updatedAllocs []treasurydb.CreatePaymentAllocationParams
 }
 
 func (f *fakeTreasuryStore) CreateBankAccount(_ context.Context, _ []uuid.UUID, _ treasurydb.CreateBankAccountParams) (treasurydb.CreateBankAccountRow, error) {
@@ -48,6 +51,16 @@ func (f *fakeTreasuryStore) CreatePayment(_ context.Context, _ []uuid.UUID, _ tr
 func (f *fakeTreasuryStore) GetWithAllocations(_ context.Context, scope []uuid.UUID, id uuid.UUID) (treasurydb.TrsPayment, []treasurydb.ListPaymentAllocationsRow, error) {
 	amt, _ := platform.ParseNumeric("500.0000")
 	dt, _ := platform.ParseDate("2026-03-15")
+	allocs := f.allocs
+	if allocs == nil {
+		allocs = []treasurydb.ListPaymentAllocationsRow{{
+			ID:                uuid.MustParse("40000000-0000-0000-0000-000000000401"),
+			PaymentID:         id,
+			TargetDocumentRef: "INV-001",
+			AllocatedAmount:   amt,
+			RowVersion:        1,
+		}}
+	}
 	return treasurydb.TrsPayment{
 		ID:             id,
 		OrganizationID: scope[0],
@@ -57,8 +70,9 @@ func (f *fakeTreasuryStore) GetWithAllocations(_ context.Context, scope []uuid.U
 		Amount:         amt,
 		PaymentDate:    dt,
 		Status:         "Draft",
+		CreatedBy:      f.createdBy,
 		RowVersion:     1,
-	}, nil, nil
+	}, allocs, nil
 }
 
 func (f *fakeTreasuryStore) ListWithCount(_ context.Context, scope []uuid.UUID, _ treasurydb.ListPaymentsParams) ([]treasurydb.ListPaymentsRow, int64, error) {
@@ -76,7 +90,8 @@ func (f *fakeTreasuryStore) ListWithCount(_ context.Context, scope []uuid.UUID, 
 	}}, 1, nil
 }
 
-func (f *fakeTreasuryStore) UpdateDraft(_ context.Context, _ []uuid.UUID, _ treasurydb.UpdateDraftPaymentParams) (int32, error) {
+func (f *fakeTreasuryStore) UpdateDraft(_ context.Context, _ []uuid.UUID, _ treasurydb.UpdateDraftPaymentParams, allocs []treasurydb.CreatePaymentAllocationParams) (int32, error) {
+	f.updatedAllocs = allocs
 	return 2, nil
 }
 
@@ -91,6 +106,14 @@ func (f *fakeTreasuryStore) SettleAndEmit(_ context.Context, _ []uuid.UUID, _ tr
 
 func (f *fakeTreasuryStore) CreateStatementLine(_ context.Context, _ []uuid.UUID, _ treasurydb.CreateBankStatementLineParams) (treasurydb.CreateBankStatementLineRow, error) {
 	return treasurydb.CreateBankStatementLineRow{ID: uuid.MustParse("30000000-0000-0000-0000-000000000301"), IsReconciled: false, RowVersion: 1}, nil
+}
+
+func (f *fakeTreasuryStore) CreateStatementLinesBatch(_ context.Context, _ []uuid.UUID, lines []treasurydb.CreateBankStatementLineParams) ([]uuid.UUID, int32, error) {
+	ids := make([]uuid.UUID, len(lines))
+	for i := range lines {
+		ids[i] = uuid.New()
+	}
+	return ids, 1, nil
 }
 
 func (f *fakeTreasuryStore) ListStatementLinesWithCount(_ context.Context, _ []uuid.UUID, _ treasurydb.ListBankStatementLinesParams) ([]treasurydb.ListBankStatementLinesRow, int64, error) {
@@ -151,8 +174,23 @@ func TestTreasuryEndpointsRBACPaginationSettleAndReconcile(t *testing.T) {
 		t.Fatalf("expected 400 when allocations exceed payment amount, got %d (%s)", rr.Code, rr.Body.String())
 	}
 
-	hdrs := authHeaders("treasury:read,treasury:write")
+	// Settle requires treasury.approve (treasury:write alone is rejected) and enforces SoD.
+	hdrsNoApprove := authHeaders("treasury:read,treasury:write")
+	hdrsNoApprove["If-Match"] = `"1"`
+	rr = doReq(t, h, http.MethodPost, "/payments/20000000-0000-0000-0000-000000000201/settle", nil, hdrsNoApprove)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 when missing treasury.approve, got %d", rr.Code)
+	}
+
+	hdrs := authHeaders("treasury:read,treasury:write,treasury.approve")
 	hdrs["If-Match"] = `"1"`
+	store.createdBy = uuid.MustParse("00000000-0000-0000-0000-000000000010")
+	rr = doReq(t, h, http.MethodPost, "/payments/20000000-0000-0000-0000-000000000201/settle", nil, hdrs)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for maker-checker SoD self-settlement, got %d", rr.Code)
+	}
+	store.createdBy = uuid.MustParse("00000000-0000-0000-0000-000000000099")
+
 	rr = doReq(t, h, http.MethodPost, "/payments/20000000-0000-0000-0000-000000000201/settle", nil, hdrs)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 on settle, got %d (%s)", rr.Code, rr.Body.String())
@@ -161,6 +199,30 @@ func TestTreasuryEndpointsRBACPaginationSettleAndReconcile(t *testing.T) {
 		store.settledEvents[0].EventType != "treasury.payment.settled" ||
 		store.settledEvents[1].EventType != "cashbank.payment.settled" {
 		t.Fatalf("expected both treasury.payment.settled and cashbank.payment.settled, got %+v", store.settledEvents)
+	}
+	var settledPayload struct {
+		Allocations []struct {
+			InvoiceID       string `json:"invoiceId"`
+			InvoiceType     string `json:"invoiceType"`
+			AllocatedAmount string `json:"allocatedAmount"`
+		} `json:"allocations"`
+	}
+	if err := json.Unmarshal(store.settledEvents[0].Payload, &settledPayload); err != nil {
+		t.Fatalf("unmarshal settled event payload: %v", err)
+	}
+	if len(settledPayload.Allocations) != 1 || settledPayload.Allocations[0].InvoiceID != "INV-001" || settledPayload.Allocations[0].InvoiceType != "AP" {
+		t.Fatalf("expected settled event payload to include allocations, got %+v", settledPayload)
+	}
+
+	// updateDraftPayment validates and updates allocations
+	rr = doReq(t, h, http.MethodPut, "/payments/20000000-0000-0000-0000-000000000201", map[string]any{
+		"paymentType":   "Outgoing",
+		"bankAccountId": "10000000-0000-0000-0000-000000000101",
+		"amount":        "600.0000",
+		"allocations":   []map[string]any{{"invoiceId": "INV-001", "allocatedAmount": "600.0000"}},
+	}, hdrs)
+	if rr.Code != http.StatusOK || len(store.updatedAllocs) != 1 {
+		t.Fatalf("expected 200 and updated allocations on updateDraftPayment, got %d (%s)", rr.Code, rr.Body.String())
 	}
 
 	rr = doReq(t, h, http.MethodPost, "/bank-accounts/10000000-0000-0000-0000-000000000101/reconcile", nil, hdrs)

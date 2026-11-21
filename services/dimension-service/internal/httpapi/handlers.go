@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/sinergiinvestasiproperti/erp/services/dimension-service/internal/dimensiondb"
+	"github.com/sinergiinvestasiproperti/erp/services/dimension-service/internal/repository"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
 )
@@ -270,7 +271,7 @@ func (s *Server) getCostCenter(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, costCenterDTO(row))
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, costCenterDTO(row))
 }
 
 func (s *Server) updateCostCenter(w http.ResponseWriter, r *http.Request) {
@@ -405,7 +406,7 @@ func (s *Server) getProfitCenter(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, profitCenterDTO(row))
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, profitCenterDTO(row))
 }
 
 func (s *Server) updateProfitCenter(w http.ResponseWriter, r *http.Request) {
@@ -601,7 +602,7 @@ func (s *Server) getAllocationRule(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, allocDTO(row))
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, allocDTO(row))
 }
 
 func (s *Server) updateAllocationRule(w http.ResponseWriter, r *http.Request) {
@@ -691,10 +692,11 @@ func (s *Server) executeAllocationRule(w http.ResponseWriter, r *http.Request) {
 		Amount         string     `json:"amount"`
 		FiscalPeriodID *uuid.UUID `json:"fiscalPeriodId,omitempty"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
 	amtNum, err := platform.ParseNumeric(req.Amount)
 	if err != nil {
 		httpx.WriteError(w, r, httpx.BadRequest("amount must be a valid decimal string"))
@@ -705,33 +707,17 @@ func (s *Server) executeAllocationRule(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.BadRequest("amount must be > 0"))
 		return
 	}
-	rule, err := s.repo.ExecuteAllocationRule(r.Context(), scope, id, platform.FormatNumeric(amtNum, 4), req.FiscalPeriodID, httpx.CorrelationUUID(r))
+	formattedAmt := platform.FormatNumeric(amtNum, 4)
+	rule, err := s.repo.ExecuteAllocationRule(r.Context(), scope, id, formattedAmt, req.FiscalPeriodID, httpx.CorrelationUUID(r))
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	// Compute exact target distributions with *big.Rat (no IEEE-754 floats).
-	var targets []allocTarget
-	_ = json.Unmarshal(rule.Targets, &targets)
-	hundred := big.NewRat(100, 1)
-	distributions := make([]map[string]any, 0, len(targets))
-	for _, t := range targets {
-		pct, _ := new(big.Rat).SetString(strings.TrimSpace(t.Percentage))
-		if pct == nil {
-			continue
-		}
-		share := new(big.Rat).Quo(new(big.Rat).Mul(amtRat, pct), hundred)
-		shareNum, _ := platform.RatToNumeric(share, 4)
-		distributions = append(distributions, map[string]any{
-			"costCenterId": t.CostCenterID,
-			"percentage":   t.Percentage,
-			"amount":       platform.FormatNumeric(shareNum, 4),
-		})
-	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+	distributions := repository.ComputeDistributions(rule.Targets, formattedAmt)
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, rule.RowVersion, map[string]any{
 		"ruleId":             rule.ID,
 		"sourceCostCenterId": rule.SourceCostCenterID,
-		"totalAmount":        platform.FormatNumeric(amtNum, 4),
+		"totalAmount":        formattedAmt,
 		"distributions":      distributions,
 	})
 }

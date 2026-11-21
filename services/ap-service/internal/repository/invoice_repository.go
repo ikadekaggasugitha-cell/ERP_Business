@@ -190,6 +190,61 @@ func (r *InvoiceRepository) LineTotal(ctx context.Context, scope []uuid.UUID, ar
 	return out, err
 }
 
+// SettlementAllocation carries one AP payment allocation from treasury.payment.settled.
+type SettlementAllocation struct {
+	InvoiceRef      string
+	AllocatedAmount pgtype.Numeric
+}
+
+// ConsumePaymentSettled idempotently applies treasury.payment.settled allocations to AP vendor invoices.
+func (r *InvoiceRepository) ConsumePaymentSettled(
+	ctx context.Context, scope []uuid.UUID,
+	mark apdb.MarkEventProcessedParams,
+	orgID, paymentID, actor uuid.UUID,
+	allocs []SettlementAllocation,
+) (applied bool, err error) {
+	err = r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		n, e := q.MarkEventProcessed(ctx, mark)
+		if e != nil || n == 0 {
+			return e
+		}
+		for _, a := range allocs {
+			inv, e := q.GetInvoiceByRef(ctx, apdb.GetInvoiceByRefParams{
+				OrganizationID: orgID,
+				InvoiceRef:     a.InvoiceRef,
+			})
+			if e != nil {
+				if errors.Is(e, pgx.ErrNoRows) {
+					continue
+				}
+				return e
+			}
+			if e = q.CreatePaymentAllocation(ctx, apdb.CreatePaymentAllocationParams{
+				OrganizationID:  orgID,
+				ApInvoiceID:     inv.ID,
+				InvoiceDate:     inv.InvoiceDate,
+				PaymentID:       paymentID,
+				AllocatedAmount: a.AllocatedAmount,
+				CreatedBy:       actor,
+			}); e != nil {
+				return e
+			}
+			if _, e = q.ApplyPaymentToInvoice(ctx, apdb.ApplyPaymentToInvoiceParams{
+				ID:          inv.ID,
+				InvoiceDate: inv.InvoiceDate,
+				UpdatedBy:   &actor,
+				PaidAmount:  a.AllocatedAmount,
+			}); e != nil {
+				return e
+			}
+		}
+		applied = true
+		return nil
+	})
+	return applied, err
+}
+
 // ConsumeAndRecordInvoice creates+records an AP invoice idempotently from procurement.goods.received.
 func (r *InvoiceRepository) ConsumeAndRecordInvoice(
 	ctx context.Context, scope []uuid.UUID,

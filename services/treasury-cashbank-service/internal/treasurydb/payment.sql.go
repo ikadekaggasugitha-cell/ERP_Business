@@ -241,6 +241,16 @@ func (q *Queries) DeleteDraftPayment(ctx context.Context, arg DeleteDraftPayment
 	return result.RowsAffected(), nil
 }
 
+const deletePaymentAllocations = `-- name: DeletePaymentAllocations :exec
+DELETE FROM trs.payment_allocation
+WHERE payment_id = $1
+`
+
+func (q *Queries) DeletePaymentAllocations(ctx context.Context, paymentID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deletePaymentAllocations, paymentID)
+	return err
+}
+
 const drainOutbox = `-- name: DrainOutbox :many
 SELECT id, aggregate_type, aggregate_id, event_type, payload, organization_id, correlation_id, created_at
 FROM trs.outbox

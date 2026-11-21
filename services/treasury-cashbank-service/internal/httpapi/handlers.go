@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -30,10 +29,11 @@ type Store interface {
 	CreatePayment(ctx context.Context, scope []uuid.UUID, arg treasurydb.CreatePaymentParams, allocs []treasurydb.CreatePaymentAllocationParams) (treasurydb.CreatePaymentRow, error)
 	GetWithAllocations(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (treasurydb.TrsPayment, []treasurydb.ListPaymentAllocationsRow, error)
 	ListWithCount(ctx context.Context, scope []uuid.UUID, arg treasurydb.ListPaymentsParams) ([]treasurydb.ListPaymentsRow, int64, error)
-	UpdateDraft(ctx context.Context, scope []uuid.UUID, arg treasurydb.UpdateDraftPaymentParams) (int32, error)
+	UpdateDraft(ctx context.Context, scope []uuid.UUID, arg treasurydb.UpdateDraftPaymentParams, allocs []treasurydb.CreatePaymentAllocationParams) (int32, error)
 	DeleteDraft(ctx context.Context, scope []uuid.UUID, arg treasurydb.DeleteDraftPaymentParams) (int64, error)
 	SettleAndEmit(ctx context.Context, scope []uuid.UUID, settle treasurydb.SettlePaymentParams, events ...treasurydb.InsertOutboxParams) (int32, error)
 	CreateStatementLine(ctx context.Context, scope []uuid.UUID, arg treasurydb.CreateBankStatementLineParams) (treasurydb.CreateBankStatementLineRow, error)
+	CreateStatementLinesBatch(ctx context.Context, scope []uuid.UUID, lines []treasurydb.CreateBankStatementLineParams) ([]uuid.UUID, int32, error)
 	ListStatementLinesWithCount(ctx context.Context, scope []uuid.UUID, arg treasurydb.ListBankStatementLinesParams) ([]treasurydb.ListBankStatementLinesRow, int64, error)
 	ReconcileBankAccountAndEmit(ctx context.Context, scope []uuid.UUID, bankAccountID, actorID, correlationID uuid.UUID) ([]repository.ReconcileMatch, error)
 }
@@ -214,6 +214,8 @@ func (s *Server) getBankAccount(w http.ResponseWriter, r *http.Request) {
 
 type allocReq struct {
 	TargetDocumentRef string `json:"targetDocumentRef"`
+	InvoiceID         string `json:"invoiceId,omitempty"`
+	InvoiceType       string `json:"invoiceType,omitempty"`
 	AllocatedAmount   string `json:"allocatedAmount"`
 }
 
@@ -426,12 +428,12 @@ func (s *Server) updateDraftPayment(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	payAmt, _, payDate, _, err := validatePaymentFields(req, false)
+	payAmt, payRat, payDate, allocParams, err := validatePaymentFields(req, false)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	existing, _, err := s.repo.GetWithAllocations(r.Context(), scope, id)
+	existing, existingAllocs, err := s.repo.GetWithAllocations(r.Context(), scope, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.WriteError(w, r, httpx.NotFound("pembayaran tidak ditemukan"))
@@ -444,6 +446,21 @@ func (s *Server) updateDraftPayment(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.Conflict("VERSION_CONFLICT", "pembayaran bukan Draft atau versi bentrok"))
 		return
 	}
+	var updatedAllocs []treasurydb.CreatePaymentAllocationParams
+	if req.Allocations != nil {
+		updatedAllocs = allocParams
+	} else if len(existingAllocs) > 0 {
+		existingSum := new(big.Rat)
+		for _, a := range existingAllocs {
+			if rVal := platform.NumericToRat(a.AllocatedAmount); rVal != nil {
+				existingSum.Add(existingSum, rVal)
+			}
+		}
+		if existingSum.Cmp(payRat) > 0 {
+			httpx.WriteError(w, r, httpx.BadRequest("total alokasi yang ada melebihi amount pembayaran baru"))
+			return
+		}
+	}
 	newVer, err := s.repo.UpdateDraft(r.Context(), scope, treasurydb.UpdateDraftPaymentParams{
 		ID:            id,
 		RowVersion:    ver,
@@ -454,7 +471,7 @@ func (s *Server) updateDraftPayment(w http.ResponseWriter, r *http.Request) {
 		PaymentDate:   payDate,
 		ExternalRef:   req.ExternalRef,
 		UpdatedBy:     &actor,
-	})
+	}, updatedAllocs)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.WriteError(w, r, httpx.Conflict("VERSION_CONFLICT", "pembayaran berubah secara bersamaan"))
@@ -524,8 +541,18 @@ func (s *Server) deleteDraftPayment(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func requireTreasuryApprove(r *http.Request) error {
+	if err := httpx.RequirePermission(r, "treasury.approve"); err != nil {
+		if httpx.RequirePermission(r, "treasury:approve") == nil {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 func (s *Server) settlePayment(w http.ResponseWriter, r *http.Request) {
-	if err := httpx.RequirePermission(r, "treasury:write"); err != nil {
+	if err := requireTreasuryApprove(r); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
@@ -549,7 +576,7 @@ func (s *Server) settlePayment(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	p, _, err := s.repo.GetWithAllocations(r.Context(), scope, id)
+	p, allocs, err := s.repo.GetWithAllocations(r.Context(), scope, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.WriteError(w, r, httpx.NotFound("pembayaran tidak ditemukan"))
@@ -558,12 +585,39 @@ func (s *Server) settlePayment(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
+	if p.CreatedBy != uuid.Nil && p.CreatedBy == actor && !httpx.HasRole(r.Context(), "SYSTEM_ADMIN") {
+		httpx.WriteError(w, r, httpx.Forbidden("maker-checker separation of duties: creator cannot settle own payment"))
+		return
+	}
 	if p.Status != "Draft" || p.RowVersion != ver {
 		httpx.WriteError(w, r, httpx.Conflict("VERSION_CONFLICT", "pembayaran bukan Draft atau row_version sudah berubah"))
 		return
 	}
+	invType := "AP"
+	if strings.EqualFold(p.PaymentType, "Incoming") {
+		invType = "AR"
+	}
 	amtStr := platform.FormatNumeric(p.Amount, 4)
-	payload, _ := json.Marshal(map[string]any{
+	allocPayloads := make([]map[string]any, 0, len(allocs))
+	for _, a := range allocs {
+		allocPayloads = append(allocPayloads, map[string]any{
+			"id":                a.ID,
+			"invoiceId":         a.TargetDocumentRef,
+			"targetDocumentRef": a.TargetDocumentRef,
+			"invoiceType":       invType,
+			"allocatedAmount":   platform.FormatNumeric(a.AllocatedAmount, 4),
+		})
+	}
+	if len(allocPayloads) == 0 && p.ExternalRef != nil && strings.TrimSpace(*p.ExternalRef) != "" {
+		ref := strings.TrimSpace(*p.ExternalRef)
+		allocPayloads = append(allocPayloads, map[string]any{
+			"invoiceId":         ref,
+			"targetDocumentRef": ref,
+			"invoiceType":       invType,
+			"allocatedAmount":   amtStr,
+		})
+	}
+	payloadMap := map[string]any{
 		"paymentId":     p.ID,
 		"paymentNo":     p.PaymentNo,
 		"paymentType":   p.PaymentType,
@@ -572,7 +626,17 @@ func (s *Server) settlePayment(w http.ResponseWriter, r *http.Request) {
 		"amount":        amtStr,
 		"paymentDate":   platform.FormatDate(p.PaymentDate),
 		"externalRef":   p.ExternalRef,
-	})
+		"allocations":   allocPayloads,
+	}
+	if bank, berr := s.repo.GetBankAccount(r.Context(), scope, p.BankAccountID); berr == nil {
+		if bank.CurrencyCode != "" {
+			payloadMap["currencyCode"] = bank.CurrencyCode
+		}
+		if bank.GlAccountID != uuid.Nil {
+			payloadMap["glAccountId"] = bank.GlAccountID
+		}
+	}
+	payload, _ := json.Marshal(payloadMap)
 	corr := httpx.CorrelationUUID(r)
 	evTreasury := treasurydb.InsertOutboxParams{
 		AggregateType:  "payment",
@@ -612,15 +676,15 @@ func (s *Server) settlePayment(w http.ResponseWriter, r *http.Request) {
 }
 
 type companionStatementLineItem struct {
-	BankAccountID *uuid.UUID `json:"bankAccountId,omitempty"`
-	StatementDate string     `json:"statementDate,omitempty"`
-	Date          string     `json:"date,omitempty"`
-	Description   string     `json:"description"`
-	Amount        any        `json:"amount,omitempty"`
-	Debit         any        `json:"debit,omitempty"`
-	Credit        any        `json:"credit,omitempty"`
-	Balance       any        `json:"balance,omitempty"`
-	ExternalRef   *string    `json:"externalRef,omitempty"`
+	BankAccountID *uuid.UUID      `json:"bankAccountId,omitempty"`
+	StatementDate string          `json:"statementDate,omitempty"`
+	Date          string          `json:"date,omitempty"`
+	Description   string          `json:"description"`
+	Amount        json.RawMessage `json:"amount,omitempty"`
+	Debit         json.RawMessage `json:"debit,omitempty"`
+	Credit        json.RawMessage `json:"credit,omitempty"`
+	Balance       json.RawMessage `json:"balance,omitempty"`
+	ExternalRef   *string         `json:"externalRef,omitempty"`
 }
 
 type createStatementLineReq struct {
@@ -733,10 +797,9 @@ func (s *Server) createStatementLine(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
-		createdIDs := make([]uuid.UUID, 0, len(parsedLines))
-		var lastVer int32 = 1
+		batchParams := make([]treasurydb.CreateBankStatementLineParams, 0, len(parsedLines))
 		for _, pl := range parsedLines {
-			row, cerr := s.repo.CreateStatementLine(r.Context(), scope, treasurydb.CreateBankStatementLineParams{
+			batchParams = append(batchParams, treasurydb.CreateBankStatementLineParams{
 				OrganizationID: org,
 				BankAccountID:  pl.bankID,
 				StatementDate:  pl.date,
@@ -745,16 +808,15 @@ func (s *Server) createStatementLine(w http.ResponseWriter, r *http.Request) {
 				ExternalRef:    pl.extRef,
 				CreatedBy:      actor,
 			})
-			if cerr != nil {
-				if errors.Is(cerr, pgx.ErrNoRows) {
-					httpx.WriteError(w, r, httpx.NotFound("rekening bank tidak ditemukan"))
-					return
-				}
-				httpx.WriteError(w, r, httpx.MapDBError(cerr, ""))
+		}
+		createdIDs, lastVer, cerr := s.repo.CreateStatementLinesBatch(r.Context(), scope, batchParams)
+		if cerr != nil {
+			if errors.Is(cerr, pgx.ErrNoRows) {
+				httpx.WriteError(w, r, httpx.NotFound("rekening bank tidak ditemukan"))
 				return
 			}
-			createdIDs = append(createdIDs, row.ID)
-			lastVer = row.RowVersion
+			httpx.WriteError(w, r, httpx.MapDBError(cerr, ""))
+			return
 		}
 		httpx.SaveIDResponse(w, s.idem, scope, key, hash, http.StatusCreated, lastVer, map[string]any{
 			"importedCount": len(createdIDs),
@@ -827,24 +889,28 @@ func parseCompanionStatementDate(primary, fallback string) pgtype.Date {
 	return pgtype.Date{Time: time.Now().UTC(), Valid: true}
 }
 
-func anyToDecimalString(v any) string {
-	switch val := v.(type) {
-	case nil:
-		return ""
-	case string:
-		return strings.TrimSpace(val)
-	case float64:
-		return strconv.FormatFloat(val, 'f', -1, 64)
-	case json.Number:
-		return val.String()
-	default:
-		return strings.TrimSpace(fmt.Sprintf("%v", val))
+func rawJSONToDecimalString(raw json.RawMessage) (string, error) {
+	s := strings.TrimSpace(string(raw))
+	if s == "" || s == "null" {
+		return "", nil
 	}
+	if strings.HasPrefix(s, `"`) && strings.HasSuffix(s, `"`) {
+		var unquoted string
+		if err := json.Unmarshal(raw, &unquoted); err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(unquoted), nil
+	}
+	return s, nil
 }
 
 func resolveCompanionLineAmount(item companionStatementLineItem) (pgtype.Numeric, error) {
-	if raw := anyToDecimalString(item.Amount); raw != "" {
-		n, err := platform.ParseNumeric(raw)
+	rawAmt, err := rawJSONToDecimalString(item.Amount)
+	if err != nil {
+		return pgtype.Numeric{}, err
+	}
+	if rawAmt != "" {
+		n, err := platform.ParseNumeric(rawAmt)
 		if err != nil {
 			return pgtype.Numeric{}, err
 		}
@@ -854,7 +920,11 @@ func resolveCompanionLineAmount(item companionStatementLineItem) (pgtype.Numeric
 	}
 	cr := new(big.Rat)
 	dr := new(big.Rat)
-	if rawCr := anyToDecimalString(item.Credit); rawCr != "" {
+	rawCr, err := rawJSONToDecimalString(item.Credit)
+	if err != nil {
+		return pgtype.Numeric{}, err
+	}
+	if rawCr != "" {
 		n, err := platform.ParseNumeric(rawCr)
 		if err != nil {
 			return pgtype.Numeric{}, err
@@ -863,7 +933,11 @@ func resolveCompanionLineAmount(item companionStatementLineItem) (pgtype.Numeric
 			cr.Set(rVal)
 		}
 	}
-	if rawDr := anyToDecimalString(item.Debit); rawDr != "" {
+	rawDr, err := rawJSONToDecimalString(item.Debit)
+	if err != nil {
+		return pgtype.Numeric{}, err
+	}
+	if rawDr != "" {
 		n, err := platform.ParseNumeric(rawDr)
 		if err != nil {
 			return pgtype.Numeric{}, err
@@ -1004,7 +1078,11 @@ func validatePaymentFields(req paymentReq, requireNo bool) (pgtype.Numeric, *big
 	allocParams := make([]treasurydb.CreatePaymentAllocationParams, 0, len(req.Allocations))
 	allocTotal := new(big.Rat)
 	for _, a := range req.Allocations {
-		if strings.TrimSpace(a.TargetDocumentRef) == "" {
+		targetRef := strings.TrimSpace(a.TargetDocumentRef)
+		if targetRef == "" {
+			targetRef = strings.TrimSpace(a.InvoiceID)
+		}
+		if targetRef == "" {
 			return pgtype.Numeric{}, nil, pgtype.Date{}, nil, httpx.BadRequest("targetDocumentRef alokasi wajib diisi")
 		}
 		aNum, err := platform.ParseNumeric(a.AllocatedAmount)
@@ -1017,7 +1095,7 @@ func validatePaymentFields(req paymentReq, requireNo bool) (pgtype.Numeric, *big
 		}
 		allocTotal.Add(allocTotal, aRat)
 		allocParams = append(allocParams, treasurydb.CreatePaymentAllocationParams{
-			TargetDocumentRef: strings.TrimSpace(a.TargetDocumentRef),
+			TargetDocumentRef: targetRef,
 			AllocatedAmount:   aNum,
 		})
 	}

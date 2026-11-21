@@ -109,17 +109,20 @@ func TestSecurityRolesPermissionsAndSystemLock(t *testing.T) {
 
 	hdrs := secHdrs("security:read,security:write")
 	hdrs["If-Match"] = `"1"`
-	if rr := sendReq(t, h, http.MethodDelete, "/roles/10000000-0000-0000-0000-000000000021", nil, hdrs); rr.Code != http.StatusConflict {
-		t.Fatalf("expected 409 deleting system role, got %d", rr.Code)
+	if rr := sendReq(t, h, http.MethodDelete, "/roles/10000000-0000-0000-0000-000000000021", nil, hdrs); rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 deleting system role, got %d", rr.Code)
 	}
-	if rr := sendReq(t, h, http.MethodPut, "/roles/10000000-0000-0000-0000-000000000021", map[string]any{"name": "Tampered", "isSystem": false}, hdrs); rr.Code != http.StatusConflict {
-		t.Fatalf("expected 409 updating system role, got %d", rr.Code)
+	if rr := sendReq(t, h, http.MethodPut, "/roles/10000000-0000-0000-0000-000000000021", map[string]any{"name": "Tampered", "isSystem": false}, hdrs); rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 updating system role, got %d", rr.Code)
 	}
-	if rr := sendReq(t, h, http.MethodPost, "/roles/10000000-0000-0000-0000-000000000021/permissions", map[string]any{"permissionId": "20000000-0000-0000-0000-000000000001"}, hdrs); rr.Code != http.StatusConflict {
-		t.Fatalf("expected 409 granting permission to system role, got %d", rr.Code)
+	if rr := sendReq(t, h, http.MethodPost, "/roles/10000000-0000-0000-0000-000000000021/permissions", map[string]any{"permissionId": "20000000-0000-0000-0000-000000000001"}, hdrs); rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 granting permission to system role, got %d", rr.Code)
 	}
 
 	store.sysRole = false
+	if rr := sendReq(t, h, http.MethodPut, "/roles/10000000-0000-0000-0000-000000000021", map[string]any{"name": "Escalated", "isSystem": true}, hdrs); rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 escalating custom role to system role, got %d", rr.Code)
+	}
 	if rr := sendReq(t, h, http.MethodDelete, "/roles/10000000-0000-0000-0000-000000000021", nil, hdrs); rr.Code != http.StatusNoContent {
 		t.Fatalf("expected 204 deleting custom role, got %d", rr.Code)
 	}

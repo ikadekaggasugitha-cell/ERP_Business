@@ -12,6 +12,37 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const applyPaymentToInvoice = `-- name: ApplyPaymentToInvoice :execrows
+UPDATE ap.ap_invoice
+SET outstanding_amount = GREATEST(outstanding_amount - $4::numeric(20,4), 0),
+    status = CASE
+        WHEN outstanding_amount - $4::numeric(20,4) <= 0 THEN 'Paid'
+        ELSE 'PartiallyPaid'
+    END,
+    updated_by = $3
+WHERE id = $1 AND invoice_date = $2 AND status IN ('Recorded', 'PartiallyPaid') AND deleted_at IS NULL
+`
+
+type ApplyPaymentToInvoiceParams struct {
+	ID          uuid.UUID      `json:"id"`
+	InvoiceDate pgtype.Date    `json:"invoice_date"`
+	UpdatedBy   *uuid.UUID     `json:"updated_by"`
+	PaidAmount  pgtype.Numeric `json:"paid_amount"`
+}
+
+func (q *Queries) ApplyPaymentToInvoice(ctx context.Context, arg ApplyPaymentToInvoiceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, applyPaymentToInvoice,
+		arg.ID,
+		arg.InvoiceDate,
+		arg.UpdatedBy,
+		arg.PaidAmount,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countInvoices = `-- name: CountInvoices :one
 SELECT COUNT(*)
 FROM ap.ap_invoice
@@ -114,6 +145,36 @@ func (q *Queries) CreateInvoiceLine(ctx context.Context, arg CreateInvoiceLinePa
 		arg.UnitPrice,
 		arg.Amount,
 		arg.Description,
+		arg.CreatedBy,
+	)
+	return err
+}
+
+const createPaymentAllocation = `-- name: CreatePaymentAllocation :exec
+INSERT INTO ap.ap_payment_allocation (
+    organization_id, ap_invoice_id, invoice_date, payment_id, allocated_amount, created_by
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+)
+ON CONFLICT (ap_invoice_id, payment_id) DO NOTHING
+`
+
+type CreatePaymentAllocationParams struct {
+	OrganizationID  uuid.UUID      `json:"organization_id"`
+	ApInvoiceID     uuid.UUID      `json:"ap_invoice_id"`
+	InvoiceDate     pgtype.Date    `json:"invoice_date"`
+	PaymentID       uuid.UUID      `json:"payment_id"`
+	AllocatedAmount pgtype.Numeric `json:"allocated_amount"`
+	CreatedBy       uuid.UUID      `json:"created_by"`
+}
+
+func (q *Queries) CreatePaymentAllocation(ctx context.Context, arg CreatePaymentAllocationParams) error {
+	_, err := q.db.Exec(ctx, createPaymentAllocation,
+		arg.OrganizationID,
+		arg.ApInvoiceID,
+		arg.InvoiceDate,
+		arg.PaymentID,
+		arg.AllocatedAmount,
 		arg.CreatedBy,
 	)
 	return err
@@ -253,6 +314,45 @@ LIMIT 1
 
 func (q *Queries) GetInvoiceByID(ctx context.Context, id uuid.UUID) (ApApInvoice, error) {
 	row := q.db.QueryRow(ctx, getInvoiceByID, id)
+	var i ApApInvoice
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.InvoiceNo,
+		&i.VendorID,
+		&i.InvoiceDate,
+		&i.DueDate,
+		&i.CurrencyCode,
+		&i.TotalAmount,
+		&i.OutstandingAmount,
+		&i.Status,
+		&i.GoodsReceiptRef,
+		&i.GlJournalRef,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+		&i.DeletedAt,
+		&i.RowVersion,
+	)
+	return i, err
+}
+
+const getInvoiceByRef = `-- name: GetInvoiceByRef :one
+SELECT id, organization_id, invoice_no, vendor_id, invoice_date, due_date, currency_code, total_amount, outstanding_amount, status, goods_receipt_ref, gl_journal_ref, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM ap.ap_invoice
+WHERE organization_id = $1 AND deleted_at IS NULL
+  AND (id::text = $2::text OR invoice_no = $2::text)
+ORDER BY invoice_date DESC
+LIMIT 1
+`
+
+type GetInvoiceByRefParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	InvoiceRef     string    `json:"invoice_ref"`
+}
+
+func (q *Queries) GetInvoiceByRef(ctx context.Context, arg GetInvoiceByRefParams) (ApApInvoice, error) {
+	row := q.db.QueryRow(ctx, getInvoiceByRef, arg.OrganizationID, arg.InvoiceRef)
 	var i ApApInvoice
 	err := row.Scan(
 		&i.ID,

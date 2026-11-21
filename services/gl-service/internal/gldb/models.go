@@ -42,6 +42,13 @@ type GlDocumentNumberRegistry struct {
 	RowVersion     int32              `json:"row_version"`
 }
 
+type GlFiscalPeriodStatus struct {
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	PeriodID       uuid.UUID          `json:"period_id"`
+	Status         string             `json:"status"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type GlJournalEntry struct {
 	ID                      uuid.UUID          `json:"id"`
 	OrganizationID          uuid.UUID          `json:"organization_id"`

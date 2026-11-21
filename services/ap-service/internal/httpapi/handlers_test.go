@@ -133,7 +133,17 @@ func TestAPInvoiceLifecycleValidationAndRBAC(t *testing.T) {
 		t.Fatalf("expected 409 idempotency mismatch, got %d", r409.Code)
 	}
 
-	rec = do(http.MethodPost, "/vendor-invoices/"+created.ID+"/record", "", "ap:write", "", `"1"`)
+	// Record requires ap.approve (ap:write alone is rejected) and enforces SoD when CreatedBy == caller.
+	if rNoApprove := do(http.MethodPost, "/vendor-invoices/"+created.ID+"/record", "", "ap:write", "", `"1"`); rNoApprove.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 without ap.approve, got %d", rNoApprove.Code)
+	}
+	store.inv.CreatedBy = userID
+	if rSoD := do(http.MethodPost, "/vendor-invoices/"+created.ID+"/record", "", "ap:write,ap.approve", "", `"1"`); rSoD.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for maker-checker SoD self-approval, got %d", rSoD.Code)
+	}
+	store.inv.CreatedBy = uuid.New()
+
+	rec = do(http.MethodPost, "/vendor-invoices/"+created.ID+"/record", "", "ap:write,ap.approve", "", `"1"`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("record failed: %d %s", rec.Code, rec.Body.String())
 	}

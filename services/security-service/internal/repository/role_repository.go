@@ -26,7 +26,7 @@ func NewRoleRepository(db *platform.DB) *RoleRepository {
 
 func (r *RoleRepository) CreateAndEmit(ctx context.Context, scope []uuid.UUID, arg securitydb.CreateRoleParams, ev securitydb.InsertOutboxParams) (securitydb.CreateRoleRow, error) {
 	var created securitydb.CreateRoleRow
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if created, e = q.CreateRole(ctx, arg); e != nil {
@@ -41,7 +41,7 @@ func (r *RoleRepository) CreateAndEmit(ctx context.Context, scope []uuid.UUID, a
 func (r *RoleRepository) GetWithPermissions(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (securitydb.SecRole, []securitydb.ListRolePermissionsRow, error) {
 	var role securitydb.SecRole
 	var perms []securitydb.ListRolePermissionsRow
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithOrgReadScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if role, e = q.GetRole(ctx, id); e != nil {
@@ -56,7 +56,7 @@ func (r *RoleRepository) GetWithPermissions(ctx context.Context, scope []uuid.UU
 func (r *RoleRepository) ListWithCount(ctx context.Context, scope []uuid.UUID, arg securitydb.ListRolesParams) ([]securitydb.ListRolesRow, int64, error) {
 	var rows []securitydb.ListRolesRow
 	var total int64
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithOrgReadScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if rows, e = q.ListRoles(ctx, arg); e != nil {
@@ -70,7 +70,7 @@ func (r *RoleRepository) ListWithCount(ctx context.Context, scope []uuid.UUID, a
 
 func (r *RoleRepository) UpdateAndEmit(ctx context.Context, scope []uuid.UUID, arg securitydb.UpdateRoleParams, ev securitydb.InsertOutboxParams) (int32, error) {
 	var ver int32
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if ver, e = q.UpdateRole(ctx, arg); e != nil {
@@ -83,7 +83,7 @@ func (r *RoleRepository) UpdateAndEmit(ctx context.Context, scope []uuid.UUID, a
 
 func (r *RoleRepository) DeleteRole(ctx context.Context, scope []uuid.UUID, arg securitydb.DeleteRoleParams) (int64, error) {
 	var n int64
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		var e error
 		n, e = r.q.WithTx(tx).DeleteRole(ctx, arg)
 		return e
@@ -93,7 +93,7 @@ func (r *RoleRepository) DeleteRole(ctx context.Context, scope []uuid.UUID, arg 
 
 func (r *RoleRepository) CreatePermission(ctx context.Context, scope []uuid.UUID, arg securitydb.CreatePermissionParams) (securitydb.CreatePermissionRow, error) {
 	var out securitydb.CreatePermissionRow
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		var e error
 		out, e = r.q.WithTx(tx).CreatePermission(ctx, arg)
 		return e
@@ -104,7 +104,7 @@ func (r *RoleRepository) CreatePermission(ctx context.Context, scope []uuid.UUID
 func (r *RoleRepository) ListPermissionsWithCount(ctx context.Context, scope []uuid.UUID, arg securitydb.ListPermissionsParams) ([]securitydb.ListPermissionsRow, int64, error) {
 	var rows []securitydb.ListPermissionsRow
 	var total int64
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithOrgReadScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if rows, e = q.ListPermissions(ctx, arg); e != nil {
@@ -118,7 +118,7 @@ func (r *RoleRepository) ListPermissionsWithCount(ctx context.Context, scope []u
 
 func (r *RoleRepository) GrantPermissionAndEmit(ctx context.Context, scope []uuid.UUID, arg securitydb.CreateRolePermissionParams, ev securitydb.InsertOutboxParams) (int64, error) {
 	var n int64
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		if _, e := q.GetRole(ctx, arg.RoleID); e != nil {
 			return e
@@ -127,14 +127,17 @@ func (r *RoleRepository) GrantPermissionAndEmit(ctx context.Context, scope []uui
 		if n, e = q.CreateRolePermission(ctx, arg); e != nil {
 			return e
 		}
-		return q.InsertOutbox(ctx, ev)
+		if n == 1 {
+			return q.InsertOutbox(ctx, ev)
+		}
+		return nil
 	})
 	return n, err
 }
 
 func (r *RoleRepository) RevokePermissionAndEmit(ctx context.Context, scope []uuid.UUID, arg securitydb.DeleteRolePermissionParams, ev securitydb.InsertOutboxParams) (int64, error) {
 	var n int64
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if n, e = q.DeleteRolePermission(ctx, arg); e != nil {

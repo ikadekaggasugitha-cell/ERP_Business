@@ -5,11 +5,13 @@
 \if :{?actor}  \else \set actor  '00000000-0000-0000-0000-000000000001' \endif
 
 INSERT INTO cons.consolidation_group (id, organization_id, code, name, parent_group_id, presentation_currency_code, created_by) VALUES
-  ('c0050000-0000-4000-8000-000000000001', :'org_id', 'GRP-HOLDING', 'Holding Consolidated Group (Reference)', NULL, 'IDR', :'actor')
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN 'c0050000-0000-4000-8000-000000000001'::uuid ELSE md5(:'org_id' || ':cons:GRP-HOLDING')::uuid END, :'org_id', 'GRP-HOLDING', 'Holding Consolidated Group (Reference)', NULL, 'IDR', :'actor')
 ON CONFLICT (organization_id, code) DO NOTHING;
 
 INSERT INTO cons.elimination_rule (id, organization_id, consolidation_group_id, rule_type, config, is_active, created_by)
-SELECT v.id, :'org_id'::uuid, g.id, v.rule_type, v.config, true, :'actor'::uuid
+SELECT
+  CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN v.id ELSE md5(:'org_id' || ':cons:rule:' || v.rule_type)::uuid END,
+  :'org_id'::uuid, g.id, v.rule_type, v.config, true, :'actor'::uuid
 FROM (VALUES
   ('c0051000-0000-4000-8000-000000000001'::uuid, 'ICReceivablePayable', '{"description":"Eliminate intercompany AR/AP balances","matchOn":"counterparty"}'::jsonb),
   ('c0051000-0000-4000-8000-000000000002'::uuid, 'ICSalesPurchase', '{"description":"Eliminate intercompany revenue and COGS","matchOn":"counterparty"}'::jsonb),
@@ -18,4 +20,10 @@ FROM (VALUES
 ) AS v(id, rule_type, config)
 JOIN cons.consolidation_group g
   ON g.organization_id = :'org_id'::uuid AND g.code = 'GRP-HOLDING'
+WHERE NOT EXISTS (
+  SELECT 1 FROM cons.elimination_rule er
+  WHERE er.organization_id = :'org_id'::uuid
+    AND er.consolidation_group_id = g.id
+    AND er.rule_type = v.rule_type
+)
 ON CONFLICT (id) DO NOTHING;

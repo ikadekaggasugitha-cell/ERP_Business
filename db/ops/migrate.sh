@@ -50,5 +50,8 @@ for dir_name in "${targets[@]}"; do
     rc=1
     break
   fi
+  if command -v psql >/dev/null 2>&1 && [ -f "$ROOT/db/ops/apply_grants.sql" ]; then
+    psql "${DSN_PREFIX}${db}?sslmode=disable" -v ON_ERROR_STOP=1 -f "$ROOT/db/ops/apply_grants.sql" >/dev/null
+  fi
 done
 exit "$rc"

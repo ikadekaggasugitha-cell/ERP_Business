@@ -26,7 +26,12 @@ type metricKey struct {
 type metricVal struct {
 	count      uint64
 	durationMs float64
+	buckets    [6]uint64 // <=5ms, <=25ms, <=100ms, <=250ms, <=1000ms, <=5000ms
 }
+
+var latencyBucketBounds = [6]float64{5, 25, 100, 250, 1000, 5000}
+
+const maxMetricSeries = 1024
 
 func NewMetrics(service string) *Metrics {
 	return &Metrics{
@@ -67,19 +72,44 @@ func (m *Metrics) Wrap(next http.Handler) http.Handler {
 		dur := float64(time.Since(start).Microseconds()) / 1000.0
 		path := normalizeMetricPath(r.Pattern)
 		if path == "" {
-			path = r.URL.Path
+			if sw.status == http.StatusNotFound || sw.status == http.StatusMethodNotAllowed {
+				path = "_unmatched"
+			} else {
+				path = sanitizeRawPath(r.URL.Path)
+			}
 		}
 		k := metricKey{method: r.Method, path: path, status: strconv.Itoa(sw.status)}
 		m.mu.Lock()
 		v, ok := m.reqs[k]
 		if !ok {
-			v = &metricVal{}
-			m.reqs[k] = v
+			if len(m.reqs) >= maxMetricSeries {
+				k = metricKey{method: r.Method, path: "_overflow", status: strconv.Itoa(sw.status)}
+				v, ok = m.reqs[k]
+			}
+			if !ok {
+				v = &metricVal{}
+				m.reqs[k] = v
+			}
 		}
 		v.count++
 		v.durationMs += dur
+		for i, b := range latencyBucketBounds {
+			if dur <= b {
+				v.buckets[i]++
+			}
+		}
 		m.mu.Unlock()
 	})
+}
+
+func sanitizeRawPath(p string) string {
+	if p == "" {
+		return "/"
+	}
+	if len(p) > 64 {
+		return p[:64]
+	}
+	return p
 }
 
 func normalizeMetricPath(pattern string) string {
@@ -129,6 +159,20 @@ func (m *Metrics) Handler() http.HandlerFunc {
 			v := m.reqs[k]
 			_, _ = fmt.Fprintf(w, "erp_http_request_duration_ms_sum{service=%q,method=%q,path=%q,status=%q} %.3f\n",
 				m.service, k.method, k.path, k.status, v.durationMs)
+		}
+		_, _ = fmt.Fprintf(w, "# HELP erp_http_request_duration_ms HTTP request latency histogram in ms.\n# TYPE erp_http_request_duration_ms histogram\n")
+		for _, k := range keys {
+			v := m.reqs[k]
+			for i, b := range latencyBucketBounds {
+				_, _ = fmt.Fprintf(w, "erp_http_request_duration_ms_bucket{service=%q,method=%q,path=%q,status=%q,le=\"%.0f\"} %d\n",
+					m.service, k.method, k.path, k.status, b, v.buckets[i])
+			}
+			_, _ = fmt.Fprintf(w, "erp_http_request_duration_ms_bucket{service=%q,method=%q,path=%q,status=%q,le=\"+Inf\"} %d\n",
+				m.service, k.method, k.path, k.status, v.count)
+			_, _ = fmt.Fprintf(w, "erp_http_request_duration_ms_sum{service=%q,method=%q,path=%q,status=%q} %.3f\n",
+				m.service, k.method, k.path, k.status, v.durationMs)
+			_, _ = fmt.Fprintf(w, "erp_http_request_duration_ms_count{service=%q,method=%q,path=%q,status=%q} %d\n",
+				m.service, k.method, k.path, k.status, v.count)
 		}
 		m.mu.RUnlock()
 	}

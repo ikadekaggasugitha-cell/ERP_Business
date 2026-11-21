@@ -73,6 +73,12 @@ WHERE id = $1 AND posting_date = $2 AND status = 'Draft' AND deleted_at IS NULL 
 DELETE FROM gl.journal_line
 WHERE journal_entry_id = $1 AND posting_date = $2;
 
+-- name: RecalculateJournalLinesFunctionalAmount :exec
+UPDATE gl.journal_line
+SET functional_amount = ROUND((CASE WHEN debit_amount > 0 THEN debit_amount ELSE credit_amount END) * sqlc.arg(exchange_rate)::numeric(20,8), 4),
+    updated_by = $3
+WHERE journal_entry_id = $1 AND posting_date = $2 AND deleted_at IS NULL;
+
 -- name: SoftDeleteJournalEntry :execrows
 UPDATE gl.journal_entry
 SET deleted_at = now(), updated_by = $4
@@ -81,6 +87,8 @@ WHERE id = $1 AND posting_date = $2 AND status = 'Draft' AND deleted_at IS NULL 
 -- name: JournalEntryTotals :one
 SELECT COALESCE(SUM(debit_amount), 0)::numeric(20,4)  AS total_debit,
        COALESCE(SUM(credit_amount), 0)::numeric(20,4) AS total_credit,
+       COALESCE(SUM(CASE WHEN debit_amount > 0 THEN functional_amount ELSE 0 END), 0)::numeric(20,4) AS total_functional_debit,
+       COALESCE(SUM(CASE WHEN credit_amount > 0 THEN functional_amount ELSE 0 END), 0)::numeric(20,4) AS total_functional_credit,
        count(*)::bigint AS line_count
 FROM gl.journal_line
 WHERE journal_entry_id = $1 AND posting_date = $2 AND deleted_at IS NULL;
@@ -151,3 +159,14 @@ WHERE id = $1 AND created_at = $2;
 INSERT INTO gl.processed_event (event_id, event_type)
 VALUES ($1, $2)
 ON CONFLICT (event_id) DO NOTHING;
+
+-- name: UpsertFiscalPeriodStatus :exec
+INSERT INTO gl.fiscal_period_status (organization_id, period_id, status, updated_at)
+VALUES ($1, $2, $3, now())
+ON CONFLICT (organization_id, period_id)
+DO UPDATE SET status = EXCLUDED.status, updated_at = now();
+
+-- name: GetFiscalPeriodStatus :one
+SELECT status
+FROM gl.fiscal_period_status
+WHERE organization_id = $1 AND period_id = $2;

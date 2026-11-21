@@ -12,6 +12,7 @@ import (
 
 	"github.com/sinergiinvestasiproperti/erp/services/localization-service/internal/localizationdb"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
 )
 
 // Store abstracts repository operations for handler unit testing.
@@ -152,11 +153,12 @@ type languageResp struct {
 	Name       string    `json:"name"`
 	IsActive   bool      `json:"isActive"`
 	IsFallback bool      `json:"isFallback"`
+	IsSystem   bool      `json:"isSystem"`
 	RowVersion int32     `json:"rowVersion"`
 }
 
 func languageDTO(l localizationdb.LocLanguage) languageResp {
-	return languageResp{ID: l.ID, Code: l.Code, Name: l.Name, IsActive: l.IsActive, IsFallback: l.IsFallback, RowVersion: l.RowVersion}
+	return languageResp{ID: l.ID, Code: l.Code, Name: l.Name, IsActive: l.IsActive, IsFallback: l.IsFallback, IsSystem: l.OrganizationID == platform.SystemOrgID, RowVersion: l.RowVersion}
 }
 
 func boolOr(p *bool, def bool) bool {
@@ -237,7 +239,7 @@ func (s *Server) getLanguage(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, languageDTO(row))
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, languageDTO(row))
 }
 
 func (s *Server) updateLanguage(w http.ResponseWriter, r *http.Request) {
@@ -295,12 +297,13 @@ type translationResp struct {
 	ResourceKey   string    `json:"resourceKey"`
 	ResourceValue string    `json:"resourceValue"`
 	Module        *string   `json:"module,omitempty"`
+	IsSystem      bool      `json:"isSystem"`
 	RowVersion    int32     `json:"rowVersion"`
 }
 
 func translationDTO(t localizationdb.LocTranslation) translationResp {
 	return translationResp{ID: t.ID, LanguageCode: t.LanguageCode, ResourceKey: t.ResourceKey,
-		ResourceValue: t.ResourceValue, Module: t.Module, RowVersion: t.RowVersion}
+		ResourceValue: t.ResourceValue, Module: t.Module, IsSystem: t.OrganizationID == platform.SystemOrgID, RowVersion: t.RowVersion}
 }
 
 func (s *Server) listTranslations(w http.ResponseWriter, r *http.Request) {
@@ -367,7 +370,7 @@ func (s *Server) getTranslation(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, translationDTO(row))
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, translationDTO(row))
 }
 
 func (s *Server) updateTranslation(w http.ResponseWriter, r *http.Request) {
@@ -459,12 +462,13 @@ type localeFormatResp struct {
 	DateFormat     string    `json:"dateFormat"`
 	NumberFormat   string    `json:"numberFormat"`
 	CurrencyFormat string    `json:"currencyFormat"`
+	IsSystem       bool      `json:"isSystem"`
 	RowVersion     int32     `json:"rowVersion"`
 }
 
 func localeFormatDTO(l localizationdb.LocLocaleFormat) localeFormatResp {
 	return localeFormatResp{ID: l.ID, LocaleCode: l.LocaleCode, DateFormat: l.DateFormat,
-		NumberFormat: l.NumberFormat, CurrencyFormat: l.CurrencyFormat, RowVersion: l.RowVersion}
+		NumberFormat: l.NumberFormat, CurrencyFormat: l.CurrencyFormat, IsSystem: l.OrganizationID == platform.SystemOrgID, RowVersion: l.RowVersion}
 }
 
 func formatsValid(req localeFormatReq) bool {
@@ -538,7 +542,7 @@ func (s *Server) getLocaleFormat(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, localeFormatDTO(row))
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, localeFormatDTO(row))
 }
 
 func (s *Server) updateLocaleFormat(w http.ResponseWriter, r *http.Request) {

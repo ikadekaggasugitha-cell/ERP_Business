@@ -26,12 +26,14 @@ WITH budget_rollup AS (
 gl_actuals AS (
   SELECT
     org_id,
-    account_code,
+    CAST(EXTRACT(YEAR FROM posting_date) AS STRING) AS fiscal_year_key,
     EXTRACT(MONTH FROM posting_date) AS period_no,
+    account_code,
+    COALESCE(CAST(cost_center AS STRING), '') AS cost_center_key,
     SUM(amount_fc) AS actual_amount_fc,
     SUM(amount_pc) AS actual_amount_pc
   FROM ${ref("fact_gl_transaction")}
-  GROUP BY 1, 2, 3
+  GROUP BY 1, 2, 3, 4, 5
 )
 
 SELECT
@@ -55,5 +57,7 @@ SELECT
 FROM budget_rollup b
 LEFT JOIN gl_actuals g
   ON g.org_id = b.org_id
+  AND g.fiscal_year_key = COALESCE(REGEXP_EXTRACT(CAST(b.fiscal_year_ref AS STRING), r'^(20[0-9]{2})'), CAST(b.fiscal_year_ref AS STRING))
   AND g.account_code = b.account_code
   AND g.period_no = b.period_no
+  AND g.cost_center_key = COALESCE(CAST(b.cost_center_ref AS STRING), '')

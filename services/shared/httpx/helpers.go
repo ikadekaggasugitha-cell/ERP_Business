@@ -164,14 +164,22 @@ func ScopeKey(scope []uuid.UUID) string {
 }
 
 // BeginIdempotent decodes dst via DecodeJSONIdempotent and guards against duplicate
-// or conflicting Idempotency-Key mutations. When done is false, callers should defer release().
+// or conflicting Idempotency-Key mutations. Keys are scoped by HTTP method + path
+// to prevent cross-endpoint collisions. When done is false, callers should defer release().
 func BeginIdempotent(w http.ResponseWriter, r *http.Request, idem *IdemStore, scope []uuid.UUID, dst any) (idemKey, reqHash string, release func(), done bool) {
 	reqHash, err := DecodeJSONIdempotent(w, r, dst)
 	if err != nil {
 		WriteError(w, r, err)
 		return "", "", func() {}, true
 	}
-	idemKey = strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	rawKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if rawKey != "" {
+		route := strings.TrimSpace(r.Pattern)
+		if route == "" {
+			route = r.Method + " " + r.URL.Path
+		}
+		idemKey = route + "|" + rawKey
+	}
 	sk := ScopeKey(scope)
 	if idem != nil {
 		if idem.ReplayWithHash(w, sk, idemKey, reqHash) {
@@ -198,22 +206,25 @@ func BeginIdempotent(w http.ResponseWriter, r *http.Request, idem *IdemStore, sc
 func SaveIDResponse(w http.ResponseWriter, idem *IdemStore, scope []uuid.UUID, key, reqHash string, status int, version int32, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
-		log.Printf("[error] code=INTERNAL_ERROR status=500: encode json failed: %v", err)
+		cid := w.Header().Get("X-Correlation-Id")
+		log.Printf("[error] cid=%s code=INTERNAL_ERROR status=500: encode json failed: %v", cid, err)
 		WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": map[string]any{
 				"code":          "INTERNAL_ERROR",
 				"message":       "internal server error",
-				"correlationId": "",
+				"correlationId": cid,
 				"details":       nil,
 			},
 		})
 		return
 	}
-	if idem != nil && key != "" {
-		idem.SaveWithHash(ScopeKey(scope), key, reqHash, status, body)
-	}
+	etag := ""
 	if version > 0 {
-		w.Header().Set("ETag", strconvQuoteVersion(version))
+		etag = strconvQuoteVersion(version)
+		w.Header().Set("ETag", etag)
+	}
+	if idem != nil && key != "" {
+		idem.SaveWithHashAndETag(ScopeKey(scope), key, reqHash, etag, status, body)
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)

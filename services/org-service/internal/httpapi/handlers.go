@@ -461,6 +461,10 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
+	if existing.OrganizationID == platform.SystemOrgID {
+		httpx.WriteError(w, r, httpx.Forbidden("system organization tidak dapat dimodifikasi"))
+		return
+	}
 	if existing.RowVersion != ver {
 		httpx.WriteError(w, r, httpx.Conflict("VERSION_CONFLICT", "row_version organisasi tidak cocok"))
 		return
@@ -533,6 +537,10 @@ func (s *Server) activate(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
+	if existing.OrganizationID == platform.SystemOrgID {
+		httpx.WriteError(w, r, httpx.Forbidden("system organization tidak dapat dimodifikasi"))
+		return
+	}
 	if existing.Status != "Draft" || existing.RowVersion != ver {
 		httpx.WriteError(w, r, httpx.Conflict("VERSION_CONFLICT", "organisasi bukan Draft atau row_version tidak cocok"))
 		return
@@ -592,12 +600,17 @@ func (s *Server) deleteOrg(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	if _, _, err := s.repo.GetWithHierarchy(r.Context(), scope, id); err != nil {
+	existing, _, err := s.repo.GetWithHierarchy(r.Context(), scope, id)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			httpx.WriteError(w, r, httpx.NotFound("organization tidak ditemukan"))
 			return
 		}
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	if existing.OrganizationID == platform.SystemOrgID {
+		httpx.WriteError(w, r, httpx.Forbidden("system organization tidak dapat dihapus"))
 		return
 	}
 	n, err := s.repo.DeleteOrganization(r.Context(), scope, orgdb.DeleteOrganizationParams{

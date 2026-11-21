@@ -94,6 +94,14 @@ CREATE TABLE gl.processed_event (
     PRIMARY KEY (event_id)
 );
 
+CREATE TABLE gl.fiscal_period_status (
+    organization_id uuid        NOT NULL,
+    period_id       uuid        NOT NULL,
+    status          varchar(20) NOT NULL DEFAULT 'Open',
+    updated_at      timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (organization_id, period_id)
+);
+
 CREATE TABLE gl.recurring_journal_template (
     id               uuid         NOT NULL DEFAULT gen_random_uuid(),
     organization_id  uuid         NOT NULL,

@@ -3,7 +3,7 @@ config {
   schema: dataform.projectConfig.vars.target_dataset,
   tags: ["fact", "cortex_v7", "crm", "pipeline"],
   clusterBy: ["org_id", "opportunity_status", "stage"],
-  description: "CRM opportunity pipeline and maintenance backlog analytics with weighted expected revenue"
+  description: "CRM opportunity pipeline analytics with weighted expected revenue"
 }
 
 WITH dedup_org AS (

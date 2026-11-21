@@ -203,13 +203,18 @@ func (s *Server) createInstance(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.BadRequest("documentRef wajib diisi"))
 		return
 	}
-	assigneeID := actor
-	if strings.TrimSpace(req.AssigneeID) != "" {
-		assigneeID, err = httpx.ParseUUIDParam("assigneeId", req.AssigneeID)
-		if err != nil {
-			httpx.WriteError(w, r, err)
-			return
-		}
+	if strings.TrimSpace(req.AssigneeID) == "" {
+		httpx.WriteError(w, r, httpx.BadRequest("assigneeId wajib diisi dan tidak boleh sama dengan requester"))
+		return
+	}
+	assigneeID, err := httpx.ParseUUIDParam("assigneeId", req.AssigneeID)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if assigneeID == actor {
+		httpx.WriteError(w, r, &httpx.APIError{Status: http.StatusForbidden, Code: "SOD_VIOLATION", Message: "assigneeId tidak boleh sama dengan requester (SoD)"})
+		return
 	}
 	step := int32(1)
 	payload, _ := json.Marshal(map[string]any{
@@ -430,6 +435,8 @@ func (s *Server) decideTask(w http.ResponseWriter, r *http.Request, decision str
 			httpx.WriteError(w, r, httpx.NotFound("workflow task tidak ditemukan"))
 		case errors.Is(err, repository.ErrSoDViolation):
 			httpx.WriteError(w, r, &httpx.APIError{Status: http.StatusForbidden, Code: "SOD_VIOLATION", Message: err.Error()})
+		case errors.Is(err, repository.ErrNotAssignee):
+			httpx.WriteError(w, r, &httpx.APIError{Status: http.StatusForbidden, Code: "NOT_ASSIGNEE", Message: err.Error()})
 		case errors.Is(err, repository.ErrAlreadyDecided):
 			httpx.WriteError(w, r, httpx.Conflict("ALREADY_DECIDED", err.Error()))
 		case errors.Is(err, repository.ErrVersionConflict):

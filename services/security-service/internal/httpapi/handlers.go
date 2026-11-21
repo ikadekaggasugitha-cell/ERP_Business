@@ -15,6 +15,7 @@ import (
 
 	"github.com/sinergiinvestasiproperti/erp/services/security-service/internal/securitydb"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
 )
 
 type Store interface {
@@ -249,6 +250,10 @@ func (s *Server) updateRole(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.BadRequest("name wajib diisi"))
 		return
 	}
+	if req.IsSystem {
+		httpx.WriteError(w, r, httpx.Forbidden("tidak diizinkan mengubah role menjadi system role"))
+		return
+	}
 	existing, _, err := s.repo.GetWithPermissions(r.Context(), scope, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -258,20 +263,19 @@ func (s *Server) updateRole(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
-	if existing.IsSystem || existing.OrganizationID == uuid.Nil {
-		httpx.WriteError(w, r, httpx.Conflict("SYSTEM_ROLE_LOCKED", "system role tidak dapat dimodifikasi"))
+	if existing.IsSystem || existing.OrganizationID == platform.SystemOrgID {
+		httpx.WriteError(w, r, httpx.Forbidden("system role tidak dapat dimodifikasi"))
 		return
 	}
 	if existing.RowVersion != ver {
 		httpx.WriteError(w, r, httpx.Conflict("VERSION_CONFLICT", "row_version role tidak cocok"))
 		return
 	}
-	payload, _ := json.Marshal(map[string]any{"code": existing.Code, "name": name, "isSystem": req.IsSystem})
+	payload, _ := json.Marshal(map[string]any{"code": existing.Code, "name": name, "isSystem": false})
 	newVer, err := s.repo.UpdateAndEmit(r.Context(), scope, securitydb.UpdateRoleParams{
 		ID:         id,
 		RowVersion: ver,
 		Name:       name,
-		IsSystem:   req.IsSystem,
 		UpdatedBy:  &actor,
 	}, securitydb.InsertOutboxParams{
 		AggregateType:  "Role",
@@ -293,7 +297,7 @@ func (s *Server) updateRole(w http.ResponseWriter, r *http.Request) {
 		"id":         id,
 		"code":       existing.Code,
 		"name":       name,
-		"isSystem":   req.IsSystem,
+		"isSystem":   false,
 		"rowVersion": newVer,
 	})
 }
@@ -332,8 +336,8 @@ func (s *Server) deleteRole(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
-	if existing.IsSystem || existing.OrganizationID == uuid.Nil {
-		httpx.WriteError(w, r, httpx.Conflict("SYSTEM_ROLE_LOCKED", "role sistem tidak boleh dihapus"))
+	if existing.IsSystem || existing.OrganizationID == platform.SystemOrgID {
+		httpx.WriteError(w, r, httpx.Forbidden("role sistem tidak boleh dihapus"))
 		return
 	}
 	if existing.RowVersion != ver {
@@ -498,10 +502,11 @@ func (s *Server) grantRolePermission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req grantPermReq
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	key, hash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
 	if req.PermissionID == uuid.Nil {
 		httpx.WriteError(w, r, httpx.BadRequest("permissionId wajib diisi"))
 		return
@@ -515,13 +520,13 @@ func (s *Server) grantRolePermission(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
-	if existing.IsSystem || existing.OrganizationID == uuid.Nil {
-		httpx.WriteError(w, r, httpx.Conflict("SYSTEM_ROLE_LOCKED", "system role tidak dapat dimodifikasi"))
+	if existing.IsSystem || existing.OrganizationID == platform.SystemOrgID {
+		httpx.WriteError(w, r, httpx.Forbidden("system role tidak dapat dimodifikasi"))
 		return
 	}
 	payload, _ := json.Marshal(map[string]any{"roleId": roleID, "permissionId": req.PermissionID})
 	_, err = s.repo.GrantPermissionAndEmit(r.Context(), scope, securitydb.CreateRolePermissionParams{
-		OrganizationID: scope[0],
+		OrganizationID: existing.OrganizationID,
 		RoleID:         roleID,
 		PermissionID:   req.PermissionID,
 		CreatedBy:      actor,
@@ -530,7 +535,7 @@ func (s *Server) grantRolePermission(w http.ResponseWriter, r *http.Request) {
 		AggregateID:    roleID,
 		EventType:      "security.role.upserted",
 		Payload:        payload,
-		OrganizationID: scope[0],
+		OrganizationID: existing.OrganizationID,
 		CorrelationID:  httpx.CorrelationUUID(r),
 	})
 	if err != nil {
@@ -541,7 +546,7 @@ func (s *Server) grantRolePermission(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
-	httpx.WriteJSON(w, http.StatusCreated, map[string]any{
+	httpx.SaveIDResponse(w, s.idem, scope, key, hash, http.StatusCreated, 0, map[string]any{
 		"roleId":       roleID,
 		"permissionId": req.PermissionID,
 	})
@@ -576,8 +581,8 @@ func (s *Server) revokeRolePermission(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
-	if existing.IsSystem || existing.OrganizationID == uuid.Nil {
-		httpx.WriteError(w, r, httpx.Conflict("SYSTEM_ROLE_LOCKED", "system role tidak dapat dimodifikasi"))
+	if existing.IsSystem || existing.OrganizationID == platform.SystemOrgID {
+		httpx.WriteError(w, r, httpx.Forbidden("system role tidak dapat dimodifikasi"))
 		return
 	}
 	payload, _ := json.Marshal(map[string]any{"roleId": roleID, "permissionId": permID, "revoked": true})
@@ -589,7 +594,7 @@ func (s *Server) revokeRolePermission(w http.ResponseWriter, r *http.Request) {
 		AggregateID:    roleID,
 		EventType:      "security.role.upserted",
 		Payload:        payload,
-		OrganizationID: scope[0],
+		OrganizationID: existing.OrganizationID,
 		CorrelationID:  httpx.CorrelationUUID(r),
 	})
 	if err != nil {

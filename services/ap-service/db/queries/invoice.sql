@@ -16,6 +16,13 @@ SELECT * FROM ap.ap_invoice
 WHERE id = $1 AND deleted_at IS NULL
 LIMIT 1;
 
+-- name: GetInvoiceByRef :one
+SELECT * FROM ap.ap_invoice
+WHERE organization_id = $1 AND deleted_at IS NULL
+  AND (id::text = sqlc.arg(invoice_ref)::text OR invoice_no = sqlc.arg(invoice_ref)::text)
+ORDER BY invoice_date DESC
+LIMIT 1;
+
 -- name: ListInvoices :many
 SELECT id, invoice_no, vendor_id, invoice_date, due_date, status,
        currency_code, total_amount, outstanding_amount, row_version
@@ -88,6 +95,24 @@ WHERE id = $1 AND invoice_date = $2 AND status = 'Draft' AND row_version = $3 AN
 UPDATE ap.ap_invoice
 SET status = 'Recorded', updated_by = $4
 WHERE id = $1 AND invoice_date = $2 AND status = 'Draft' AND row_version = $3 AND deleted_at IS NULL;
+
+-- name: CreatePaymentAllocation :exec
+INSERT INTO ap.ap_payment_allocation (
+    organization_id, ap_invoice_id, invoice_date, payment_id, allocated_amount, created_by
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+)
+ON CONFLICT (ap_invoice_id, payment_id) DO NOTHING;
+
+-- name: ApplyPaymentToInvoice :execrows
+UPDATE ap.ap_invoice
+SET outstanding_amount = GREATEST(outstanding_amount - sqlc.arg(paid_amount)::numeric(20,4), 0),
+    status = CASE
+        WHEN outstanding_amount - sqlc.arg(paid_amount)::numeric(20,4) <= 0 THEN 'Paid'
+        ELSE 'PartiallyPaid'
+    END,
+    updated_by = $3
+WHERE id = $1 AND invoice_date = $2 AND status IN ('Recorded', 'PartiallyPaid') AND deleted_at IS NULL;
 
 -- name: InsertOutbox :exec
 INSERT INTO ap.outbox (aggregate_type, aggregate_id, event_type, payload, organization_id, correlation_id)

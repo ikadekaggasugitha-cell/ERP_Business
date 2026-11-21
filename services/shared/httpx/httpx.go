@@ -6,6 +6,9 @@ package httpx
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -16,6 +19,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
@@ -141,6 +145,103 @@ func HasPermission(ctx context.Context, perm string) bool {
 	return slices.Contains(Permissions(ctx), perm)
 }
 
+// ---- gateway HMAC trust boundary -------------------------------------------
+
+const defaultDevGatewaySecret = "dev-erp-jwt-secret-change-me"
+
+// GatewaySigningSecret returns the shared HMAC secret used to sign/verify
+// X-Gateway-Signature between api-gateway and downstream microservices.
+func GatewaySigningSecret() []byte {
+	if s := strings.TrimSpace(os.Getenv("GATEWAY_HMAC_SECRET")); s != "" {
+		return []byte(s)
+	}
+	if s := strings.TrimSpace(os.Getenv("JWT_SECRET")); s != "" {
+		return []byte(s)
+	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production") {
+		return nil
+	}
+	return []byte(defaultDevGatewaySecret)
+}
+
+// ComputeGatewaySignature computes HMAC-SHA256 over the canonical gateway identity headers.
+func ComputeGatewaySignature(secret []byte, ts, userID, orgID, orgScope, roles, perms string) string {
+	mac := hmac.New(sha256.New, secret)
+	_, _ = mac.Write([]byte(ts))
+	_, _ = mac.Write([]byte("\n"))
+	_, _ = mac.Write([]byte(userID))
+	_, _ = mac.Write([]byte("\n"))
+	_, _ = mac.Write([]byte(orgID))
+	_, _ = mac.Write([]byte("\n"))
+	_, _ = mac.Write([]byte(orgScope))
+	_, _ = mac.Write([]byte("\n"))
+	_, _ = mac.Write([]byte(roles))
+	_, _ = mac.Write([]byte("\n"))
+	_, _ = mac.Write([]byte(perms))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// SignGatewayRequest attaches X-Gateway-Timestamp and X-Gateway-Signature to an outbound proxy request.
+func SignGatewayRequest(r *http.Request, secret []byte) {
+	if len(secret) == 0 {
+		secret = GatewaySigningSecret()
+	}
+	if len(secret) == 0 {
+		return
+	}
+	ts := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+	sig := ComputeGatewaySignature(
+		secret,
+		ts,
+		strings.TrimSpace(r.Header.Get("X-User-Id")),
+		strings.TrimSpace(r.Header.Get("X-Organization-Id")),
+		strings.TrimSpace(r.Header.Get("X-Org-Scope")),
+		strings.TrimSpace(r.Header.Get("X-Roles")),
+		strings.TrimSpace(r.Header.Get("X-Permissions")),
+	)
+	r.Header.Set("X-Gateway-Timestamp", ts)
+	r.Header.Set("X-Gateway-Signature", sig)
+}
+
+func verifyGatewayHeaders(r *http.Request) bool {
+	sig := strings.TrimSpace(r.Header.Get("X-Gateway-Signature"))
+	tsRaw := strings.TrimSpace(r.Header.Get("X-Gateway-Timestamp"))
+	if sig != "" {
+		secret := GatewaySigningSecret()
+		if len(secret) == 0 || tsRaw == "" {
+			return false
+		}
+		tsUnix, err := strconv.ParseInt(tsRaw, 10, 64)
+		if err != nil {
+			return false
+		}
+		skew := time.Since(time.Unix(tsUnix, 0))
+		if skew < -5*time.Minute || skew > 5*time.Minute {
+			return false
+		}
+		expected := ComputeGatewaySignature(
+			secret,
+			tsRaw,
+			strings.TrimSpace(r.Header.Get("X-User-Id")),
+			strings.TrimSpace(r.Header.Get("X-Organization-Id")),
+			strings.TrimSpace(r.Header.Get("X-Org-Scope")),
+			strings.TrimSpace(r.Header.Get("X-Roles")),
+			strings.TrimSpace(r.Header.Get("X-Permissions")),
+		)
+		return hmac.Equal([]byte(sig), []byte(expected))
+	}
+	// When no X-Gateway-Signature is sent:
+	// - In production (or when REQUIRE_GATEWAY_SIGNATURE=true), reject unsigned headers unless TRUST_INTERNAL_DEV=true.
+	// - In local dev/test, allow unsigned internal headers unless TRUST_INTERNAL_DEV=false or REQUIRE_GATEWAY_SIGNATURE=true.
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("REQUIRE_GATEWAY_SIGNATURE")), "true") {
+		return false
+	}
+	if v := strings.TrimSpace(os.Getenv("TRUST_INTERNAL_DEV")); v != "" {
+		return strings.EqualFold(v, "true") || v == "1"
+	}
+	return !strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production")
+}
+
 // ---- middleware ------------------------------------------------------------
 
 // Middleware injects correlation id, org scope, acting user, roles, and
@@ -153,25 +254,28 @@ func Middleware(next http.Handler) http.Handler {
 		}
 		w.Header().Set("X-Correlation-Id", cid)
 
-		scope := mergeScopes(parseScope(r.Header.Get("X-Organization-Id")), parseScope(r.Header.Get("X-Org-Scope")))
 		ctx := context.WithValue(r.Context(), correlationKey, cid)
-		ctx = context.WithValue(ctx, scopeKey, scope)
-		if u, err := uuid.Parse(strings.TrimSpace(r.Header.Get("X-User-Id"))); err == nil {
-			ctx = context.WithValue(ctx, userKey, u)
+		if verifyGatewayHeaders(r) {
+			scope := mergeScopes(parseScope(r.Header.Get("X-Organization-Id")), parseScope(r.Header.Get("X-Org-Scope")))
+			ctx = context.WithValue(ctx, scopeKey, scope)
+			if u, err := uuid.Parse(strings.TrimSpace(r.Header.Get("X-User-Id"))); err == nil {
+				ctx = context.WithValue(ctx, userKey, u)
+			}
+			if roles := parseCSV(r.Header.Get("X-Roles")); len(roles) > 0 {
+				ctx = context.WithValue(ctx, rolesKey, roles)
+			}
+			if perms := parseCSV(r.Header.Get("X-Permissions")); len(perms) > 0 {
+				ctx = context.WithValue(ctx, permsKey, perms)
+			}
 		}
-		if roles := parseCSV(r.Header.Get("X-Roles")); len(roles) > 0 {
-			ctx = context.WithValue(ctx, rolesKey, roles)
-		}
-		if perms := parseCSV(r.Header.Get("X-Permissions")); len(perms) > 0 {
-			ctx = context.WithValue(ctx, permsKey, perms)
-		}
+		rWithCtx := r.WithContext(ctx)
 		defer func() {
 			if rec := recover(); rec != nil {
 				log.Printf("[panic] cid=%s panic=%v", cid, rec)
-				WriteError(w, r, Internal("panic"))
+				WriteError(w, rWithCtx, Internal("panic"))
 			}
 		}()
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, rWithCtx)
 	})
 }
 
@@ -396,12 +500,40 @@ func Paginate(r *http.Request) (limit, offset int32) {
 }
 
 // RequireScope returns the caller scope or a 401 if absent (deny-by-default).
+// For mutating HTTP methods (POST, PUT, PATCH, DELETE), it rejects requests where
+// the active organization is SystemOrgID (00000000-0000-0000-0000-000000000000) with 403
+// and strips SystemOrgID from the returned scope slice.
 func RequireScope(r *http.Request) ([]uuid.UUID, error) {
 	s := Scope(r.Context())
 	if len(s) == 0 {
 		return nil, Unauthorized("X-Organization-Id (scope) wajib")
 	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+		if s[0] == platform.SystemOrgID {
+			return nil, Forbidden("system organization (00000000-0000-0000-0000-000000000000) is read-only and cannot be selected as active tenant")
+		}
+		s = platform.TenantOnlyScope(s)
+		if len(s) == 0 {
+			return nil, Forbidden("active tenant organization scope is required for mutations")
+		}
+	}
 	return s, nil
+}
+
+// RequireTenantOrg returns the active tenant organization and tenant-only scope, rejecting SystemOrgID.
+func RequireTenantOrg(r *http.Request) (uuid.UUID, []uuid.UUID, error) {
+	s := Scope(r.Context())
+	if len(s) == 0 {
+		return uuid.Nil, nil, Unauthorized("X-Organization-Id (scope) wajib")
+	}
+	if s[0] == platform.SystemOrgID {
+		return uuid.Nil, nil, Forbidden("system organization (00000000-0000-0000-0000-000000000000) is read-only")
+	}
+	ts := platform.TenantOnlyScope(s)
+	if len(ts) == 0 {
+		return uuid.Nil, nil, Forbidden("active tenant organization required")
+	}
+	return ts[0], ts, nil
 }
 
 // RequireUser returns the acting user or a 401 if absent.
@@ -413,11 +545,17 @@ func RequireUser(r *http.Request) (uuid.UUID, error) {
 	return u, nil
 }
 
-// EnforceRBAC reports whether REQUIRE_RBAC is explicitly enabled (true/1),
+// EnforceRBAC reports whether REQUIRE_RBAC is enabled (or APP_ENV=production by default unless REQUIRE_RBAC=false),
 // forcing RequirePermission to reject requests missing gateway role/permission headers.
 func EnforceRBAC() bool {
 	v := strings.TrimSpace(os.Getenv("REQUIRE_RBAC"))
-	return strings.EqualFold(v, "true") || v == "1"
+	if strings.EqualFold(v, "true") || v == "1" {
+		return true
+	}
+	if strings.EqualFold(v, "false") || v == "0" {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production")
 }
 
 // RequirePermission checks RBAC permission when X-Permissions or X-Roles are injected

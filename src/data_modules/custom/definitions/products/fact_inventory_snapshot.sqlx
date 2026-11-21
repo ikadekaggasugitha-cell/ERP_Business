@@ -130,15 +130,15 @@ SELECT
   f.currency_fc,
   NUMERIC '1' AS exchange_rate_fc,
   
-  -- Presentation Currency (USD)
+  -- Presentation Currency (Group Presentation Currency)
   CASE
-    WHEN f.currency_fc = 'USD' THEN f.total_value_fc
+    WHEN f.currency_fc = '${dataform.projectConfig.vars.holding_presentation_currency}' THEN f.total_value_fc
     ELSE f.total_value_fc * fx.mid_rate
   END AS total_value_pc,
-  'USD' AS currency_pc,
+  '${dataform.projectConfig.vars.holding_presentation_currency}' AS currency_pc,
   COALESCE(
     fx.mid_rate,
-    CASE WHEN f.currency_fc = 'USD' THEN NUMERIC '1' ELSE CAST(NULL AS NUMERIC) END
+    CASE WHEN f.currency_fc = '${dataform.projectConfig.vars.holding_presentation_currency}' THEN NUMERIC '1' ELSE CAST(NULL AS NUMERIC) END
   ) AS exchange_rate_pc,
   
   f.source_system,
@@ -147,4 +147,4 @@ FROM filtered f
 LEFT JOIN dedup_fx fx
   ON fx.rate_date = f.snapshot_date
   AND fx.from_currency = f.currency_fc
-  AND fx.to_currency = 'USD'
+  AND fx.to_currency = '${dataform.projectConfig.vars.holding_presentation_currency}'

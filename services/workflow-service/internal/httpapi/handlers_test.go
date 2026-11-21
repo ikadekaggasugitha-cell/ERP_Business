@@ -17,6 +17,7 @@ import (
 
 type fakeWFStore struct {
 	requesterID uuid.UUID
+	assigneeID  uuid.UUID
 }
 
 func (f *fakeWFStore) CreateDefinition(_ context.Context, _ []uuid.UUID, _ workflowdb.CreateWorkflowDefinitionParams, _ []workflowdb.CreateWorkflowStepParams) (workflowdb.CreateWorkflowDefinitionRow, error) {
@@ -55,6 +56,9 @@ func (f *fakeWFStore) ListTasksWithCount(_ context.Context, scope []uuid.UUID, _
 func (f *fakeWFStore) DecideTaskAndEmit(_ context.Context, _ []uuid.UUID, taskID, actorID, _ uuid.UUID, _ *int32, decision, comment string) (repository.TaskDecisionResult, error) {
 	if decision == "Approve" && actorID == f.requesterID {
 		return repository.TaskDecisionResult{}, repository.ErrSoDViolation
+	}
+	if f.assigneeID != uuid.Nil && actorID != f.assigneeID {
+		return repository.TaskDecisionResult{}, repository.ErrNotAssignee
 	}
 	st := "Approved"
 	if decision == "Reject" {
@@ -97,13 +101,39 @@ func callWF(t *testing.T, h http.Handler, method, path string, body any, hdrs ma
 func TestWorkflowSoDRBACApproveAndReject(t *testing.T) {
 	requester := "00000000-0000-0000-0000-000000000010"
 	approver := "00000000-0000-0000-0000-000000000020"
-	store := &fakeWFStore{requesterID: uuid.MustParse(requester)}
+	bystander := "00000000-0000-0000-0000-000000000030"
+	store := &fakeWFStore{
+		requesterID: uuid.MustParse(requester),
+		assigneeID:  uuid.MustParse(approver),
+	}
 	mux := http.NewServeMux()
 	NewServer(store).Register(mux)
 	h := httpx.Middleware(mux)
 
 	if rr := callWF(t, h, http.MethodGet, "/workflow-tasks", nil, wfHdrs(requester, "ap:read")); rr.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 without workflow:read, got %d", rr.Code)
+	}
+
+	// Self-assigning or omitting assigneeId when creating an instance must fail.
+	if rr := callWF(t, h, http.MethodPost, "/workflow-instances", map[string]any{
+		"definitionId": "10000000-0000-0000-0000-000000000050",
+		"documentRef":  "PO-001",
+	}, wfHdrs(requester, "workflow:write")); rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 when assigneeId is omitted, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if rr := callWF(t, h, http.MethodPost, "/workflow-instances", map[string]any{
+		"definitionId": "10000000-0000-0000-0000-000000000050",
+		"documentRef":  "PO-001",
+		"assigneeId":   requester,
+	}, wfHdrs(requester, "workflow:write")); rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 SOD_VIOLATION when requester self-assigns, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if rr := callWF(t, h, http.MethodPost, "/workflow-instances", map[string]any{
+		"definitionId": "10000000-0000-0000-0000-000000000050",
+		"documentRef":  "PO-001",
+		"assigneeId":   approver,
+	}, wfHdrs(requester, "workflow:write")); rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201 when distinct assigneeId is provided, got %d (%s)", rr.Code, rr.Body.String())
 	}
 
 	// Missing If-Match must be rejected with 428 Precondition Required.
@@ -116,6 +146,13 @@ func TestWorkflowSoDRBACApproveAndReject(t *testing.T) {
 	rr := callWF(t, h, http.MethodPost, "/workflow-tasks/10000000-0000-0000-0000-000000000052/approve", nil, reqHdrs)
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 SOD_VIOLATION when requester self-approves, got %d (%s)", rr.Code, rr.Body.String())
+	}
+
+	bystanderHdrs := wfHdrs(bystander, "workflow:approve")
+	bystanderHdrs["If-Match"] = `"1"`
+	rr = callWF(t, h, http.MethodPost, "/workflow-tasks/10000000-0000-0000-0000-000000000052/approve", nil, bystanderHdrs)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 NOT_ASSIGNEE when non-assigned user approves, got %d (%s)", rr.Code, rr.Body.String())
 	}
 
 	aprHdrs := wfHdrs(approver, "workflow:approve")

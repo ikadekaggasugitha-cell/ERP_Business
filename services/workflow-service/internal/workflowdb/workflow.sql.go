@@ -12,6 +12,32 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const advanceWorkflowInstanceStep = `-- name: AdvanceWorkflowInstanceStep :one
+UPDATE wf.workflow_instance
+SET current_step = $3, updated_by = $4
+WHERE id = $1 AND status = 'Pending' AND row_version = $2 AND deleted_at IS NULL
+RETURNING row_version
+`
+
+type AdvanceWorkflowInstanceStepParams struct {
+	ID          uuid.UUID  `json:"id"`
+	RowVersion  int32      `json:"row_version"`
+	CurrentStep *int32     `json:"current_step"`
+	UpdatedBy   *uuid.UUID `json:"updated_by"`
+}
+
+func (q *Queries) AdvanceWorkflowInstanceStep(ctx context.Context, arg AdvanceWorkflowInstanceStepParams) (int32, error) {
+	row := q.db.QueryRow(ctx, advanceWorkflowInstanceStep,
+		arg.ID,
+		arg.RowVersion,
+		arg.CurrentStep,
+		arg.UpdatedBy,
+	)
+	var row_version int32
+	err := row.Scan(&row_version)
+	return row_version, err
+}
+
 const countPendingTasksByInstance = `-- name: CountPendingTasksByInstance :one
 SELECT count(*)::bigint
 FROM wf.workflow_task
@@ -311,6 +337,37 @@ func (q *Queries) DrainOutbox(ctx context.Context, limit int32) ([]DrainOutboxRo
 	return items, nil
 }
 
+const getWorkflowDefinition = `-- name: GetWorkflowDefinition :one
+SELECT id, organization_id, code, document_type, version, is_active, row_version
+FROM wf.workflow_definition
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+type GetWorkflowDefinitionRow struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+	Code           string    `json:"code"`
+	DocumentType   string    `json:"document_type"`
+	Version        int32     `json:"version"`
+	IsActive       bool      `json:"is_active"`
+	RowVersion     int32     `json:"row_version"`
+}
+
+func (q *Queries) GetWorkflowDefinition(ctx context.Context, id uuid.UUID) (GetWorkflowDefinitionRow, error) {
+	row := q.db.QueryRow(ctx, getWorkflowDefinition, id)
+	var i GetWorkflowDefinitionRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Code,
+		&i.DocumentType,
+		&i.Version,
+		&i.IsActive,
+		&i.RowVersion,
+	)
+	return i, err
+}
+
 const getWorkflowInstance = `-- name: GetWorkflowInstance :one
 SELECT id, organization_id, definition_id, document_ref, status, current_step,
        created_at, created_by, updated_at, updated_by, deleted_at, row_version
@@ -488,6 +545,51 @@ func (q *Queries) ListWorkflowInstances(ctx context.Context, arg ListWorkflowIns
 			&i.CurrentStep,
 			&i.RowVersion,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkflowStepsByDefinition = `-- name: ListWorkflowStepsByDefinition :many
+SELECT id, organization_id, definition_id, step_order, approver_rule, escalation_rule, row_version
+FROM wf.workflow_step
+WHERE definition_id = $1 AND deleted_at IS NULL
+ORDER BY step_order ASC
+`
+
+type ListWorkflowStepsByDefinitionRow struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+	DefinitionID   uuid.UUID `json:"definition_id"`
+	StepOrder      int32     `json:"step_order"`
+	ApproverRule   []byte    `json:"approver_rule"`
+	EscalationRule []byte    `json:"escalation_rule"`
+	RowVersion     int32     `json:"row_version"`
+}
+
+func (q *Queries) ListWorkflowStepsByDefinition(ctx context.Context, definitionID uuid.UUID) ([]ListWorkflowStepsByDefinitionRow, error) {
+	rows, err := q.db.Query(ctx, listWorkflowStepsByDefinition, definitionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWorkflowStepsByDefinitionRow
+	for rows.Next() {
+		var i ListWorkflowStepsByDefinitionRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.DefinitionID,
+			&i.StepOrder,
+			&i.ApproverRule,
+			&i.EscalationRule,
+			&i.RowVersion,
 		); err != nil {
 			return nil, err
 		}

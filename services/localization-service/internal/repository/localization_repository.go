@@ -17,7 +17,7 @@ import (
 	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
 )
 
-var systemOrgID = uuid.MustParse("00000000-0000-0000-0000-000000000000")
+var systemOrgID = platform.SystemOrgID
 
 type LocalizationRepository struct {
 	db *platform.DB
@@ -35,17 +35,7 @@ func NewLocalizationRepository(db *platform.DB) *LocalizationRepository {
 // ScopeWithSystemOrg returns a copy of scope that includes the global system
 // organization (seeded languages/locale formats) when scope is non-empty.
 func ScopeWithSystemOrg(scope []uuid.UUID) []uuid.UUID {
-	if len(scope) == 0 {
-		return nil
-	}
-	out := make([]uuid.UUID, len(scope), len(scope)+1)
-	copy(out, scope)
-	for _, id := range out {
-		if id == systemOrgID {
-			return out
-		}
-	}
-	return append(out, systemOrgID)
+	return platform.ScopeWithSystemOrg(scope)
 }
 
 // withOrgTx fails closed on an empty scope, then runs fn under RLS scope+system org.
@@ -126,7 +116,16 @@ func (r *LocalizationRepository) UpdateLanguage(ctx context.Context, scope []uui
 	var ver int32
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
-		var e error
+		cur, e := q.GetLanguage(ctx, arg.ID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("language not found")
+		}
+		if e != nil {
+			return e
+		}
+		if cur.OrganizationID == systemOrgID {
+			return httpx.Forbidden("system language cannot be modified")
+		}
 		ver, e = q.UpdateLanguage(ctx, arg)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return stale("language")
@@ -154,6 +153,11 @@ func (r *LocalizationRepository) CreateTranslation(ctx context.Context, scope []
 	var out localizationdb.CreateTranslationRow
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
+		if _, e := q.GetLanguageByCode(ctx, arg.LanguageCode); errors.Is(e, pgx.ErrNoRows) {
+			return httpx.Unprocessable("UNKNOWN_LANGUAGE", "language code is not configured")
+		} else if e != nil {
+			return e
+		}
 		var e error
 		if out, e = q.CreateTranslation(ctx, arg); e != nil {
 			return e
@@ -199,7 +203,16 @@ func (r *LocalizationRepository) UpdateTranslation(ctx context.Context, scope []
 	var ver int32
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
-		var e error
+		cur, e := q.GetTranslation(ctx, arg.ID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("translation not found")
+		}
+		if e != nil {
+			return e
+		}
+		if cur.OrganizationID == systemOrgID {
+			return httpx.Forbidden("system translation cannot be modified")
+		}
 		ver, e = q.UpdateTranslation(ctx, arg)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return stale("translation")
@@ -218,6 +231,16 @@ func (r *LocalizationRepository) UpdateTranslation(ctx context.Context, scope []
 func (r *LocalizationRepository) DeleteTranslation(ctx context.Context, scope []uuid.UUID, arg localizationdb.DeleteTranslationParams, corr uuid.UUID) error {
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
+		cur, e := q.GetTranslation(ctx, arg.ID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("translation not found")
+		}
+		if e != nil {
+			return e
+		}
+		if cur.OrganizationID == systemOrgID {
+			return httpx.Forbidden("system translation cannot be deleted")
+		}
 		n, e := q.DeleteTranslation(ctx, arg)
 		if e != nil {
 			return e
@@ -318,7 +341,16 @@ func (r *LocalizationRepository) UpdateLocaleFormat(ctx context.Context, scope [
 	var ver int32
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
-		var e error
+		cur, e := q.GetLocaleFormat(ctx, arg.ID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("locale format not found")
+		}
+		if e != nil {
+			return e
+		}
+		if cur.OrganizationID == systemOrgID {
+			return httpx.Forbidden("system locale format cannot be modified")
+		}
 		ver, e = q.UpdateLocaleFormat(ctx, arg)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return stale("locale format")

@@ -93,18 +93,18 @@ SELECT
     CASE WHEN g.currency_tc = COALESCE(g.currency_fc, org.functional_currency) THEN NUMERIC '1' ELSE CAST(NULL AS NUMERIC) END
   ) AS exchange_rate_fc,
   
-  -- Presentation Currency Triplet (Group Presentation Currency: USD)
+  -- Presentation Currency Triplet (Group Presentation Currency)
   COALESCE(
     g.amount_pc,
     CASE
-      WHEN g.currency_tc = 'USD' THEN g.amount_tc
+      WHEN g.currency_tc = '${dataform.projectConfig.vars.holding_presentation_currency}' THEN g.amount_tc
       ELSE g.amount_tc * fx_pc.mid_rate
     END
   ) AS amount_pc,
-  COALESCE(g.currency_pc, 'USD') AS currency_pc,
+  COALESCE(g.currency_pc, '${dataform.projectConfig.vars.holding_presentation_currency}') AS currency_pc,
   COALESCE(
     fx_pc.mid_rate,
-    CASE WHEN g.currency_tc = 'USD' THEN NUMERIC '1' ELSE CAST(NULL AS NUMERIC) END
+    CASE WHEN g.currency_tc = '${dataform.projectConfig.vars.holding_presentation_currency}' THEN NUMERIC '1' ELSE CAST(NULL AS NUMERIC) END
   ) AS exchange_rate_pc,
   
   g.source_last_updated_at
@@ -125,4 +125,4 @@ LEFT JOIN dedup_fx fx_fc
 LEFT JOIN dedup_fx fx_pc
   ON fx_pc.rate_date = g.posting_date
   AND fx_pc.from_currency = g.currency_tc
-  AND fx_pc.to_currency = COALESCE(g.currency_pc, 'USD')
+  AND fx_pc.to_currency = COALESCE(g.currency_pc, '${dataform.projectConfig.vars.holding_presentation_currency}')

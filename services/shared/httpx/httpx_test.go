@@ -201,3 +201,93 @@ func TestMetricsStatusWriterSupportsFlusherAndUnwrap(t *testing.T) {
 		t.Fatalf("unexpected flushed=%v code=%d", flushed, rec.Code)
 	}
 }
+
+func TestBeginIdempotentScopesByRouteAndReplaysETag(t *testing.T) {
+	idem := NewIdemStore()
+	scope := []uuid.UUID{uuid.New()}
+
+	type payload struct {
+		Name string `json:"name"`
+	}
+	var p1 payload
+	req1 := httptest.NewRequest(http.MethodPost, "/items", strings.NewReader(`{"name":"alpha"}`))
+	req1.Header.Set("Idempotency-Key", "shared-key")
+	rec1 := httptest.NewRecorder()
+	k1, h1, rel1, done1 := BeginIdempotent(rec1, req1, idem, scope, &p1)
+	if done1 {
+		t.Fatal("expected first /items request not to replay")
+	}
+	SaveIDResponse(rec1, idem, scope, k1, h1, http.StatusCreated, 3, map[string]string{"id": "1"})
+	rel1()
+
+	// Replay on /items returns ETag "3".
+	var p1Replay payload
+	req1Replay := httptest.NewRequest(http.MethodPost, "/items", strings.NewReader(`{"name":"alpha"}`))
+	req1Replay.Header.Set("Idempotency-Key", "shared-key")
+	rec1Replay := httptest.NewRecorder()
+	_, _, _, doneReplay := BeginIdempotent(rec1Replay, req1Replay, idem, scope, &p1Replay)
+	if !doneReplay || rec1Replay.Header().Get("ETag") != `"3"` {
+		t.Fatalf("expected replay with ETag \"3\", got done=%v etag=%q", doneReplay, rec1Replay.Header().Get("ETag"))
+	}
+
+	// Same Idempotency-Key on a DIFFERENT route (/parties) must NOT collide with /items.
+	var p2 payload
+	req2 := httptest.NewRequest(http.MethodPost, "/parties", strings.NewReader(`{"name":"beta"}`))
+	req2.Header.Set("Idempotency-Key", "shared-key")
+	rec2 := httptest.NewRecorder()
+	_, _, rel2, done2 := BeginIdempotent(rec2, req2, idem, scope, &p2)
+	defer rel2()
+	if done2 || p2.Name != "beta" {
+		t.Fatalf("expected /parties with same Idempotency-Key not to collide with /items, got done=%v", done2)
+	}
+}
+
+func TestGatewayHMACAndSystemOrgMutationGuard(t *testing.T) {
+	t.Setenv("REQUIRE_GATEWAY_SIGNATURE", "true")
+	t.Setenv("GATEWAY_HMAC_SECRET", "unit-test-hmac-secret-32-bytes-ok")
+
+	tenantID := uuid.New()
+	var capturedScope []uuid.UUID
+	var scopeErr error
+
+	h := Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedScope, scopeErr = RequireScope(r)
+		if scopeErr != nil {
+			WriteError(w, r, scopeErr)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// 1. Unsigned request is rejected when REQUIRE_GATEWAY_SIGNATURE=true.
+	req := httptest.NewRequest(http.MethodPost, "/items", nil)
+	req.Header.Set("X-Organization-Id", tenantID.String())
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 on unsigned request, got %d", rec.Code)
+	}
+
+	// 2. Signed request with tenant + systemOrg strips systemOrg on POST.
+	req = httptest.NewRequest(http.MethodPost, "/items", nil)
+	req.Header.Set("X-Organization-Id", tenantID.String()+",00000000-0000-0000-0000-000000000000")
+	req.Header.Set("X-Org-Scope", tenantID.String()+",00000000-0000-0000-0000-000000000000")
+	req.Header.Set("X-User-Id", uuid.NewString())
+	req.Header.Set("X-Roles", "FINANCE_MANAGER")
+	SignGatewayRequest(req, []byte("unit-test-hmac-secret-32-bytes-ok"))
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || len(capturedScope) != 1 || capturedScope[0] != tenantID {
+		t.Fatalf("expected tenant-only scope [%s], got code=%d scope=%v", tenantID, rec.Code, capturedScope)
+	}
+
+	// 3. Signed POST with systemOrg as primary active org is rejected with 403.
+	req = httptest.NewRequest(http.MethodPost, "/items", nil)
+	req.Header.Set("X-Organization-Id", "00000000-0000-0000-0000-000000000000")
+	SignGatewayRequest(req, []byte("unit-test-hmac-secret-32-bytes-ok"))
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 when systemOrg is active org on POST, got %d", rec.Code)
+	}
+}

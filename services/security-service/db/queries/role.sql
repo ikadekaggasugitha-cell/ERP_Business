@@ -28,7 +28,7 @@ WHERE deleted_at IS NULL
 
 -- name: UpdateRole :one
 UPDATE sec.role
-SET name = $3, is_system = $4, updated_by = $5
+SET name = $3, updated_by = $4
 WHERE id = $1 AND row_version = $2 AND is_system = false AND deleted_at IS NULL
   AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;

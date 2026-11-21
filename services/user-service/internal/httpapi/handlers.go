@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
 	"github.com/sinergiinvestasiproperti/erp/services/user-service/internal/userdb"
 )
 
@@ -63,7 +64,7 @@ type updateReq struct {
 
 type assignRoleReq struct {
 	RoleID            uuid.UUID `json:"roleId"`
-	OrganizationRefID uuid.UUID `json:"organizationRefId"`
+	OrganizationRefID string    `json:"organizationRefId"`
 }
 
 func (s *Server) create(w http.ResponseWriter, r *http.Request) {
@@ -467,17 +468,23 @@ func (s *Server) assignRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req assignRoleReq
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	key, hash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
 	if req.RoleID == uuid.Nil {
 		httpx.WriteError(w, r, httpx.BadRequest("roleId wajib diisi"))
 		return
 	}
-	orgRef := req.OrganizationRefID
-	if orgRef == uuid.Nil {
-		orgRef = scope[0]
+	orgRef := scope[0]
+	if rawOrg := strings.TrimSpace(req.OrganizationRefID); rawOrg != "" {
+		parsed, perr := httpx.ParseUUIDParam("organizationRefId", rawOrg)
+		if perr != nil {
+			httpx.WriteError(w, r, perr)
+			return
+		}
+		orgRef = parsed
 	}
 	if !orgInScope(scope, orgRef) {
 		httpx.WriteError(w, r, httpx.Forbidden("organizationRefId berada di luar scope akses"))
@@ -506,7 +513,7 @@ func (s *Server) assignRole(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, "role sudah terpasang"))
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, row.RowVersion, map[string]any{
+	httpx.SaveIDResponse(w, s.idem, scope, key, hash, http.StatusCreated, row.RowVersion, map[string]any{
 		"id":                row.ID,
 		"userId":            userID,
 		"roleId":            req.RoleID,
@@ -516,6 +523,9 @@ func (s *Server) assignRole(w http.ResponseWriter, r *http.Request) {
 }
 
 func orgInScope(scope []uuid.UUID, target uuid.UUID) bool {
+	if target == uuid.Nil || target == platform.SystemOrgID {
+		return false
+	}
 	for _, s := range scope {
 		if s == target {
 			return true

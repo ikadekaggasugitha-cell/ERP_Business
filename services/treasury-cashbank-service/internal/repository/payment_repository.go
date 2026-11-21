@@ -65,6 +65,17 @@ func (r *PaymentRepository) ConsumeAndSchedulePayment(
 		if err != nil {
 			return err
 		}
+		if pay.ExternalRef != nil && *pay.ExternalRef != "" {
+			if err := q.CreatePaymentAllocation(ctx, treasurydb.CreatePaymentAllocationParams{
+				OrganizationID:    pay.OrganizationID,
+				PaymentID:         row.ID,
+				TargetDocumentRef: *pay.ExternalRef,
+				AllocatedAmount:   pay.Amount,
+				CreatedBy:         sysActor,
+			}); err != nil {
+				return err
+			}
+		}
 		created = true
 		out = row.ID
 		return nil
@@ -164,7 +175,7 @@ func (r *PaymentRepository) ListWithCount(ctx context.Context, scope []uuid.UUID
 	return rows, total, err
 }
 
-func (r *PaymentRepository) UpdateDraft(ctx context.Context, scope []uuid.UUID, arg treasurydb.UpdateDraftPaymentParams) (int32, error) {
+func (r *PaymentRepository) UpdateDraft(ctx context.Context, scope []uuid.UUID, arg treasurydb.UpdateDraftPaymentParams, allocs []treasurydb.CreatePaymentAllocationParams) (int32, error) {
 	var ver int32
 	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
@@ -173,7 +184,27 @@ func (r *PaymentRepository) UpdateDraft(ctx context.Context, scope []uuid.UUID, 
 		}
 		var e error
 		ver, e = q.UpdateDraftPayment(ctx, arg)
-		return e
+		if e != nil {
+			return e
+		}
+		if allocs != nil {
+			if e = q.DeletePaymentAllocations(ctx, arg.ID); e != nil {
+				return e
+			}
+			actor := uuid.Nil
+			if arg.UpdatedBy != nil {
+				actor = *arg.UpdatedBy
+			}
+			for _, a := range allocs {
+				a.PaymentID = arg.ID
+				a.OrganizationID = scope[0]
+				a.CreatedBy = actor
+				if e = q.CreatePaymentAllocation(ctx, a); e != nil {
+					return e
+				}
+			}
+		}
+		return nil
 	})
 	return ver, err
 }
@@ -223,6 +254,31 @@ func (r *PaymentRepository) CreateStatementLine(ctx context.Context, scope []uui
 		return e
 	})
 	return out, err
+}
+
+func (r *PaymentRepository) CreateStatementLinesBatch(ctx context.Context, scope []uuid.UUID, lines []treasurydb.CreateBankStatementLineParams) ([]uuid.UUID, int32, error) {
+	createdIDs := make([]uuid.UUID, 0, len(lines))
+	var lastVer int32 = 1
+	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		checkedBanks := make(map[uuid.UUID]struct{}, 4)
+		for _, arg := range lines {
+			if _, ok := checkedBanks[arg.BankAccountID]; !ok {
+				if _, err := q.GetBankAccount(ctx, arg.BankAccountID); err != nil {
+					return err
+				}
+				checkedBanks[arg.BankAccountID] = struct{}{}
+			}
+			row, err := q.CreateBankStatementLine(ctx, arg)
+			if err != nil {
+				return err
+			}
+			createdIDs = append(createdIDs, row.ID)
+			lastVer = row.RowVersion
+		}
+		return nil
+	})
+	return createdIDs, lastVer, err
 }
 
 func (r *PaymentRepository) ListStatementLinesWithCount(ctx context.Context, scope []uuid.UUID, arg treasurydb.ListBankStatementLinesParams) ([]treasurydb.ListBankStatementLinesRow, int64, error) {

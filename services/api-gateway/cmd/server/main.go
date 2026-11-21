@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,6 +22,8 @@ import (
 	"github.com/sinergiinvestasiproperti/erp/services/api-gateway/internal/auth"
 	"github.com/sinergiinvestasiproperti/erp/services/api-gateway/internal/proxy"
 	"github.com/sinergiinvestasiproperti/erp/services/api-gateway/internal/sse"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/eventbus"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
 )
 
 const (
@@ -78,19 +83,20 @@ var rolePermissions = map[string][]string{
 		"inventory.create", "inventory.read", "inventory.update",
 		"sales.create", "sales.read", "sales.update",
 		"audit.read", "reporting.read", "org.read",
-		"ap:read", "ap:write",
-		"ar:read", "ar:write",
+		"gl:read", "gl:write", "gl:approve",
+		"ap:read", "ap:write", "ap:approve",
+		"ar:read", "ar:write", "ar:approve",
 		"coa:read", "coa:write",
-		"tax:read", "tax:write",
+		"tax:read", "tax:write", "tax:approve",
 		"currency:read", "currency:write",
-		"treasury:read", "treasury:write",
-		"workflow:read", "workflow:write", "workflow:approve",
+		"treasury:read", "treasury:write", "treasury:approve",
+		"workflow:read", "workflow:write", "workflow:approve", "workflow.approve",
 		"inventory:read", "inventory:write",
-		"procurement:read", "procurement:write",
+		"procurement:read", "procurement:write", "procurement:approve",
 		"sales:read", "sales:write",
 		"manufacturing:read", "manufacturing:write",
 		"hr:read", "hr:write",
-		"payroll:read", "payroll:write",
+		"payroll:read", "payroll:write", "payroll:approve", "payroll.approve",
 		"masterdata:read", "masterdata:write",
 		"org:read", "org:write",
 		"user:read", "user:write",
@@ -98,10 +104,10 @@ var rolePermissions = map[string][]string{
 		"audit:read",
 		"dimension:read", "dimension:write", "localization:read", "localization:write",
 		"fixedasset.read", "fixedasset.create", "fixedasset.update", "fixedasset:read", "fixedasset:write",
-		"budget.read", "budget.create", "budget.update", "budget:read", "budget:write",
-		"financialclose.read", "financialclose.create", "financialclose.update", "financialclose:read", "financialclose:write",
-		"consolidation.read", "consolidation.create", "consolidation.update", "consolidation:read", "consolidation:write",
-		"project.read", "project.create", "project.update", "project:read", "project:write",
+		"budget.read", "budget.create", "budget.update", "budget.approve", "budget:read", "budget:write", "budget:approve",
+		"financialclose.read", "financialclose.create", "financialclose.update", "financialclose.approve", "financialclose:read", "financialclose:write", "financialclose:approve",
+		"consolidation.read", "consolidation.create", "consolidation.update", "consolidation.approve", "consolidation:read", "consolidation:write", "consolidation:approve",
+		"project.read", "project.create", "project.update", "project.approve", "project:read", "project:write", "project:approve",
 		"asset.read", "asset.create", "asset.update", "asset:read", "asset:write",
 		"maintenance.read", "maintenance.create", "maintenance.update", "maintenance:read", "maintenance:write",
 		"crm.read", "crm.create", "crm.update", "crm:read", "crm:write",
@@ -116,26 +122,27 @@ var rolePermissions = map[string][]string{
 		"inventory.read",
 		"sales.read",
 		"audit.read", "reporting.read", "org.read",
-		"ap:read", "ap:write",
-		"ar:read", "ar:write",
+		"gl:read", "gl:write", "gl:approve",
+		"ap:read", "ap:write", "ap:approve",
+		"ar:read", "ar:write", "ar:approve",
 		"coa:read", "coa:write",
-		"tax:read", "tax:write",
+		"tax:read", "tax:write", "tax:approve",
 		"currency:read", "currency:write",
-		"treasury:read", "treasury:write",
-		"workflow:read", "workflow:write", "workflow:approve",
+		"treasury:read", "treasury:write", "treasury:approve",
+		"workflow:read", "workflow:write", "workflow:approve", "workflow.approve",
 		"inventory:read",
-		"procurement:read",
+		"procurement:read", "procurement:approve",
 		"sales:read",
 		"manufacturing:read",
-		"payroll:read", "payroll:write",
+		"payroll:read", "payroll:write", "payroll:approve", "payroll.approve",
 		"masterdata:read", "masterdata:write",
 		"org:read",
 		"audit:read",
 		"dimension:read", "dimension:write", "localization:read",
 		"fixedasset.read", "fixedasset.create", "fixedasset.update", "fixedasset:read", "fixedasset:write",
-		"budget.read", "budget.create", "budget.update", "budget:read", "budget:write",
-		"financialclose.read", "financialclose.create", "financialclose.update", "financialclose:read", "financialclose:write",
-		"consolidation.read", "consolidation.create", "consolidation.update", "consolidation:read", "consolidation:write",
+		"budget.read", "budget.create", "budget.update", "budget.approve", "budget:read", "budget:write", "budget:approve",
+		"financialclose.read", "financialclose.create", "financialclose.update", "financialclose.approve", "financialclose:read", "financialclose:write", "financialclose:approve",
+		"consolidation.read", "consolidation.create", "consolidation.update", "consolidation.approve", "consolidation:read", "consolidation:write", "consolidation:approve",
 		"project.read", "project:read", "asset.read", "asset:read", "maintenance.read", "maintenance:read", "crm.read", "crm:read",
 	},
 	"ACCOUNTANT": {
@@ -168,11 +175,11 @@ var rolePermissions = map[string][]string{
 		"procurement.create", "procurement.read", "procurement.update", "procurement.approve",
 		"inventory.create", "inventory.read", "inventory.update",
 		"ap.read", "org.read",
-		"procurement:read", "procurement:write",
+		"procurement:read", "procurement:write", "procurement:approve",
 		"inventory:read", "inventory:write",
 		"ap:read",
 		"masterdata:read", "masterdata:write",
-		"workflow:read", "workflow:write", "workflow:approve",
+		"workflow:read", "workflow:write", "workflow:approve", "workflow.approve",
 		"org:read",
 		"budget.read", "budget:read",
 		"asset.read", "asset:read", "asset:write",
@@ -193,8 +200,8 @@ var rolePermissions = map[string][]string{
 	},
 	"HR_MANAGER": {
 		"hr:read", "hr:write",
-		"payroll:read", "payroll:write",
-		"workflow:read", "workflow:write", "workflow:approve",
+		"payroll:read", "payroll:write", "payroll:approve", "payroll.approve",
+		"workflow:read", "workflow:write", "workflow:approve", "workflow.approve",
 		"org.read", "org:read",
 		"user:read",
 	},
@@ -232,18 +239,44 @@ func permissionsForRoles(roles []string) []string {
 	return out
 }
 
+func validateProductionConfig(appEnv, jwtSecret string, devAuthMode, allowAnon bool) error {
+	if !strings.EqualFold(strings.TrimSpace(appEnv), "production") {
+		return nil
+	}
+	s := strings.TrimSpace(jwtSecret)
+	if s == "" || s == "dev-erp-jwt-secret-change-in-prod" || s == "dev-erp-jwt-secret-change-me" || len(s) < 32 {
+		return errors.New("JWT_SECRET must be set to a strong >=32-byte secret when APP_ENV=production")
+	}
+	if devAuthMode {
+		return errors.New("DEV_AUTH_MODE must be false when APP_ENV=production")
+	}
+	if allowAnon {
+		return errors.New("DEV_AUTH_ALLOW_ANON must be false when APP_ENV=production")
+	}
+	return nil
+}
+
 func main() {
 	addr := getenv("HTTP_ADDR", ":8000")
+	appEnv := getenv("APP_ENV", "development")
 	secretStr := getenv("JWT_SECRET", "dev-erp-jwt-secret-change-in-prod")
-	if secretStr == "dev-erp-jwt-secret-change-in-prod" {
+	if secretStr == "dev-erp-jwt-secret-change-in-prod" || secretStr == "dev-erp-jwt-secret-change-me" {
 		log.Println("WARN: using default dev JWT_SECRET; set JWT_SECRET in production")
 	}
 	jwtSecret := []byte(secretStr)
 	devAuthMode := strings.EqualFold(getenv("DEV_AUTH_MODE", "true"), "true")
 	allowAnon := strings.EqualFold(getenv("DEV_AUTH_ALLOW_ANON", "false"), "true")
+	if err := validateProductionConfig(appEnv, secretStr, devAuthMode, allowAnon); err != nil {
+		log.Fatalf("gateway production config check failed: %v", err)
+	}
 	brokers := splitCSV(os.Getenv("KAFKA_BROKERS"))
 	allowedOrigins := splitCSV(getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173"))
-	allowChromeExt := strings.EqualFold(getenv("CORS_ALLOW_CHROME_EXTENSIONS", "true"), "true")
+	defaultAllowExt := "true"
+	if strings.EqualFold(appEnv, "production") {
+		defaultAllowExt = "false"
+	}
+	allowChromeExt := strings.EqualFold(getenv("CORS_ALLOW_CHROME_EXTENSIONS", defaultAllowExt), "true")
+	allowedExtIDs := splitCSV(os.Getenv("CORS_ALLOWED_EXTENSION_IDS"))
 
 	router, err := proxy.NewRouter()
 	if err != nil {
@@ -256,14 +289,19 @@ func main() {
 	hub := sse.NewHub()
 	go hub.StartKafkaBridge(ctx, brokers, getenv("KAFKA_GROUP_ID", "api-gateway-sse"))
 
-	mux := newGatewayMux(router, hub, jwtSecret, devAuthMode, allowAnon)
-	handler := withCORS(allowedOrigins, allowChromeExt)(mux)
+	metrics := httpx.NewMetrics("api-gateway")
+	mux := newGatewayMux(router, hub, jwtSecret, devAuthMode, allowAnon, brokers, metrics)
+	rps := 200
+	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("RATE_LIMIT_RPS"))); err == nil && v > 0 {
+		rps = v
+	}
+	handler := withRecovery(metrics.Wrap(withCORS(allowedOrigins, allowChromeExt, allowedExtIDs)(withRateLimit(rps, rps*2)(mux))))
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      0, // SSE connections are long-lived
+		WriteTimeout:      0, // SSE connections are long-lived; REST routes set per-request write deadlines
 		IdleTimeout:       120 * time.Second,
 	}
 
@@ -284,14 +322,28 @@ func main() {
 	log.Println("api-gateway stopped")
 }
 
-func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuthMode, allowAnon bool) *http.ServeMux {
+func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuthMode, allowAnon bool, extra ...any) *http.ServeMux {
+	var brokers []string
+	var metrics *httpx.Metrics
+	for _, item := range extra {
+		switch v := item.(type) {
+		case []string:
+			brokers = v
+		case *httpx.Metrics:
+			metrics = v
+		}
+	}
+	if metrics == nil {
+		metrics = httpx.NewMetrics("api-gateway")
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "api-gateway"})
 	})
-	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ready", "service": "api-gateway"})
-	})
+	mux.HandleFunc("GET /readyz", httpx.ReadinessHandler("api-gateway", func(c context.Context) error {
+		return eventbus.CheckBrokers(c, brokers)
+	}))
+	mux.HandleFunc("GET /metrics", metrics.Handler())
 
 	mux.HandleFunc("POST /api/v1/auth/login", handleLogin(jwtSecret, devAuthMode))
 	mux.HandleFunc("POST /api/v1/auth/logout", handleLogout())
@@ -300,6 +352,10 @@ func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuth
 	mux.HandleFunc("GET /api/v1/stream/events", handleSSE(hub, jwtSecret, allowAnon))
 
 	mux.HandleFunc("/api/v1/", func(w http.ResponseWriter, r *http.Request) {
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(30 * time.Second))
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10 MiB gateway payload cap
+		}
 		rp, ok := router.Match(r.URL.Path)
 		if !ok {
 			writeErr(w, http.StatusNotFound, "ROUTE_NOT_FOUND", "No upstream service configured for path", r.Header.Get("X-Correlation-Id"))
@@ -311,12 +367,16 @@ func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuth
 		r.Header.Del("X-Roles")
 		r.Header.Del("X-Permissions")
 		r.Header.Del("X-Org-Scope")
+		r.Header.Del("X-Gateway-Signature")
+		r.Header.Del("X-Gateway-Timestamp")
 
 		corrID := strings.TrimSpace(r.Header.Get("X-Correlation-Id"))
 		if _, err := uuid.Parse(corrID); err != nil {
 			corrID = uuid.NewString()
 			r.Header.Set("X-Correlation-Id", corrID)
 		}
+
+		isReadMethod := r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions
 
 		claims, err := extractClaims(r, jwtSecret, "access")
 		if err != nil {
@@ -329,12 +389,16 @@ func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuth
 			if orgID == systemOrgID {
 				orgID = defaultOrgID
 			}
-			scope := orgID + "," + systemOrgID
+			scope := orgID
+			if isReadMethod {
+				scope = orgID + "," + systemOrgID
+			}
 			r.Header.Set("X-Organization-Id", scope)
 			r.Header.Set("X-Org-Scope", scope)
 			r.Header.Set("X-User-Id", defaultUID)
 			r.Header.Set("X-Roles", "SYSTEM_ADMIN")
 			r.Header.Set("X-Permissions", strings.Join(permissionsForRoles([]string{"SYSTEM_ADMIN"}), ","))
+			httpx.SignGatewayRequest(r, jwtSecret)
 			rp.ServeHTTP(w, r)
 			return
 		}
@@ -358,11 +422,11 @@ func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuth
 
 		scopeList := []string{requestedOrg}
 		for _, id := range claims.OrgScope {
-			if id != requestedOrg {
+			if id != requestedOrg && id != systemOrgID {
 				scopeList = append(scopeList, id)
 			}
 		}
-		if !slices.Contains(scopeList, systemOrgID) {
+		if isReadMethod && !slices.Contains(scopeList, systemOrgID) {
 			scopeList = append(scopeList, systemOrgID)
 		}
 
@@ -378,6 +442,7 @@ func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuth
 		r.Header.Set("X-User-Id", claims.Subject)
 		r.Header.Set("X-Roles", strings.Join(claims.Roles, ","))
 		r.Header.Set("X-Permissions", strings.Join(effectivePerms, ","))
+		httpx.SignGatewayRequest(r, jwtSecret)
 		rp.ServeHTTP(w, r)
 	})
 	return mux
@@ -462,6 +527,7 @@ func handleLogin(secret []byte, devAuthMode bool) http.HandlerFunc {
 			Value:    token,
 			Path:     "/",
 			HttpOnly: true,
+			Secure:   isSecureCookie(r),
 			SameSite: http.SameSiteLaxMode,
 			MaxAge:   28800,
 		})
@@ -492,11 +558,30 @@ func handleLogout() http.HandlerFunc {
 			Value:    "",
 			Path:     "/",
 			HttpOnly: true,
+			Secure:   isSecureCookie(r),
 			SameSite: http.SameSiteLaxMode,
 			MaxAge:   -1,
 		})
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+func isSecureCookie(r *http.Request) bool {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("COOKIE_SECURE")), "true") {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("COOKIE_SECURE")), "false") {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production") {
+		return true
+	}
+	if r != nil {
+		if r.TLS != nil || strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https") {
+			return true
+		}
+	}
+	return false
 }
 
 func handleMe(secret []byte) http.HandlerFunc {
@@ -649,19 +734,35 @@ func extractClaims(r *http.Request, secret []byte, expectedUse string) (auth.Cla
 	if err != nil {
 		return auth.Claims{}, err
 	}
-	if expectedUse != "" && claims.TokenUse != "" && claims.TokenUse != expectedUse {
+	if expectedUse != "" && claims.TokenUse != expectedUse {
 		return auth.Claims{}, auth.ErrInvalidToken
 	}
 	return claims, nil
 }
 
-func withCORS(allowedOrigins []string, allowChromeExt bool) func(http.Handler) http.Handler {
+func isAllowedChromeExtensionOrigin(origin string, allowAll bool, allowedExtIDs []string) bool {
+	if !strings.HasPrefix(origin, "chrome-extension://") {
+		return false
+	}
+	extID := strings.TrimSpace(strings.TrimPrefix(origin, "chrome-extension://"))
+	extID = strings.TrimSuffix(extID, "/")
+	if len(allowedExtIDs) > 0 {
+		return slices.Contains(allowedExtIDs, extID)
+	}
+	return allowAll && extID != ""
+}
+
+func withCORS(allowedOrigins []string, allowChromeExt bool, extraExtIDs ...[]string) func(http.Handler) http.Handler {
+	var allowedExtIDs []string
+	if len(extraExtIDs) > 0 {
+		allowedExtIDs = extraExtIDs[0]
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
 			if origin != "" {
 				allowed := slices.Contains(allowedOrigins, origin) ||
-					(allowChromeExt && strings.HasPrefix(origin, "chrome-extension://"))
+					isAllowedChromeExtensionOrigin(origin, allowChromeExt, allowedExtIDs)
 				if allowed {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
 					w.Header().Set("Vary", "Origin")
@@ -673,6 +774,90 @@ func withCORS(allowedOrigins []string, allowChromeExt bool) func(http.Handler) h
 			}
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func withRecovery(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				cid := strings.TrimSpace(r.Header.Get("X-Correlation-Id"))
+				log.Printf("[gateway-panic] cid=%s panic=%v", cid, rec)
+				writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error", cid)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+type rateBucket struct {
+	tokens float64
+	last   time.Time
+}
+
+func withRateLimit(rps, burst int) func(http.Handler) http.Handler {
+	if rps <= 0 {
+		rps = 200
+	}
+	if burst < rps {
+		burst = rps * 2
+	}
+	var (
+		mu      sync.Mutex
+		buckets = make(map[string]*rateBucket)
+	)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/metrics" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			clientIP := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
+			if idx := strings.IndexByte(clientIP, ','); idx > 0 {
+				clientIP = strings.TrimSpace(clientIP[:idx])
+			}
+			if clientIP == "" {
+				host, _, err := net.SplitHostPort(r.RemoteAddr)
+				if err == nil && host != "" {
+					clientIP = host
+				} else {
+					clientIP = r.RemoteAddr
+				}
+			}
+			now := time.Now()
+			mu.Lock()
+			if len(buckets) > 10000 {
+				for k, b := range buckets {
+					if now.Sub(b.last) > 2*time.Minute {
+						delete(buckets, k)
+					}
+				}
+			}
+			b, ok := buckets[clientIP]
+			if !ok {
+				b = &rateBucket{tokens: float64(burst), last: now}
+				buckets[clientIP] = b
+			} else {
+				elapsed := now.Sub(b.last).Seconds()
+				b.tokens += elapsed * float64(rps)
+				if b.tokens > float64(burst) {
+					b.tokens = float64(burst)
+				}
+				b.last = now
+			}
+			allowed := false
+			if b.tokens >= 1.0 {
+				b.tokens -= 1.0
+				allowed = true
+			}
+			mu.Unlock()
+			if !allowed {
+				w.Header().Set("Retry-After", "1")
+				writeErr(w, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED", "Too many requests; please retry shortly", r.Header.Get("X-Correlation-Id"))
 				return
 			}
 			next.ServeHTTP(w, r)

@@ -64,3 +64,52 @@ INSERT INTO crm.customer_segment (id, organization_id, code, name, criteria, cre
   ('c9000000-0000-4000-8000-000000000102', '22222222-2222-2222-2222-222222222222', 'TENANT_B', 'Segmen Tenant B', '{"tenant": "B"}'::jsonb, '00000000-0000-0000-0000-000000000001')
 ON CONFLICT (organization_id, code) DO NOTHING;
 \endif
+
+\if :db = 'coa_db'
+INSERT INTO fin.fiscal_calendar (id, organization_id, code, name, period_type, created_by) VALUES
+  ('ca1e0000-0000-4000-8000-000000000101', '11111111-1111-1111-1111-111111111111', 'CAL_A', 'Calendar A', 'Monthly', '00000000-0000-0000-0000-000000000001'),
+  ('ca1e0000-0000-4000-8000-000000000102', '22222222-2222-2222-2222-222222222222', 'CAL_B', 'Calendar B', 'Monthly', '00000000-0000-0000-0000-000000000001')
+ON CONFLICT (organization_id, code) DO NOTHING;
+\endif
+
+\if :db = 'currency_db'
+INSERT INTO cur.exchange_rate_type (organization_id, code, name, created_by) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'TENANT_A', 'Rate Type A', '00000000-0000-0000-0000-000000000001'),
+  ('22222222-2222-2222-2222-222222222222', 'TENANT_B', 'Rate Type B', '00000000-0000-0000-0000-000000000001')
+ON CONFLICT (organization_id, code) DO NOTHING;
+\endif
+
+\if :db = 'localization_db'
+INSERT INTO loc.language (organization_id, code, name, is_active, is_fallback, created_by) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'xa', 'Tenant A Lang', true, false, '00000000-0000-0000-0000-000000000001'),
+  ('22222222-2222-2222-2222-222222222222', 'xb', 'Tenant B Lang', true, false, '00000000-0000-0000-0000-000000000001')
+ON CONFLICT (organization_id, code) DO NOTHING;
+\endif
+
+\if :db = 'org_db'
+INSERT INTO org.organization_type (organization_id, code, name, level_hint, is_active, created_by) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'TENANT_A', 'Type A', 1, true, '00000000-0000-0000-0000-000000000001'),
+  ('22222222-2222-2222-2222-222222222222', 'TENANT_B', 'Type B', 1, true, '00000000-0000-0000-0000-000000000001')
+ON CONFLICT (organization_id, code) DO NOTHING;
+\endif
+
+\if :db = 'security_db'
+INSERT INTO sec.role (organization_id, code, name, is_system, created_by) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'ROLE_TENANT_A', 'Role Tenant A', false, '00000000-0000-0000-0000-000000000001'),
+  ('22222222-2222-2222-2222-222222222222', 'ROLE_TENANT_B', 'Role Tenant B', false, '00000000-0000-0000-0000-000000000001')
+ON CONFLICT (organization_id, code) DO NOTHING;
+\endif
+
+\if :db = 'tax_db'
+INSERT INTO tax.tax_code (organization_id, code, rate, tax_type, created_by) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'TAX_A', 11.0000, 'VAT', '00000000-0000-0000-0000-000000000001'),
+  ('22222222-2222-2222-2222-222222222222', 'TAX_B', 11.0000, 'VAT', '00000000-0000-0000-0000-000000000001')
+ON CONFLICT (organization_id, code) DO NOTHING;
+\endif
+
+\if :db = 'dimension_db'
+INSERT INTO cc.cost_center (organization_id, code, name, effective_from, status, created_by) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'CC_A', 'Cost Center A', '2026-01-01', 'Active', '00000000-0000-0000-0000-000000000001'),
+  ('22222222-2222-2222-2222-222222222222', 'CC_B', 'Cost Center B', '2026-01-01', 'Active', '00000000-0000-0000-0000-000000000001')
+ON CONFLICT (organization_id, code) DO NOTHING;
+\endif

@@ -30,12 +30,14 @@ WHERE deleted_at IS NULL
 UPDATE md.party
 SET name = $3, party_type = $4, tax_id = $5, is_shared = $6, updated_by = $7
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: DeleteParty :execrows
 UPDATE md.party
 SET deleted_at = now(), updated_by = $3
-WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL;
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
 
 -- name: CreatePartyAddress :one
 INSERT INTO md.party_address (
@@ -84,12 +86,14 @@ WHERE deleted_at IS NULL
 UPDATE md.item
 SET name = $3, item_type = $4, base_uom = $5, updated_by = $6
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: DeleteItem :execrows
 UPDATE md.item
 SET deleted_at = now(), updated_by = $3
-WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL;
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
 
 -- name: CreateItemUOM :exec
 INSERT INTO md.item_uom (

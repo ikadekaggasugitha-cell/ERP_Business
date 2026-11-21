@@ -66,10 +66,10 @@ SELECT COUNT(*) FROM bud.budget_control_policy WHERE deleted_at IS NULL;
 
 -- name: ResolveBudgetControlType :one
 SELECT control_type FROM bud.budget_control_policy
-WHERE organization_id = $1 AND deleted_at IS NULL
+WHERE organization_id IN ($1, '00000000-0000-0000-0000-000000000000'::uuid) AND deleted_at IS NULL
   AND (account_ref IS NULL OR account_ref = sqlc.narg('account_ref')::uuid)
   AND (transaction_type IS NULL OR transaction_type = sqlc.narg('transaction_type')::text)
-ORDER BY (account_ref IS NOT NULL) DESC, (transaction_type IS NOT NULL) DESC, created_at DESC
+ORDER BY (organization_id = $1) DESC, (account_ref IS NOT NULL) DESC, (transaction_type IS NOT NULL) DESC, created_at DESC
 LIMIT 1;
 
 -- name: CreateBudgetCommitment :one

@@ -923,6 +923,8 @@ INSERT INTO inv.stock_balance (
 ON CONFLICT (organization_id, warehouse_id, item_id) DO UPDATE
 SET on_hand_qty = inv.stock_balance.on_hand_qty + EXCLUDED.on_hand_qty,
     avg_cost = CASE
+        WHEN EXCLUDED.avg_cost > 0 AND (inv.stock_balance.on_hand_qty + EXCLUDED.on_hand_qty) > 0
+            THEN ROUND(((inv.stock_balance.on_hand_qty * inv.stock_balance.avg_cost) + (EXCLUDED.on_hand_qty * EXCLUDED.avg_cost)) / (inv.stock_balance.on_hand_qty + EXCLUDED.on_hand_qty), 4)
         WHEN EXCLUDED.avg_cost > 0 THEN EXCLUDED.avg_cost
         ELSE inv.stock_balance.avg_cost
     END,

@@ -16,6 +16,7 @@ const changeUserStatus = `-- name: ChangeUserStatus :one
 UPDATE usr.app_user
 SET status = $3, updated_by = $4
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING status, row_version
 `
 
@@ -140,6 +141,7 @@ const deleteAppUser = `-- name: DeleteAppUser :execrows
 UPDATE usr.app_user
 SET deleted_at = now(), updated_by = $3
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type DeleteAppUserParams struct {
@@ -405,6 +407,7 @@ SET email = $3,
     default_organization_id = $5,
     updated_by = $6
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING status, row_version
 `
 

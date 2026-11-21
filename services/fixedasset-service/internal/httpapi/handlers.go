@@ -1,7 +1,10 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -16,12 +19,17 @@ import (
 
 type Store interface {
 	CreateCategory(ctx context.Context, scope []uuid.UUID, arg fadb.CreateAssetCategoryParams) (fadb.CreateAssetCategoryRow, error)
+	GetCategory(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (fadb.FaAssetCategory, error)
 	ListCategories(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]fadb.FaAssetCategory, int64, error)
+	UpdateCategory(ctx context.Context, scope []uuid.UUID, arg fadb.UpdateAssetCategoryParams) (int32, error)
+	DeleteCategory(ctx context.Context, scope []uuid.UUID, arg fadb.DeleteAssetCategoryParams) error
 	CreateAsset(ctx context.Context, scope []uuid.UUID, arg fadb.CreateFixedAssetParams) (fadb.CreateFixedAssetRow, error)
 	GetAsset(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (fadb.FaFixedAsset, error)
 	ListAssets(ctx context.Context, scope []uuid.UUID, status *string, limit, offset int32) ([]fadb.FaFixedAsset, int64, error)
+	UpdateAssetDraft(ctx context.Context, scope []uuid.UUID, arg fadb.UpdateFixedAssetDraftParams) (int32, error)
+	DeleteAssetDraft(ctx context.Context, scope []uuid.UUID, arg fadb.DeleteFixedAssetDraftParams) error
 	CapitalizeAndEmit(ctx context.Context, scope []uuid.UUID, id uuid.UUID, rowVer int32, txDate pgtype.Date, actor, corr uuid.UUID) (int32, error)
-	DepreciateAndEmit(ctx context.Context, scope []uuid.UUID, id uuid.UUID, rowVer int32, fiscalPeriodRef uuid.UUID, runDate pgtype.Date, actor, corr uuid.UUID) (fadb.CreateDepreciationEntryRow, string, string, int32, error)
+	DepreciateAndEmit(ctx context.Context, scope []uuid.UUID, id uuid.UUID, rowVer int32, fiscalPeriodRef uuid.UUID, runDate pgtype.Date, unitsProduced, totalEstimatedUnits *big.Rat, actor, corr uuid.UUID) (fadb.CreateDepreciationEntryRow, string, string, int32, error)
 	DisposeAndEmit(ctx context.Context, scope []uuid.UUID, id uuid.UUID, rowVer int32, proceeds pgtype.Numeric, txDate pgtype.Date, notes *string, actor, corr uuid.UUID) (int32, string, error)
 	ListDepreciationEntries(ctx context.Context, scope []uuid.UUID, assetID uuid.UUID) ([]fadb.FaDepreciationEntry, error)
 	ListTransactions(ctx context.Context, scope []uuid.UUID, assetID uuid.UUID) ([]fadb.FaAssetTransaction, error)
@@ -37,14 +45,37 @@ func NewServer(repo Store) *Server { return &Server{repo: repo, idem: httpx.NewI
 func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /asset-categories", s.listCategories)
 	mux.HandleFunc("POST /asset-categories", s.createCategory)
+	mux.HandleFunc("GET /asset-categories/{id}", s.getCategory)
+	mux.HandleFunc("PUT /asset-categories/{id}", s.updateCategory)
+	mux.HandleFunc("DELETE /asset-categories/{id}", s.deleteCategory)
 	mux.HandleFunc("GET /fixed-assets", s.listAssets)
 	mux.HandleFunc("POST /fixed-assets", s.createAsset)
 	mux.HandleFunc("GET /fixed-assets/{id}", s.getAsset)
+	mux.HandleFunc("PUT /fixed-assets/{id}", s.updateAssetDraft)
+	mux.HandleFunc("DELETE /fixed-assets/{id}", s.deleteAssetDraft)
 	mux.HandleFunc("POST /fixed-assets/{id}/capitalize", s.capitalizeAsset)
 	mux.HandleFunc("POST /fixed-assets/{id}/depreciate", s.depreciateAsset)
 	mux.HandleFunc("POST /fixed-assets/{id}/dispose", s.disposeAsset)
 	mux.HandleFunc("GET /fixed-assets/{id}/depreciation-entries", s.listDepreciationEntries)
 	mux.HandleFunc("GET /fixed-assets/{id}/transactions", s.listTransactions)
+}
+
+func beginIdemOptional(w http.ResponseWriter, r *http.Request, idem *httpx.IdemStore, scope []uuid.UUID, dst any) (string, string, func(), bool) {
+	if dst == nil {
+		var empty map[string]any
+		dst = &empty
+	}
+	if r.Body == nil {
+		r.Body = io.NopCloser(strings.NewReader("{}"))
+	} else {
+		raw, err := io.ReadAll(io.LimitReader(r.Body, (1<<20)+1))
+		if err == nil && len(bytes.TrimSpace(raw)) == 0 {
+			r.Body = io.NopCloser(strings.NewReader("{}"))
+		} else {
+			r.Body = io.NopCloser(bytes.NewReader(raw))
+		}
+	}
+	return httpx.BeginIdempotent(w, r, idem, scope, dst)
 }
 
 func requireRead(w http.ResponseWriter, r *http.Request) ([]uuid.UUID, bool) {
@@ -82,6 +113,82 @@ func validMethod(m string) bool {
 	return m == "StraightLine" || m == "DecliningBalance" || m == "UnitsOfProduction"
 }
 
+func categoryDTO(c fadb.FaAssetCategory) map[string]any {
+	return map[string]any{
+		"id":                        c.ID,
+		"organizationId":            c.OrganizationID,
+		"code":                      c.Code,
+		"name":                      c.Name,
+		"defaultDepreciationMethod": c.DefaultDepreciationMethod,
+		"defaultUsefulLifeMonths":   c.DefaultUsefulLifeMonths,
+		"isActive":                  c.IsActive,
+		"isSystem":                  c.OrganizationID == platform.SystemOrgID,
+		"rowVersion":                c.RowVersion,
+	}
+}
+
+func assetDTO(a fadb.FaFixedAsset) map[string]any {
+	return map[string]any{
+		"id":                           a.ID,
+		"organizationId":               a.OrganizationID,
+		"assetNo":                      a.AssetNo,
+		"name":                         a.Name,
+		"assetCategoryId":              a.AssetCategoryID,
+		"financialOrganizationRef":     a.FinancialOrganizationRef,
+		"acquisitionDate":              platform.FormatDate(a.AcquisitionDate),
+		"acquisitionCost":              platform.FormatNumeric(a.AcquisitionCost, 4),
+		"salvageValue":                 platform.FormatNumeric(a.SalvageValue, 4),
+		"usefulLifeMonths":             a.UsefulLifeMonths,
+		"depreciationMethod":           a.DepreciationMethod,
+		"depreciationStartDate":        platform.FormatDate(a.DepreciationStartDate),
+		"assetAccountId":               a.AssetAccountID,
+		"accumDepreciationAccountId":   a.AccumDepreciationAccountID,
+		"depreciationExpenseAccountId": a.DepreciationExpenseAccountID,
+		"costCenterRef":                a.CostCenterRef,
+		"netBookValue":                 platform.FormatNumeric(a.NetBookValue, 4),
+		"parentAssetId":                a.ParentAssetID,
+		"status":                       a.Status,
+		"rowVersion":                   a.RowVersion,
+	}
+}
+
+func depreciationEntryDTO(e fadb.FaDepreciationEntry) map[string]any {
+	return map[string]any{
+		"id":                      e.ID,
+		"organizationId":          e.OrganizationID,
+		"fixedAssetId":            e.FixedAssetID,
+		"fiscalPeriodRef":         e.FiscalPeriodRef,
+		"depreciationAmount":      platform.FormatNumeric(e.DepreciationAmount, 4),
+		"accumulatedDepreciation": platform.FormatNumeric(e.AccumulatedDepreciation, 4),
+		"netBookValue":            platform.FormatNumeric(e.NetBookValue, 4),
+		"isPosted":                e.IsPosted,
+		"glJournalRef":            e.GlJournalRef,
+		"runDate":                 platform.FormatDate(e.RunDate),
+		"rowVersion":              e.RowVersion,
+	}
+}
+
+func transactionDTO(t fadb.FaAssetTransaction) map[string]any {
+	var gainLoss any
+	if t.GainLossAmount.Valid {
+		gainLoss = platform.FormatNumeric(t.GainLossAmount, 4)
+	}
+	return map[string]any{
+		"id":                           t.ID,
+		"organizationId":               t.OrganizationID,
+		"fixedAssetId":                 t.FixedAssetID,
+		"transactionType":              t.TransactionType,
+		"transactionDate":              platform.FormatDate(t.TransactionDate),
+		"amount":                       platform.FormatNumeric(t.Amount, 4),
+		"gainLossAmount":               gainLoss,
+		"fromFinancialOrganizationRef": t.FromFinancialOrganizationRef,
+		"toFinancialOrganizationRef":   t.ToFinancialOrganizationRef,
+		"glJournalRef":                 t.GlJournalRef,
+		"notes":                        t.Notes,
+		"rowVersion":                   t.RowVersion,
+	}
+}
+
 func (s *Server) listCategories(w http.ResponseWriter, r *http.Request) {
 	scope, ok := requireRead(w, r)
 	if !ok {
@@ -93,7 +200,29 @@ func (s *Server) listCategories(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, categoryDTO(row))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: out, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+}
+
+func (s *Server) getCategory(w http.ResponseWriter, r *http.Request) {
+	scope, ok := requireRead(w, r)
+	if !ok {
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	c, err := s.repo.GetCategory(r.Context(), scope, id)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteIDResponse(w, http.StatusOK, c.RowVersion, categoryDTO(c))
 }
 
 func (s *Server) createCategory(w http.ResponseWriter, r *http.Request) {
@@ -137,14 +266,81 @@ func (s *Server) createCategory(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func assetDTO(a fadb.FaFixedAsset) map[string]any {
-	return map[string]any{
-		"id": a.ID, "assetNo": a.AssetNo, "name": a.Name, "assetCategoryId": a.AssetCategoryID,
-		"financialOrganizationRef": a.FinancialOrganizationRef, "acquisitionDate": platform.FormatDate(a.AcquisitionDate),
-		"acquisitionCost": platform.FormatNumeric(a.AcquisitionCost, 4), "salvageValue": platform.FormatNumeric(a.SalvageValue, 4),
-		"usefulLifeMonths": a.UsefulLifeMonths, "depreciationMethod": a.DepreciationMethod,
-		"netBookValue": platform.FormatNumeric(a.NetBookValue, 4), "status": a.Status, "rowVersion": a.RowVersion,
+func (s *Server) updateCategory(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
 	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var req struct {
+		Name                      string `json:"name"`
+		DefaultDepreciationMethod string `json:"defaultDepreciationMethod"`
+		DefaultUsefulLifeMonths   *int32 `json:"defaultUsefulLifeMonths,omitempty"`
+		IsActive                  *bool  `json:"isActive,omitempty"`
+	}
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		httpx.WriteError(w, r, httpx.BadRequest("name is required"))
+		return
+	}
+	method := strings.TrimSpace(req.DefaultDepreciationMethod)
+	if method == "" {
+		method = "StraightLine"
+	}
+	if !validMethod(method) {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVALID_METHOD", "invalid depreciation method"))
+		return
+	}
+	active := true
+	if req.IsActive != nil {
+		active = *req.IsActive
+	}
+	next, err := s.repo.UpdateCategory(r.Context(), scope, fadb.UpdateAssetCategoryParams{
+		ID: id, RowVersion: rowVer, Name: strings.TrimSpace(req.Name),
+		DefaultDepreciationMethod: method, DefaultUsefulLifeMonths: req.DefaultUsefulLifeMonths,
+		IsActive: active, UpdatedBy: &user,
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"id": id, "rowVersion": next})
+}
+
+func (s *Server) deleteCategory(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := s.repo.DeleteCategory(r.Context(), scope, fadb.DeleteAssetCategoryParams{
+		ID: id, RowVersion: rowVer, UpdatedBy: &user,
+	}); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) listAssets(w http.ResponseWriter, r *http.Request) {
@@ -265,6 +461,89 @@ func (s *Server) getAsset(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteIDResponse(w, http.StatusOK, a.RowVersion, assetDTO(a))
 }
 
+func (s *Server) updateAssetDraft(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var req struct {
+		Name               string     `json:"name"`
+		SalvageValue       string     `json:"salvageValue"`
+		UsefulLifeMonths   int32      `json:"usefulLifeMonths"`
+		DepreciationMethod string     `json:"depreciationMethod"`
+		CostCenterRef      *uuid.UUID `json:"costCenterRef,omitempty"`
+	}
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		httpx.WriteError(w, r, httpx.BadRequest("name is required"))
+		return
+	}
+	if req.UsefulLifeMonths <= 0 {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVALID_LIFE", "usefulLifeMonths must be > 0"))
+		return
+	}
+	salvage, err := platform.ParseOptionalNumeric(req.SalvageValue)
+	if err != nil || platform.NumericToRat(salvage).Sign() < 0 {
+		httpx.WriteError(w, r, httpx.BadRequest("salvageValue must be >= 0"))
+		return
+	}
+	method := strings.TrimSpace(req.DepreciationMethod)
+	if method == "" {
+		method = "StraightLine"
+	}
+	if !validMethod(method) {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVALID_METHOD", "invalid depreciationMethod"))
+		return
+	}
+	next, err := s.repo.UpdateAssetDraft(r.Context(), scope, fadb.UpdateFixedAssetDraftParams{
+		ID: id, RowVersion: rowVer, Name: strings.TrimSpace(req.Name),
+		SalvageValue: salvage, UsefulLifeMonths: req.UsefulLifeMonths,
+		DepreciationMethod: method, CostCenterRef: req.CostCenterRef, UpdatedBy: &user,
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"id": id, "rowVersion": next})
+}
+
+func (s *Server) deleteAssetDraft(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := s.repo.DeleteAssetDraft(r.Context(), scope, fadb.DeleteFixedAssetDraftParams{
+		ID: id, RowVersion: rowVer, UpdatedBy: &user,
+	}); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) capitalizeAsset(w http.ResponseWriter, r *http.Request) {
 	scope, user, ok := requireWrite(w, r)
 	if !ok {
@@ -283,10 +562,11 @@ func (s *Server) capitalizeAsset(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TransactionDate string `json:"transactionDate"`
 	}
-	if err := httpx.DecodeOptionalJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := beginIdemOptional(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
 	txDate := pgtype.Date{Time: time.Now().UTC(), Valid: true}
 	if strings.TrimSpace(req.TransactionDate) != "" {
 		if d, perr := platform.ParseDate(req.TransactionDate); perr == nil {
@@ -301,7 +581,7 @@ func (s *Server) capitalizeAsset(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"id": id, "status": "Active", "rowVersion": next})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, next, map[string]any{"id": id, "status": "Active", "rowVersion": next})
 }
 
 func (s *Server) depreciateAsset(w http.ResponseWriter, r *http.Request) {
@@ -320,13 +600,16 @@ func (s *Server) depreciateAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		FiscalPeriodRef uuid.UUID `json:"fiscalPeriodRef"`
-		RunDate         string    `json:"runDate"`
+		FiscalPeriodRef     uuid.UUID `json:"fiscalPeriodRef"`
+		RunDate             string    `json:"runDate"`
+		UnitsProduced       string    `json:"unitsProduced,omitempty"`
+		TotalEstimatedUnits string    `json:"totalEstimatedUnits,omitempty"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
 	if req.FiscalPeriodRef == uuid.Nil {
 		httpx.WriteError(w, r, httpx.BadRequest("fiscalPeriodRef is required"))
 		return
@@ -340,12 +623,23 @@ func (s *Server) depreciateAsset(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	entry, depAmt, nbv, next, err := s.repo.DepreciateAndEmit(r.Context(), scope, id, rowVer, req.FiscalPeriodRef, runDate, user, httpx.CorrelationUUID(r))
+	var unitsProd, totalUnits *big.Rat
+	if strings.TrimSpace(req.UnitsProduced) != "" || strings.TrimSpace(req.TotalEstimatedUnits) != "" {
+		upNum, uerr := platform.ParseNumeric(req.UnitsProduced)
+		tuNum, terr := platform.ParseNumeric(req.TotalEstimatedUnits)
+		if uerr != nil || terr != nil || platform.NumericToRat(upNum).Sign() < 0 || platform.NumericToRat(tuNum).Sign() <= 0 {
+			httpx.WriteError(w, r, httpx.BadRequest("unitsProduced (>=0) and totalEstimatedUnits (>0) must be valid decimals"))
+			return
+		}
+		unitsProd = platform.NumericToRat(upNum)
+		totalUnits = platform.NumericToRat(tuNum)
+	}
+	entry, depAmt, nbv, next, err := s.repo.DepreciateAndEmit(r.Context(), scope, id, rowVer, req.FiscalPeriodRef, runDate, unitsProd, totalUnits, user, httpx.CorrelationUUID(r))
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, next, map[string]any{
 		"entryId": entry.ID, "depreciationAmount": depAmt, "netBookValue": nbv, "rowVersion": next,
 	})
 }
@@ -370,10 +664,11 @@ func (s *Server) disposeAsset(w http.ResponseWriter, r *http.Request) {
 		TransactionDate string  `json:"transactionDate"`
 		Notes           *string `json:"notes,omitempty"`
 	}
-	if err := httpx.DecodeOptionalJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := beginIdemOptional(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
 	proceeds, err := platform.ParseOptionalNumeric(req.ProceedsAmount)
 	if err != nil || platform.NumericToRat(proceeds).Sign() < 0 {
 		httpx.WriteError(w, r, httpx.BadRequest("proceedsAmount must be >= 0"))
@@ -393,7 +688,7 @@ func (s *Server) disposeAsset(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"id": id, "status": "Disposed", "gainLossAmount": gainLoss, "rowVersion": next})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, next, map[string]any{"id": id, "status": "Disposed", "gainLossAmount": gainLoss, "rowVersion": next})
 }
 
 func (s *Server) listDepreciationEntries(w http.ResponseWriter, r *http.Request) {
@@ -411,7 +706,11 @@ func (s *Server) listDepreciationEntries(w http.ResponseWriter, r *http.Request)
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(1, len(rows), len(rows))})
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, depreciationEntryDTO(row))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: out, Page: httpx.NewPageMeta(1, len(out), len(out))})
 }
 
 func (s *Server) listTransactions(w http.ResponseWriter, r *http.Request) {
@@ -429,5 +728,9 @@ func (s *Server) listTransactions(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(1, len(rows), len(rows))})
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, transactionDTO(row))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: out, Page: httpx.NewPageMeta(1, len(out), len(out))})
 }

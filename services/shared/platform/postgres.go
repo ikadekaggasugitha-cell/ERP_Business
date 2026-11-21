@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,18 +19,60 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// SystemOrgID is the global reference organization UUID (00000000-0000-0000-0000-000000000000).
+// Reference data seeded under SystemOrgID is read-only for tenants.
+var SystemOrgID = uuid.Nil
+
+var defaultDB atomic.Pointer[DB]
+
+// DefaultDB returns the most recently initialized process-wide DB pool (if any).
+func DefaultDB() *DB {
+	return defaultDB.Load()
+}
+
+// ScopeWithSystemOrg appends SystemOrgID to a non-empty tenant scope so global
+// reference rows remain visible under RLS while empty scopes still fail closed.
+func ScopeWithSystemOrg(scope []uuid.UUID) []uuid.UUID {
+	if len(scope) == 0 {
+		return nil
+	}
+	if slices.Contains(scope, SystemOrgID) {
+		return slices.Clone(scope)
+	}
+	out := make([]uuid.UUID, 0, len(scope)+1)
+	out = append(out, scope...)
+	out = append(out, SystemOrgID)
+	return out
+}
+
+// TenantOnlyScope strips SystemOrgID (00000000-0000-0000-0000-000000000000)
+// from an org scope slice so tenant mutations cannot target global system rows.
+func TenantOnlyScope(scope []uuid.UUID) []uuid.UUID {
+	if len(scope) == 0 {
+		return nil
+	}
+	out := make([]uuid.UUID, 0, len(scope))
+	for _, u := range scope {
+		if u != SystemOrgID {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
 // DB owns the connection pool. The pool MUST authenticate as a non-owner role
 // (erp_app_rw / erp_app_ro) so PostgreSQL Row-Level Security is enforced.
 type DB struct{ Pool *pgxpool.Pool }
 
 // New opens and verifies a pool using env-tunable connection limits.
+// Default MaxConns=5 ensures 30 microservices (150 total) fit safely within Postgres max_connections=250..300.
 func New(ctx context.Context, dsn string) (*DB, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("parse dsn: %w", err)
 	}
-	cfg.MaxConns = envInt32("DATABASE_MAX_OPEN_CONNS", 15)
-	cfg.MinConns = envInt32("DATABASE_MIN_CONNS", 2)
+	cfg.MaxConns = envInt32("DATABASE_MAX_OPEN_CONNS", 5)
+	cfg.MinConns = envInt32("DATABASE_MIN_CONNS", 1)
 	cfg.MaxConnLifetime = envDuration("DATABASE_CONN_MAX_LIFETIME", time.Hour)
 	cfg.MaxConnIdleTime = envDuration("DATABASE_CONN_MAX_IDLE_TIME", 5*time.Minute)
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
@@ -39,7 +83,9 @@ func New(ctx context.Context, dsn string) (*DB, error) {
 		pool.Close()
 		return nil, fmt.Errorf("ping: %w", err)
 	}
-	return &DB{Pool: pool}, nil
+	db := &DB{Pool: pool}
+	defaultDB.Store(db)
+	return db, nil
 }
 
 func envInt32(key string, fallback int32) int32 {
@@ -111,6 +157,25 @@ func (d *DB) WithOrgScope(ctx context.Context, scope []uuid.UUID, fn func(pgx.Tx
 	}
 	committed = true
 	return nil
+}
+
+// WithOrgReadScope runs fn inside a transaction with SystemOrgID included in app.org_scope
+// (for non-empty caller scopes) so global reference rows remain visible on read paths.
+func (d *DB) WithOrgReadScope(ctx context.Context, scope []uuid.UUID, fn func(pgx.Tx) error) error {
+	if len(scope) == 0 {
+		return errors.New("org scope must not be empty")
+	}
+	return d.WithOrgScope(ctx, ScopeWithSystemOrg(scope), fn)
+}
+
+// WithTenantWriteScope runs fn inside a transaction with SystemOrgID stripped from app.org_scope,
+// rejecting requests whose scope contains no active tenant organization.
+func (d *DB) WithTenantWriteScope(ctx context.Context, scope []uuid.UUID, fn func(pgx.Tx) error) error {
+	ts := TenantOnlyScope(scope)
+	if len(ts) == 0 {
+		return errors.New("active tenant organization required (system org is read-only)")
+	}
+	return d.WithOrgScope(ctx, ts, fn)
 }
 
 type PGErrorKind int

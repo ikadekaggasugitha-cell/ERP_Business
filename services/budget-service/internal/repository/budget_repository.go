@@ -48,7 +48,7 @@ func (r *BudgetRepository) withOrgTx(ctx context.Context, scope []uuid.UUID, fn 
 	if len(scope) == 0 {
 		return errors.New("org scope must not be empty")
 	}
-	return r.db.WithOrgScope(ctx, scope, fn)
+	return r.db.WithOrgScope(ctx, platform.ScopeWithSystemOrg(scope), fn)
 }
 
 func emit(ctx context.Context, q *budgetdb.Queries, aggType, eventType string, id, org, corr uuid.UUID, payload map[string]any) error {
@@ -136,6 +136,31 @@ func (r *BudgetRepository) ListBudgets(ctx context.Context, scope []uuid.UUID, s
 	return rows, total, err
 }
 
+func (r *BudgetRepository) DeleteDraftBudget(ctx context.Context, scope []uuid.UUID, arg budgetdb.DeleteDraftBudgetParams) error {
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		b, e := q.GetBudget(ctx, arg.ID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("budget not found")
+		}
+		if e != nil {
+			return e
+		}
+		if b.Status != "Draft" {
+			return httpx.Conflict("INVALID_STATE", "only Draft budget can be deleted")
+		}
+		n, e := q.DeleteDraftBudget(ctx, arg)
+		if e != nil {
+			return e
+		}
+		if n == 0 {
+			return httpx.Conflict("STALE_ROW_VERSION", "rowVersion mismatch")
+		}
+		return nil
+	})
+	return httpx.MapDBError(err, "")
+}
+
 func (r *BudgetRepository) TransitionBudgetAndEmit(ctx context.Context, scope []uuid.UUID, id uuid.UUID, rowVer int32, targetStatus string, actor, corr uuid.UUID) (int32, error) {
 	var newVer int32
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
@@ -154,6 +179,16 @@ func (r *BudgetRepository) TransitionBudgetAndEmit(ctx context.Context, scope []
 			return httpx.Conflict("INVALID_STATE", fmt.Sprintf("cannot transition budget from %s to %s", b.Status, targetStatus))
 		}
 		active := targetStatus == "Approved"
+		if active {
+			if _, e = tx.Exec(ctx, `
+				UPDATE bud.budget
+				SET is_active = FALSE, updated_by = $4
+				WHERE organization_id = $1 AND financial_organization_ref = $2 AND fiscal_year_ref = $3
+				  AND id <> $5 AND is_active = TRUE AND deleted_at IS NULL
+			`, b.OrganizationID, b.FinancialOrganizationRef, b.FiscalYearRef, actor, b.ID); e != nil {
+				return e
+			}
+		}
 		newVer, e = q.TransitionBudget(ctx, budgetdb.TransitionBudgetParams{
 			ID: id, RowVersion: rowVer, Status: targetStatus, IsActive: active, UpdatedBy: &actor,
 		})
@@ -239,11 +274,57 @@ func (r *BudgetRepository) CheckAvailability(ctx context.Context, scope []uuid.U
 	return res, err
 }
 
+func (r *BudgetRepository) ListCommitments(ctx context.Context, scope []uuid.UUID, budgetID *uuid.UUID, limit, offset int32) ([]budgetdb.BudBudgetCommitment, int64, error) {
+	var rows []budgetdb.BudBudgetCommitment
+	var total int64
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		var e error
+		if total, e = q.CountBudgetCommitments(ctx, budgetID); e != nil {
+			return e
+		}
+		rows, e = q.ListBudgetCommitments(ctx, budgetdb.ListBudgetCommitmentsParams{
+			BudgetID: budgetID, Limit: limit, Offset: offset,
+		})
+		return e
+	})
+	return rows, total, err
+}
+
 func (r *BudgetRepository) CreateCommitmentAndEmit(ctx context.Context, scope []uuid.UUID, arg budgetdb.CreateBudgetCommitmentParams, corr uuid.UUID) (budgetdb.CreateBudgetCommitmentRow, error) {
 	var out budgetdb.CreateBudgetCommitmentRow
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
-		var e error
+		b, e := q.GetBudget(ctx, arg.BudgetID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("budget not found")
+		}
+		if e != nil {
+			return e
+		}
+		if b.Status != "Approved" {
+			return httpx.Conflict("BUDGET_NOT_APPROVED", "commitments can only be created against Approved budgets")
+		}
+		totBud, e := q.SumBudgetLines(ctx, budgetdb.SumBudgetLinesParams{BudgetID: b.ID})
+		if e != nil {
+			return e
+		}
+		totCom, e := q.SumActiveCommitments(ctx, b.ID)
+		if e != nil {
+			return e
+		}
+		if platform.NumericToRat(totBud).Sign() > 0 {
+			ctrl, ce := q.ResolveBudgetControlType(ctx, budgetdb.ResolveBudgetControlTypeParams{
+				OrganizationID: b.OrganizationID,
+			})
+			if ce != nil && !errors.Is(ce, pgx.ErrNoRows) {
+				return ce
+			}
+			eval := EvaluateBudgetPolicy(b.ID, platform.NumericToRat(totBud), platform.NumericToRat(totCom), platform.NumericToRat(arg.CommittedAmount), ctrl)
+			if !eval.Allowed {
+				return httpx.Unprocessable("BUDGET_EXCEEDED", "requested commitment exceeds available budget ("+eval.ControlType+")")
+			}
+		}
 		out, e = q.CreateBudgetCommitment(ctx, arg)
 		if e != nil {
 			return e
@@ -298,6 +379,29 @@ func (r *BudgetRepository) ConsumePOApproved(ctx context.Context, scope []uuid.U
 			"budgetId": b.ID.String(), "sourceDocumentRef": docRef, "amount": platform.FormatNumeric(amount, 4),
 		}); e != nil {
 			return e
+		}
+		applied = true
+		return nil
+	})
+	return applied, err
+}
+
+func (r *BudgetRepository) ConsumeAPInvoiceRecorded(ctx context.Context, scope []uuid.UUID, mark budgetdb.MarkEventProcessedParams, orgID, actor uuid.UUID, sourceRef string) (bool, error) {
+	applied := false
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		n, e := q.MarkEventProcessed(ctx, mark)
+		if e != nil || n == 0 {
+			return e
+		}
+		if sourceRef != "" {
+			if _, e = tx.Exec(ctx, `
+				UPDATE bud.budget_commitment
+				SET status = 'Consumed', updated_by = $3
+				WHERE organization_id = $1 AND source_document_ref = $2 AND status = 'Open' AND deleted_at IS NULL
+			`, orgID, sourceRef, actor); e != nil {
+				return e
+			}
 		}
 		applied = true
 		return nil
