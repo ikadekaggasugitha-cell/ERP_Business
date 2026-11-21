@@ -29,6 +29,35 @@ type CoaAccount struct {
 	RowVersion        int32              `json:"row_version"`
 }
 
+type CoaAccountCombination struct {
+	ID                uuid.UUID          `json:"id"`
+	OrganizationID    uuid.UUID          `json:"organization_id"`
+	ChartOfAccountsID uuid.UUID          `json:"chart_of_accounts_id"`
+	CombinationCode   string             `json:"combination_code"`
+	IsEnabled         bool               `json:"is_enabled"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	CreatedBy         uuid.UUID          `json:"created_by"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy         *uuid.UUID         `json:"updated_by"`
+	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
+	RowVersion        int32              `json:"row_version"`
+}
+
+type CoaAccountSegment struct {
+	ID                uuid.UUID          `json:"id"`
+	OrganizationID    uuid.UUID          `json:"organization_id"`
+	ChartOfAccountsID uuid.UUID          `json:"chart_of_accounts_id"`
+	SegmentNo         int32              `json:"segment_no"`
+	Name              string             `json:"name"`
+	Length            int32              `json:"length"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	CreatedBy         uuid.UUID          `json:"created_by"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy         *uuid.UUID         `json:"updated_by"`
+	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
+	RowVersion        int32              `json:"row_version"`
+}
+
 type CoaChartOfAccount struct {
 	ID             uuid.UUID          `json:"id"`
 	OrganizationID uuid.UUID          `json:"organization_id"`
@@ -75,6 +104,21 @@ type CoaProcessedEvent struct {
 	EventID     uuid.UUID          `json:"event_id"`
 	EventType   string             `json:"event_type"`
 	ProcessedAt pgtype.Timestamptz `json:"processed_at"`
+}
+
+type CoaSegmentValue struct {
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	SegmentID      uuid.UUID          `json:"segment_id"`
+	Value          string             `json:"value"`
+	Description    *string            `json:"description"`
+	IsActive       bool               `json:"is_active"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	CreatedBy      uuid.UUID          `json:"created_by"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy      *uuid.UUID         `json:"updated_by"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	RowVersion     int32              `json:"row_version"`
 }
 
 type FinFinancialOrganization struct {

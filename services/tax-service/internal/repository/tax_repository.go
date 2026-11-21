@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -100,6 +102,7 @@ func (r *TaxRepository) ReportEfakturAndEmit(
 func (r *TaxRepository) ConsumeAndCreateTaxInvoice(
 	ctx context.Context, scope []uuid.UUID,
 	mark taxdb.MarkEventProcessedParams, sysActor uuid.UUID,
+	taxCode string, explicitTax bool,
 	txn taxdb.CreateTaxTransactionParams, ev taxdb.InsertOutboxParams,
 ) (applied bool, err error) {
 	err = r.db.WithOrgScope(ctx, scope, func(dbtx pgx.Tx) error {
@@ -111,15 +114,82 @@ func (r *TaxRepository) ConsumeAndCreateTaxInvoice(
 		if n == 0 {
 			return nil
 		}
-		codeID, e := q.EnsureSystemTaxCode(ctx, taxdb.EnsureSystemTaxCodeParams{OrganizationID: txn.OrganizationID, CreatedBy: sysActor})
-		if e != nil {
-			return e
+
+		// Resolve tenant tax code: explicit code -> tenant default VAT -> system SYS-VAT (11%).
+		var codeID uuid.UUID
+		var resolvedCode string
+		var rateRat *big.Rat
+		if tc := strings.TrimSpace(taxCode); tc != "" {
+			if row, re := q.GetTaxCodeByCode(ctx, taxdb.GetTaxCodeByCodeParams{
+				OrganizationID: txn.OrganizationID,
+				Code:           tc,
+			}); re == nil {
+				codeID = row.ID
+				resolvedCode = row.Code
+				rateRat = platform.NumericToRat(row.Rate)
+			} else if !errors.Is(re, pgx.ErrNoRows) {
+				return re
+			}
 		}
+		if codeID == uuid.Nil {
+			if row, re := q.GetDefaultVATTaxCode(ctx, txn.OrganizationID); re == nil {
+				codeID = row.ID
+				resolvedCode = row.Code
+				rateRat = platform.NumericToRat(row.Rate)
+			} else if !errors.Is(re, pgx.ErrNoRows) {
+				return re
+			}
+		}
+		if codeID == uuid.Nil {
+			sysRow, re := q.EnsureSystemTaxCode(ctx, taxdb.EnsureSystemTaxCodeParams{
+				OrganizationID: txn.OrganizationID,
+				CreatedBy:      sysActor,
+			})
+			if re != nil {
+				return re
+			}
+			codeID = sysRow.ID
+			resolvedCode = sysRow.Code
+			rateRat = platform.NumericToRat(sysRow.Rate)
+		}
+
+		// If ar.invoice.issued did not provide an explicit taxAmount, calculate from resolved tenant rate.
+		if !explicitTax {
+			if rateRat == nil {
+				rateRat = big.NewRat(11, 1)
+			}
+			ratio := new(big.Rat).Quo(rateRat, big.NewRat(100, 1))
+			taxRat := new(big.Rat).Mul(platform.NumericToRat(txn.BaseAmount), ratio)
+			taxNum, re := platform.RatToNumeric(taxRat, 4)
+			if re != nil {
+				return re
+			}
+			txn.TaxAmount = taxNum
+		}
+
 		txn.TaxCodeID = codeID
 		created, e := q.CreateTaxTransaction(ctx, txn)
 		if e != nil {
 			return e
 		}
+
+		// Keep outbox payload synchronized with the persisted tax amount and resolved tax code.
+		var pm map[string]any
+		if len(ev.Payload) > 0 {
+			_ = json.Unmarshal(ev.Payload, &pm)
+		}
+		if pm == nil {
+			pm = map[string]any{}
+		}
+		pm["baseAmount"] = platform.FormatNumeric(txn.BaseAmount, 4)
+		pm["taxAmount"] = platform.FormatNumeric(txn.TaxAmount, 4)
+		if resolvedCode != "" {
+			pm["taxCode"] = resolvedCode
+		}
+		if updatedPayload, me := json.Marshal(pm); me == nil {
+			ev.Payload = updatedPayload
+		}
+
 		ev.AggregateID = created.ID
 		if e = q.InsertOutbox(ctx, ev); e != nil {
 			return e

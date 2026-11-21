@@ -90,6 +90,10 @@ func requireWrite(w http.ResponseWriter, r *http.Request) ([]uuid.UUID, uuid.UUI
 		httpx.WriteError(w, r, err)
 		return nil, uuid.Nil, false
 	}
+	if scope[0] == uuid.Nil {
+		httpx.WriteError(w, r, httpx.Forbidden("system organization cannot be used as active tenant"))
+		return nil, uuid.Nil, false
+	}
 	user, err := httpx.RequireUser(r)
 	if err != nil {
 		httpx.WriteError(w, r, err)
@@ -127,10 +131,11 @@ func (s *Server) createChart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req chartReq
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
 	if strings.TrimSpace(req.Code) == "" || strings.TrimSpace(req.Name) == "" {
 		httpx.WriteError(w, r, httpx.BadRequest("code dan name wajib diisi"))
 		return
@@ -138,6 +143,9 @@ func (s *Server) createChart(w http.ResponseWriter, r *http.Request) {
 	st := req.Structure
 	if len(st) == 0 {
 		st = []byte(`{}`)
+	} else if !json.Valid(st) {
+		httpx.WriteError(w, r, httpx.BadRequest("structure harus JSON valid"))
+		return
 	}
 	created, err := s.repo.CreateChartOfAccounts(r.Context(), scope, coadb.CreateChartOfAccountsParams{
 		OrganizationID: scope[0],
@@ -150,7 +158,7 @@ func (s *Server) createChart(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, "kode chart of accounts sudah dipakai"))
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, created.RowVersion, map[string]any{
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, created.RowVersion, map[string]any{
 		"id":         created.ID.String(),
 		"code":       strings.TrimSpace(req.Code),
 		"name":       strings.TrimSpace(req.Name),
@@ -226,9 +234,24 @@ func (s *Server) updateChart(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	if strings.TrimSpace(req.Name) == "" {
+		httpx.WriteError(w, r, httpx.BadRequest("name wajib diisi"))
+		return
+	}
 	st := req.Structure
 	if len(st) == 0 {
-		st = []byte(`{}`)
+		existing, err := s.repo.GetChartOfAccounts(r.Context(), scope, id)
+		if err != nil {
+			httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+			return
+		}
+		st = existing.Structure
+		if len(st) == 0 {
+			st = []byte(`{}`)
+		}
+	} else if !json.Valid(st) {
+		httpx.WriteError(w, r, httpx.BadRequest("structure harus JSON valid"))
+		return
 	}
 	newVer, err := s.repo.UpdateChartOfAccounts(r.Context(), scope, coadb.UpdateChartOfAccountsParams{
 		ID:         id,
@@ -465,6 +488,10 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	if strings.TrimSpace(req.Name) == "" {
+		httpx.WriteError(w, r, httpx.BadRequest("name wajib diisi"))
+		return
+	}
 	if !isValidAccountType(req.AccountType) {
 		httpx.WriteError(w, r, httpx.BadRequest("accountType tidak valid"))
 		return
@@ -480,14 +507,23 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, r, err)
 			return
 		}
+		if p == id {
+			httpx.WriteError(w, r, httpx.BadRequest("parentId tidak boleh mereferensikan diri sendiri"))
+			return
+		}
 		parentID = &p
+	}
+	existing, err := s.repo.GetByID(r.Context(), scope, id)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
 	}
 	allowPosting := true
 	if req.AllowPosting != nil {
 		allowPosting = *req.AllowPosting
 	}
 	payload, _ := json.Marshal(map[string]any{
-		"name": strings.TrimSpace(req.Name), "accountType": req.AccountType,
+		"code": existing.Code, "name": strings.TrimSpace(req.Name), "accountType": req.AccountType,
 		"isMonetary": req.IsMonetary, "allowPosting": allowPosting,
 	})
 	newVer, err := s.repo.UpdateAccountAndEmit(r.Context(), scope, coadb.UpdateAccountParams{
@@ -514,13 +550,16 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteIDResponse(w, http.StatusOK, newVer, accountDTO{
-		ID:           id.String(),
-		Name:         strings.TrimSpace(req.Name),
-		AccountType:  req.AccountType,
-		IsControl:    req.IsControl,
-		IsMonetary:   req.IsMonetary,
-		AllowPosting: allowPosting,
-		RowVersion:   newVer,
+		ID:                id.String(),
+		ChartOfAccountsID: existing.ChartOfAccountsID.String(),
+		Code:              existing.Code,
+		Name:              strings.TrimSpace(req.Name),
+		AccountType:       req.AccountType,
+		AccountClass:      accClass,
+		IsControl:         req.IsControl,
+		IsMonetary:        req.IsMonetary,
+		AllowPosting:      allowPosting,
+		RowVersion:        newVer,
 	})
 }
 
@@ -566,8 +605,13 @@ func (s *Server) createFinOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req finOrgReq
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
+		return
+	}
+	defer release()
+	if strings.TrimSpace(req.Code) == "" || strings.TrimSpace(req.Name) == "" {
+		httpx.WriteError(w, r, httpx.BadRequest("code dan name wajib diisi"))
 		return
 	}
 	orgRef, err := httpx.ParseUUIDParam("organizationRefId", req.OrganizationRefID)
@@ -585,12 +629,17 @@ func (s *Server) createFinOrg(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	ccy := strings.ToUpper(deflt(req.FunctionalCurrencyCode, "IDR"))
+	if len(ccy) != 3 {
+		httpx.WriteError(w, r, httpx.BadRequest("functionalCurrencyCode harus 3 huruf ISO"))
+		return
+	}
 	created, err := s.repo.CreateFinancialOrg(r.Context(), scope, coadb.CreateFinancialOrganizationParams{
 		OrganizationID:         scope[0],
 		Code:                   strings.TrimSpace(req.Code),
 		Name:                   strings.TrimSpace(req.Name),
 		OrganizationRefID:      orgRef,
-		FunctionalCurrencyCode: deflt(req.FunctionalCurrencyCode, "IDR"),
+		FunctionalCurrencyCode: ccy,
 		ChartOfAccountsID:      coaID,
 		FiscalCalendarID:       calID,
 		CreatedBy:              user,
@@ -599,7 +648,7 @@ func (s *Server) createFinOrg(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, "kode financial organization sudah dipakai"))
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID.String(), "rowVersion": created.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID.String(), "rowVersion": created.RowVersion})
 }
 
 func (s *Server) listFinOrgs(w http.ResponseWriter, r *http.Request) {
@@ -642,8 +691,13 @@ func (s *Server) createLedger(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req ledgerReq
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
+		return
+	}
+	defer release()
+	if strings.TrimSpace(req.Code) == "" {
+		httpx.WriteError(w, r, httpx.BadRequest("code wajib diisi"))
 		return
 	}
 	finOrgID, err := httpx.ParseUUIDParam("financialOrganizationId", req.FinancialOrganizationID)
@@ -651,19 +705,29 @@ func (s *Server) createLedger(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	lt := deflt(req.LedgerType, "Primary")
+	if lt != "Primary" && lt != "Statutory" && lt != "Management" && lt != "Consolidation" {
+		httpx.WriteError(w, r, httpx.BadRequest("ledgerType harus Primary, Statutory, Management, atau Consolidation"))
+		return
+	}
+	ccy := strings.ToUpper(deflt(req.CurrencyCode, "IDR"))
+	if len(ccy) != 3 {
+		httpx.WriteError(w, r, httpx.BadRequest("currencyCode harus 3 huruf ISO"))
+		return
+	}
 	created, err := s.repo.CreateLedger(r.Context(), scope, coadb.CreateLedgerParams{
 		OrganizationID:          scope[0],
 		FinancialOrganizationID: finOrgID,
 		Code:                    strings.TrimSpace(req.Code),
-		LedgerType:              deflt(req.LedgerType, "Primary"),
-		CurrencyCode:            deflt(req.CurrencyCode, "IDR"),
+		LedgerType:              lt,
+		CurrencyCode:            ccy,
 		CreatedBy:               user,
 	})
 	if err != nil {
 		httpx.WriteError(w, r, httpx.MapDBError(err, "kode ledger sudah dipakai"))
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID.String(), "rowVersion": created.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID.String(), "rowVersion": created.RowVersion})
 }
 
 func (s *Server) listLedgers(w http.ResponseWriter, r *http.Request) {
@@ -703,8 +767,13 @@ func (s *Server) createCalendar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req calendarReq
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
+		return
+	}
+	defer release()
+	if strings.TrimSpace(req.Code) == "" || strings.TrimSpace(req.Name) == "" {
+		httpx.WriteError(w, r, httpx.BadRequest("code dan name wajib diisi"))
 		return
 	}
 	pt := deflt(req.PeriodType, "Monthly")
@@ -723,7 +792,7 @@ func (s *Server) createCalendar(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, "kode fiscal calendar sudah dipakai"))
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID.String(), "rowVersion": created.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID.String(), "rowVersion": created.RowVersion})
 }
 
 func (s *Server) listCalendars(w http.ResponseWriter, r *http.Request) {
@@ -758,8 +827,13 @@ func (s *Server) createYear(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req yearReq
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
+		return
+	}
+	defer release()
+	if req.YearNo <= 0 || strings.TrimSpace(req.Name) == "" {
+		httpx.WriteError(w, r, httpx.BadRequest("yearNo (> 0) dan name wajib diisi"))
 		return
 	}
 	calID, err := httpx.ParseUUIDParam("fiscalCalendarId", req.FiscalCalendarID)
@@ -777,6 +851,10 @@ func (s *Server) createYear(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.BadRequest("endDate harus YYYY-MM-DD"))
 		return
 	}
+	if end.Time.Before(start.Time) {
+		httpx.WriteError(w, r, httpx.BadRequest("endDate tidak boleh sebelum startDate"))
+		return
+	}
 	created, err := s.repo.CreateFiscalYear(r.Context(), scope, coadb.CreateFiscalYearParams{
 		OrganizationID:   scope[0],
 		FiscalCalendarID: calID,
@@ -790,7 +868,7 @@ func (s *Server) createYear(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, "fiscal year sudah ada"))
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID.String(), "status": created.Status, "rowVersion": created.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID.String(), "status": created.Status, "rowVersion": created.RowVersion})
 }
 
 func (s *Server) listYears(w http.ResponseWriter, r *http.Request) {
@@ -833,8 +911,13 @@ func (s *Server) createPeriod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req periodReq
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
+		return
+	}
+	defer release()
+	if req.PeriodNo <= 0 {
+		httpx.WriteError(w, r, httpx.BadRequest("periodNo harus > 0"))
 		return
 	}
 	yearID, err := httpx.ParseUUIDParam("fiscalYearId", req.FiscalYearID)
@@ -852,6 +935,10 @@ func (s *Server) createPeriod(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.BadRequest("endDate harus YYYY-MM-DD"))
 		return
 	}
+	if end.Time.Before(start.Time) {
+		httpx.WriteError(w, r, httpx.BadRequest("endDate tidak boleh sebelum startDate"))
+		return
+	}
 	created, err := s.repo.CreateFiscalPeriod(r.Context(), scope, coadb.CreateFiscalPeriodParams{
 		OrganizationID: scope[0],
 		FiscalYearID:   yearID,
@@ -864,7 +951,7 @@ func (s *Server) createPeriod(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, "fiscal period sudah ada"))
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID.String(), "status": created.Status, "rowVersion": created.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID.String(), "status": created.Status, "rowVersion": created.RowVersion})
 }
 
 func (s *Server) listPeriods(w http.ResponseWriter, r *http.Request) {
@@ -874,6 +961,14 @@ func (s *Server) listPeriods(w http.ResponseWriter, r *http.Request) {
 	}
 	page, size, limit, offset := httpx.PaginateParams(r)
 	fy := strings.TrimSpace(r.URL.Query().Get("fiscalYearId"))
+	if fy != "" {
+		u, err := httpx.ParseUUIDParam("fiscalYearId", fy)
+		if err != nil {
+			httpx.WriteError(w, r, err)
+			return
+		}
+		fy = u.String()
+	}
 	rows, total, err := s.repo.ListFiscalPeriodsWithCount(r.Context(), scope, fy, limit, offset)
 	if err != nil {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))

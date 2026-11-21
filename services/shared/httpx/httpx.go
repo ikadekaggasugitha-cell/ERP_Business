@@ -4,6 +4,7 @@
 package httpx
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -33,6 +35,37 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, v any) error {
 		if errors.As(err, &maxErr) {
 			return &APIError{Status: http.StatusRequestEntityTooLarge, Code: "PAYLOAD_TOO_LARGE", Message: "request body exceeds 1 MiB limit"}
 		}
+		return BadRequest("body JSON tidak valid")
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return BadRequest("body JSON mengandung data tambahan yang tidak valid")
+	}
+	return nil
+}
+
+// DecodeOptionalJSON decodes an optional JSON object body safely: empty bodies
+// leave dst untouched and return nil, while non-empty bodies follow DecodeJSON rules.
+func DecodeOptionalJSON(w http.ResponseWriter, r *http.Request, v any) error {
+	if r.Body == nil {
+		return nil
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return &APIError{Status: http.StatusRequestEntityTooLarge, Code: "PAYLOAD_TOO_LARGE", Message: "request body exceeds 1 MiB limit"}
+		}
+		return BadRequest("gagal membaca body JSON")
+	}
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(trimmed))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
 		return BadRequest("body JSON tidak valid")
 	}
 	var extra any
@@ -380,12 +413,22 @@ func RequireUser(r *http.Request) (uuid.UUID, error) {
 	return u, nil
 }
 
+// EnforceRBAC reports whether REQUIRE_RBAC is explicitly enabled (true/1),
+// forcing RequirePermission to reject requests missing gateway role/permission headers.
+func EnforceRBAC() bool {
+	v := strings.TrimSpace(os.Getenv("REQUIRE_RBAC"))
+	return strings.EqualFold(v, "true") || v == "1"
+}
+
 // RequirePermission checks RBAC permission when X-Permissions or X-Roles are injected
 // by the API gateway. Direct internal dev calls without gateway role headers stay allowed
 // unless EnforceRBAC is explicitly enabled via REQUIRE_RBAC=true.
 func RequirePermission(r *http.Request, perm string) error {
 	ctx := r.Context()
 	if len(Roles(ctx)) == 0 && len(Permissions(ctx)) == 0 {
+		if EnforceRBAC() {
+			return Forbidden("missing required permission: " + perm)
+		}
 		return nil
 	}
 	if !HasPermission(ctx, perm) {

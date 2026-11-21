@@ -13,14 +13,19 @@
 --       a system-org bypass (current policies do not).
 --   (C) CROSS-TENANT: per data-bearing table, scope to the org owning the most
 --       rows; zero rows of any other organization may be visible.
+--   (D) POSITIVE VISIBILITY: scoped to that same org, the number of visible
+--       own-org rows equals the owner-side count — a deny-all (USING (false))
+--       or over-restrictive policy regresses here, not just leaky ones.
 --
 -- Self-asserting: RAISES EXCEPTION on any violation; prints PASS otherwise
 -- (ON_ERROR_STOP makes the exception fail the psql invocation).
 -- State-independent: reads the live catalog and existing data only; safe on
 -- fresh or smoke-contaminated databases; re-runnable. A dataless DB passes
 -- checks B/C vacuously — the NOTICE line reports how many tables carried data.
--- CI note: db-regression applies db/seeds/<db>/seed.sql when present, so
--- seeded databases exercise B/C with real rows (two-org seeds enable C).
+-- CI note: db-regression applies db/seeds/<db>/seed.sql when present plus the
+-- synthetic tenant fixtures in db/tests/rls_smoke_tenants.sql (two orgs, one
+-- row each), so seeded databases exercise B/C/D behaviorally; databases
+-- without tenant rows stay vacuous by design and pass with a NOTICE.
 -- =============================================================================
 \set ON_ERROR_STOP on
 
@@ -31,6 +36,7 @@ DECLARE
   v_tmpsch text;
   v_scope  uuid;
   v_orgs   bigint;
+  v_own    bigint;
   cnt      bigint;
   n_data   int := 0;
   n_multi  int := 0;
@@ -49,7 +55,7 @@ BEGIN
 
   CREATE TEMP TABLE _rls_candidate AS
     SELECT n.nspname AS schemaname, c.relname AS tablename, c.oid AS reloid,
-           NULL::uuid AS scope_org, 0::bigint AS org_count
+           NULL::uuid AS scope_org, 0::bigint AS org_count, 0::bigint AS own_rows
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE c.relkind IN ('r', 'p')
@@ -90,8 +96,14 @@ BEGIN
       'SELECT count(DISTINCT organization_id) FROM %I.%I
        WHERE organization_id IS NOT NULL AND organization_id <> %L',
       r.schemaname, r.tablename, sys_org) INTO v_orgs;
+    v_own := 0;
+    IF v_scope IS NOT NULL THEN
+      EXECUTE format(
+        'SELECT count(*) FROM %I.%I WHERE organization_id = %L',
+        r.schemaname, r.tablename, v_scope) INTO v_own;
+    END IF;
     UPDATE _rls_candidate
-       SET scope_org = v_scope, org_count = v_orgs
+       SET scope_org = v_scope, org_count = v_orgs, own_rows = v_own
      WHERE reloid = r.reloid;
   END LOOP;
 
@@ -120,14 +132,23 @@ BEGIN
     IF cnt <> 0 THEN
       RAISE EXCEPTION 'RLS SMOKE FAIL (C): % foreign-org row(s) visible in %.% scoped to %s', cnt, r.schemaname, r.tablename, r.scope_org;
     END IF;
+    -- (D) Positive visibility: under the correct scope the dominant org must
+    -- see EXACTLY its owner-side row count (deny-all / over-restrict catch).
+    EXECUTE format(
+      'SELECT count(*) FROM %I.%I WHERE organization_id = %L',
+      r.schemaname, r.tablename, r.scope_org) INTO cnt;
+    IF cnt <> r.own_rows THEN
+      RAISE EXCEPTION 'RLS SMOKE FAIL (D): %.% shows % own-org row(s) under correct scope, expected %', r.schemaname, r.tablename, cnt, r.own_rows;
+    END IF;
     n_data := n_data + 1;
     IF r.org_count > 1 THEN n_multi := n_multi + 1; END IF;
   END LOOP;
 
   IF n_data = 0 THEN
-    RAISE NOTICE 'PASS (C): skipped — database holds no tenant rows (B/C vacuous)';
+    RAISE NOTICE 'PASS (C/D): skipped — database holds no tenant rows (B/C/D vacuous)';
   ELSE
     RAISE NOTICE 'PASS (C): cross-tenant isolation on % data-bearing table(s) (% with rows from >= 2 orgs)', n_data, n_multi;
+    RAISE NOTICE 'PASS (D): own-org visibility exact on % data-bearing table(s)', n_data;
   END IF;
 
   RAISE NOTICE 'RLS SMOKE PASS';

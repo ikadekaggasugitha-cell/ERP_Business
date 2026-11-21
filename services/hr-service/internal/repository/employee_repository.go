@@ -335,6 +335,23 @@ func (r *EmployeeRepository) UpdateAndEmit(ctx context.Context, scope []uuid.UUI
 		if cur.RowVersion != in.RowVersion {
 			return httpx.Conflict("VERSION_CONFLICT", "rowVersion tidak cocok")
 		}
+		// Preserve existing PII/metadata when omitted on update (GET returns masked nationalId).
+		if strings.TrimSpace(in.NationalID) == "" {
+			enc.NationalID = cur.NationalID
+			enc.EncryptedNationalID = cur.EncryptedNationalID
+			enc.NationalIDHash = cur.NationalIDHash
+		}
+		if strings.TrimSpace(in.DateOfBirth) == "" {
+			enc.EncryptedDob = cur.EncryptedDob
+		}
+		if strings.TrimSpace(in.Email) == "" {
+			enc.Email = cur.Email
+			enc.EncryptedEmail = cur.EncryptedEmail
+		}
+		userRef := in.UserRefID
+		if userRef == nil {
+			userRef = cur.UserRefID
+		}
 		if _, err := qt.UpdateEmployee(ctx, hrdb.UpdateEmployeeParams{
 			ID:                  in.ID,
 			RowVersion:          in.RowVersion,
@@ -346,7 +363,7 @@ func (r *EmployeeRepository) UpdateAndEmit(ctx context.Context, scope []uuid.UUI
 			EncryptedDob:        enc.EncryptedDob,
 			EncryptedEmail:      enc.EncryptedEmail,
 			NationalIDHash:      enc.NationalIDHash,
-			UserRefID:           in.UserRefID,
+			UserRefID:           userRef,
 			UpdatedBy:           &in.UpdatedBy,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -455,8 +472,18 @@ func (r *EmployeeRepository) Delete(ctx context.Context, scope []uuid.UUID, id u
 			}
 			return httpx.MapDBError(err, "")
 		}
+		if cur.Status == "Active" {
+			return httpx.Conflict("INVALID_STATE", "karyawan berstatus Active harus diterminasi terlebih dahulu sebelum dihapus")
+		}
 		if cur.RowVersion != version {
 			return httpx.Conflict("VERSION_CONFLICT", "rowVersion tidak cocok")
+		}
+		activeEmp, err := qt.CountActiveEmploymentsByEmployee(ctx, id)
+		if err != nil {
+			return httpx.MapDBError(err, "")
+		}
+		if activeEmp > 0 {
+			return httpx.Conflict("HAS_ACTIVE_EMPLOYMENT", "karyawan masih memiliki penugasan kerja aktif")
 		}
 		n, err := qt.SoftDeleteEmployee(ctx, hrdb.SoftDeleteEmployeeParams{
 			ID:         id,

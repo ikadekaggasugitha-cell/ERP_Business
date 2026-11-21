@@ -135,8 +135,11 @@ export function toChartCoordinate(decimalValue: string): number {
 }
 
 export function classifyAccountCategory(accountCode: string): AccountCategoryKey {
-  const firstDigitMatch = accountCode.trim().match(/\d/);
-  const digit = firstDigitMatch ? firstDigitMatch[0] : '';
+  const trimmed = accountCode.trim();
+  if (!/^[1-9]\d*/.test(trimmed)) {
+    return 'Other';
+  }
+  const digit = trimmed[0];
   switch (digit) {
     case '1':
       return 'Asset';

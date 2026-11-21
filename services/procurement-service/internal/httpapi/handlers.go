@@ -4,11 +4,9 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"math/big"
 	"net/http"
 	"strings"
@@ -524,7 +522,7 @@ func (s *Server) receivePO(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req receiveReq
-	if err := decodeOptionalJSON(r, &req); err != nil {
+	if err := httpx.DecodeOptionalJSON(w, r, &req); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
@@ -1035,24 +1033,4 @@ func validatePOInput(orgID, user uuid.UUID, req poUpsertReq) (uuid.UUID, *uuid.U
 		}
 	}
 	return vendor, prID, orderDate, currency, totalNum, lines, nil
-}
-
-func decodeOptionalJSON(r *http.Request, dst any) error {
-	if r.Body == nil {
-		return nil
-	}
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		return httpx.BadRequest("gagal membaca body")
-	}
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 {
-		return nil
-	}
-	dec := json.NewDecoder(bytes.NewReader(trimmed))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(dst); err != nil {
-		return httpx.BadRequest("JSON tidak valid: " + err.Error())
-	}
-	return nil
 }

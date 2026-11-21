@@ -60,6 +60,43 @@ CREATE TABLE loc.outbox (
     correlation_id   uuid         NOT NULL,
     created_at       timestamptz  NOT NULL DEFAULT now(),
     published_at     timestamptz,
-    PRIMARY KEY (id)
+    PRIMARY KEY (id, created_at)
+);
+
+CREATE TABLE loc.processed_event (
+    event_id     uuid         NOT NULL,
+    event_type   varchar(150) NOT NULL,
+    processed_at timestamptz  NOT NULL DEFAULT now(),
+    PRIMARY KEY (event_id)
+);
+
+CREATE TABLE loc.user_language_preference (
+    id               uuid        NOT NULL DEFAULT gen_random_uuid(),
+    organization_id  uuid        NOT NULL,
+    user_ref         uuid        NOT NULL,
+    language_code    varchar(10) NOT NULL,
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    created_by       uuid        NOT NULL,
+    updated_at       timestamptz NOT NULL DEFAULT now(),
+    updated_by       uuid,
+    deleted_at       timestamptz,
+    row_version      integer     NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_user_language_preference UNIQUE (organization_id, user_ref)
+);
+
+CREATE TABLE loc.organization_language (
+    id                     uuid        NOT NULL DEFAULT gen_random_uuid(),
+    organization_id        uuid        NOT NULL,
+    organization_ref       uuid        NOT NULL,
+    default_language_code  varchar(10) NOT NULL,
+    created_at             timestamptz NOT NULL DEFAULT now(),
+    created_by             uuid        NOT NULL,
+    updated_at             timestamptz NOT NULL DEFAULT now(),
+    updated_by             uuid,
+    deleted_at             timestamptz,
+    row_version            integer     NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_organization_language UNIQUE (organization_id, organization_ref)
 );
 

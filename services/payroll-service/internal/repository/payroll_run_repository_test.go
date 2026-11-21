@@ -29,3 +29,16 @@ func TestPayrollAmountEncryptionRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSumPayrollResultTotals(t *testing.T) {
+	gross, tax, net, err := sumPayrollResultTotals([]PayrollResultDTO{
+		{GrossAmount: "10000000.0000", TaxAmount: "250000.2500", NetAmount: "9350000.7500"},
+		{GrossAmount: "5000000.5000", TaxAmount: "100000.7500", NetAmount: "4699999.2500"},
+	})
+	if err != nil {
+		t.Fatalf("sumPayrollResultTotals: %v", err)
+	}
+	if gross != "15000000.5000" || tax != "350001.0000" || net != "14050000.0000" {
+		t.Fatalf("unexpected totals: gross=%s tax=%s net=%s", gross, tax, net)
+	}
+}
+

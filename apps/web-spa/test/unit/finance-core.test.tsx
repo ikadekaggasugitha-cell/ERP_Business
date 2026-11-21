@@ -240,6 +240,8 @@ describe('Fixed-point Finance Core Logic', () => {
     expect(classifyAccountCategory('2101')).toBe('Liability');
     expect(classifyAccountCategory('4001')).toBe('Revenue');
     expect(classifyAccountCategory('6100')).toBe('Expense');
+    expect(classifyAccountCategory('ACCT:1101-uuid')).toBe('Other');
+    expect(classifyAccountCategory('JV-170000000')).toBe('Other');
 
     const glSummary = summarizeGlSnapshots([
       {

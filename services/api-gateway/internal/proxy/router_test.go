@@ -166,3 +166,43 @@ func TestRouterParityFixesRouting(t *testing.T) {
 	}
 }
 
+func TestRouterExtendedServicesRouting(t *testing.T) {
+	t.Setenv("FIXEDASSET_SERVICE_URL", "http://127.0.0.1:18101")
+	t.Setenv("BUDGET_SERVICE_URL", "http://127.0.0.1:18103")
+	t.Setenv("FINANCIALCLOSE_SERVICE_URL", "http://127.0.0.1:18104")
+	t.Setenv("CONSOLIDATION_SERVICE_URL", "http://127.0.0.1:18105")
+	t.Setenv("PROJECT_SERVICE_URL", "http://127.0.0.1:18106")
+	t.Setenv("ASSET_SERVICE_URL", "http://127.0.0.1:18107")
+	t.Setenv("MAINTENANCE_SERVICE_URL", "http://127.0.0.1:18108")
+	t.Setenv("CRM_SERVICE_URL", "http://127.0.0.1:18109")
+
+	router, err := NewRouter()
+	if err != nil {
+		t.Fatalf("NewRouter: %v", err)
+	}
+	cases := []struct {
+		path     string
+		wantHost string
+	}{
+		{"/api/v1/fixed-assets", "127.0.0.1:18101"},
+		{"/api/v1/budgets/check", "127.0.0.1:18103"},
+		{"/api/v1/closing-runs", "127.0.0.1:18104"},
+		{"/api/v1/consolidation-runs", "127.0.0.1:18105"},
+		{"/api/v1/project-billings", "127.0.0.1:18106"},
+		{"/api/v1/asset-movements", "127.0.0.1:18107"},
+		{"/api/v1/maintenance-work-orders", "127.0.0.1:18108"},
+		{"/api/v1/opportunities", "127.0.0.1:18109"},
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest(http.MethodGet, "http://gateway.local"+tc.path, nil)
+		rp, ok := router.Match(req.URL.Path)
+		if !ok || rp == nil {
+			t.Fatalf("expected Match(%q) = true", tc.path)
+		}
+		rp.Director(req)
+		if req.URL.Host != tc.wantHost {
+			t.Fatalf("%s routed to %s, want %s", tc.path, req.URL.Host, tc.wantHost)
+		}
+	}
+}
+

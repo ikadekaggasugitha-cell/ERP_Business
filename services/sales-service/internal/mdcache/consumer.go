@@ -27,7 +27,6 @@ func New(store PartyCacheStore) *Consumer {
 func (c *Consumer) Topics() []string {
 	return []string{
 		eventbus.TopicFor("masterdata.party.upserted"),
-		eventbus.TopicFor("masterdata.party.updated"),
 	}
 }
 

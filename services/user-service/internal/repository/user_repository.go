@@ -166,6 +166,7 @@ func (r *UserRepository) DrainAndPublish(ctx context.Context, limit int32, pub *
 		}
 		if err := pub.Publish(ctx, env); err != nil {
 			log.Printf("user relay publish %s: %v", row.ID, err)
+			pubErr = err
 			break
 		}
 		if err := q.MarkOutboxPublished(ctx, userdb.MarkOutboxPublishedParams{
@@ -177,8 +178,10 @@ func (r *UserRepository) DrainAndPublish(ctx context.Context, limit int32, pub *
 		}
 		published++
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return published, err
+	if published > 0 {
+		if err := tx.Commit(ctx); err != nil {
+			return 0, err
+		}
 	}
 	return published, pubErr
 }

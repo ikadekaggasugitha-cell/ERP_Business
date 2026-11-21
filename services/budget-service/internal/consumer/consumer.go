@@ -1,0 +1,74 @@
+package consumer
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/sinergiinvestasiproperti/erp/services/budget-service/internal/budgetdb"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/eventbus"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
+)
+
+var Topics = []string{eventbus.TopicFor("procurement.po.approved")}
+var sysActor = uuid.MustParse("00000000-0000-0000-0000-0000000000b2")
+
+type Store interface {
+	ConsumePOApproved(ctx context.Context, scope []uuid.UUID, mark budgetdb.MarkEventProcessedParams, orgID, actor, corr uuid.UUID, docRef string, amount pgtype.Numeric) (bool, error)
+}
+
+type Consumer struct {
+	repo Store
+	c    *eventbus.Consumer
+}
+
+func New(repo Store, brokers []string) *Consumer {
+	return &Consumer{repo: repo, c: eventbus.NewConsumer(brokers, "budget-service", Topics)}
+}
+func NewHandler(repo Store) *Consumer              { return &Consumer{repo: repo} }
+func (x *Consumer) Run(ctx context.Context) error  { return x.c.Run(ctx, x.Handle) }
+func (x *Consumer) Close() error                   { if x.c != nil { return x.c.Close() }; return nil }
+
+func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
+	if env.EventType != "procurement.po.approved" {
+		return nil
+	}
+	org, err := uuid.Parse(strings.TrimSpace(env.OrganizationID))
+	if err != nil {
+		return eventbus.ErrPoison{Err: fmt.Errorf("invalid organizationId: %w", err)}
+	}
+	evID, err := uuid.Parse(strings.TrimSpace(env.EventID))
+	if err != nil {
+		return eventbus.ErrPoison{Err: fmt.Errorf("invalid eventId: %w", err)}
+	}
+	corr := evID
+	if c, e := uuid.Parse(strings.TrimSpace(env.CorrelationID)); e == nil {
+		corr = c
+	}
+	var p struct {
+		PoNo        string `json:"poNo"`
+		TotalAmount string `json:"totalAmount"`
+	}
+	if len(env.Data) > 0 {
+		if err := json.Unmarshal(env.Data, &p); err != nil {
+			return eventbus.ErrPoison{Err: fmt.Errorf("invalid po payload: %w", err)}
+		}
+	}
+	amt, err := platform.ParseOptionalNumeric(p.TotalAmount)
+	if err != nil {
+		return eventbus.ErrPoison{Err: fmt.Errorf("invalid totalAmount: %w", err)}
+	}
+	if platform.NumericToRat(amt).Sign() <= 0 {
+		return nil
+	}
+	ref := strings.TrimSpace(p.PoNo)
+	if ref == "" {
+		ref = env.AggregateID
+	}
+	_, err = x.repo.ConsumePOApproved(ctx, []uuid.UUID{org}, budgetdb.MarkEventProcessedParams{EventID: evID, EventType: env.EventType}, org, sysActor, corr, ref, amt)
+	return err
+}

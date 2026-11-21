@@ -158,13 +158,17 @@ func (r *InvoiceRepository) ListWithCount(ctx context.Context, scope []uuid.UUID
 	return rows, total, err
 }
 
-// MarkPaid transitions an Issued invoice to Paid with optimistic locking.
-func (r *InvoiceRepository) MarkPaid(ctx context.Context, scope []uuid.UUID, arg ardb.MarkInvoicePaidParams) (int64, error) {
+// MarkPaid transitions an Issued invoice to Paid with optimistic locking and emits ar.invoice.paid atomically.
+func (r *InvoiceRepository) MarkPaid(ctx context.Context, scope []uuid.UUID, arg ardb.MarkInvoicePaidParams, ev ardb.InsertOutboxParams) (int64, error) {
 	var n int64
 	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
 		var e error
-		n, e = r.q.WithTx(tx).MarkInvoicePaid(ctx, arg)
-		return e
+		n, e = q.MarkInvoicePaid(ctx, arg)
+		if e != nil || n == 0 {
+			return e
+		}
+		return q.InsertOutbox(ctx, ev)
 	})
 	return n, err
 }

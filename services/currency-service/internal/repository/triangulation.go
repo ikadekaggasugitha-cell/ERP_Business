@@ -245,23 +245,25 @@ func (r *CurrencyRepository) ConvertAmount(
 
 	convertedRat := new(big.Rat).Mul(ratAmount, rateLookup.Rate)
 
-	// Fetch target currency precision if available (default 4)
+	// Fetch source and target currency precision if available (default 4)
+	sourcePrecision := 4
 	targetPrecision := 4
-	var curr currencydb.CurCurrency
-	err = r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
-		var e error
-		curr, e = r.q.WithTx(tx).GetCurrencyByCode(ctx, toCurr)
-		return e
+	_ = r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		if fromC, e := q.GetCurrencyByCode(ctx, fromCurr); e == nil && fromC.Precision >= 0 {
+			sourcePrecision = int(fromC.Precision)
+		}
+		if toC, e := q.GetCurrencyByCode(ctx, toCurr); e == nil && toC.Precision >= 0 {
+			targetPrecision = int(toC.Precision)
+		}
+		return nil
 	})
-	if err == nil {
-		targetPrecision = int(curr.Precision)
-	}
 
 	return &ConvertResult{
 		FromCurrency:    fromCurr,
 		ToCurrency:      toCurr,
 		RateTypeID:      rateTypeID,
-		OriginalAmount:  ratAmount.FloatString(targetPrecision),
+		OriginalAmount:  ratAmount.FloatString(sourcePrecision),
 		ConvertedAmount: convertedRat.FloatString(targetPrecision),
 		Rate:            rateLookup.RateString,
 		RateSource:      rateLookup.Source,

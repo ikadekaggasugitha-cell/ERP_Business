@@ -146,21 +146,23 @@ func (r *WorkflowRepository) ListTasksWithCount(ctx context.Context, scope []uui
 }
 
 type TaskDecisionResult struct {
-	TaskID           uuid.UUID `json:"taskId"`
-	InstanceID       uuid.UUID `json:"instanceId"`
-	DocumentRef      string    `json:"documentRef"`
-	Decision         string    `json:"decision"`
-	InstanceStatus   string    `json:"instanceStatus"`
-	TaskRowVersion   int32     `json:"taskRowVersion"`
-	InstanceVersion  int32     `json:"instanceRowVersion"`
+	TaskID          uuid.UUID `json:"taskId"`
+	InstanceID      uuid.UUID `json:"instanceId"`
+	DocumentRef     string    `json:"documentRef"`
+	Decision        string    `json:"decision"`
+	Comment         string    `json:"comment,omitempty"`
+	InstanceStatus  string    `json:"instanceStatus"`
+	TaskRowVersion  int32     `json:"taskRowVersion"`
+	InstanceVersion int32     `json:"instanceRowVersion"`
 }
 
-// DecideTaskAndEmit enforces SoD (approver != requester), updates the task +
-// parent workflow instance, and emits workflow.approval.completed in one tx.
+// DecideTaskAndEmit enforces SoD (approver != requester), updates the task,
+// closes the parent workflow instance once all tasks are approved (or immediately on Reject),
+// and emits workflow.approval.completed with optional decision comment in one tx.
 func (r *WorkflowRepository) DecideTaskAndEmit(
 	ctx context.Context, scope []uuid.UUID,
 	taskID, actorID, correlationID uuid.UUID,
-	expectedVer *int32, decision string,
+	expectedVer *int32, decision, comment string,
 ) (TaskDecisionResult, error) {
 	var res TaskDecisionResult
 	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
@@ -194,45 +196,63 @@ func (r *WorkflowRepository) DecideTaskAndEmit(
 			}
 			return err
 		}
-		instStatus := "Approved"
-		if decision == "Reject" {
-			instStatus = "Rejected"
-		}
-		newInstVer, err := q.DecideWorkflowInstance(ctx, workflowdb.DecideWorkflowInstanceParams{
-			ID:         inst.ID,
-			RowVersion: inst.RowVersion,
-			Status:     instStatus,
-			UpdatedBy:  &actorID,
-		})
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrVersionConflict
+
+		instStatus := inst.Status
+		newInstVer := inst.RowVersion
+		shouldClose := decision == "Reject"
+		if decision == "Approve" {
+			pendingLeft, err := q.CountPendingTasksByInstance(ctx, inst.ID)
+			if err != nil {
+				return err
 			}
-			return err
+			shouldClose = pendingLeft == 0
 		}
-		payload, _ := json.Marshal(map[string]any{
-			"taskId":      task.ID,
-			"instanceId":  inst.ID,
-			"documentRef": inst.DocumentRef,
-			"decision":    decision,
-			"status":      instStatus,
-			"approverId":  actorID,
-		})
-		if err := q.InsertOutbox(ctx, workflowdb.InsertOutboxParams{
-			AggregateType:  "WorkflowInstance",
-			AggregateID:    inst.ID,
-			EventType:      "workflow.approval.completed",
-			Payload:        payload,
-			OrganizationID: inst.OrganizationID,
-			CorrelationID:  correlationID,
-		}); err != nil {
-			return err
+		if shouldClose {
+			instStatus = "Approved"
+			if decision == "Reject" {
+				instStatus = "Rejected"
+			}
+			newInstVer, err = q.DecideWorkflowInstance(ctx, workflowdb.DecideWorkflowInstanceParams{
+				ID:         inst.ID,
+				RowVersion: inst.RowVersion,
+				Status:     instStatus,
+				UpdatedBy:  &actorID,
+			})
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return ErrVersionConflict
+				}
+				return err
+			}
+			evMap := map[string]any{
+				"taskId":      task.ID,
+				"instanceId":  inst.ID,
+				"documentRef": inst.DocumentRef,
+				"decision":    decision,
+				"status":      instStatus,
+				"approverId":  actorID,
+			}
+			if comment != "" {
+				evMap["comment"] = comment
+			}
+			payload, _ := json.Marshal(evMap)
+			if err := q.InsertOutbox(ctx, workflowdb.InsertOutboxParams{
+				AggregateType:  "WorkflowInstance",
+				AggregateID:    inst.ID,
+				EventType:      "workflow.approval.completed",
+				Payload:        payload,
+				OrganizationID: inst.OrganizationID,
+				CorrelationID:  correlationID,
+			}); err != nil {
+				return err
+			}
 		}
 		res = TaskDecisionResult{
 			TaskID:          task.ID,
 			InstanceID:      inst.ID,
 			DocumentRef:     inst.DocumentRef,
 			Decision:        decision,
+			Comment:         comment,
 			InstanceStatus:  instStatus,
 			TaskRowVersion:  newTaskVer,
 			InstanceVersion: newInstVer,
@@ -273,6 +293,7 @@ func (r *WorkflowRepository) DrainAndPublish(ctx context.Context, limit int32, p
 		}
 		if err := pub.Publish(ctx, env); err != nil {
 			log.Printf("workflow relay publish %s: %v", row.ID, err)
+			pubErr = err
 			break
 		}
 		if err := q.MarkOutboxPublished(ctx, workflowdb.MarkOutboxPublishedParams{
@@ -284,8 +305,10 @@ func (r *WorkflowRepository) DrainAndPublish(ctx context.Context, limit int32, p
 		}
 		published++
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return published, err
+	if published > 0 {
+		if err := tx.Commit(ctx); err != nil {
+			return 0, err
+		}
 	}
 	return published, pubErr
 }

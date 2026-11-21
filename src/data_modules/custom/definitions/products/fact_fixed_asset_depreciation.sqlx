@@ -1,0 +1,75 @@
+config {
+  type: "incremental",
+  schema: dataform.projectConfig.vars.target_dataset,
+  uniqueKey: ["depreciation_entry_id"],
+  tags: ["fact", "cortex_v7", "fixed_assets", "tri_currency"],
+  partitionBy: "DATE_TRUNC(run_date, MONTH)",
+  clusterBy: ["org_id", "asset_category_code"],
+  description: "Incremental fixed asset depreciation and NBV fact table with presentation currency translation"
+}
+
+WITH base_fa AS (
+  SELECT *
+  FROM ${ref("erp_staging", "stg_fixed_assets_cdc")}
+  ${when(incremental(), `WHERE run_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 MONTH)`)}
+),
+
+dedup_org AS (
+  SELECT *
+  FROM ${ref("dim_organization")}
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY org_id
+    ORDER BY is_active DESC
+  ) = 1
+),
+
+dedup_fx AS (
+  SELECT
+    rate_date,
+    from_currency,
+    to_currency,
+    mid_rate
+  FROM ${ref("dim_currency")}
+  WHERE rate_type IN ('M', 'SPOT', 'CLOSING', 'DEFAULT')
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY rate_date, from_currency, to_currency
+    ORDER BY mid_rate DESC
+  ) = 1
+)
+
+SELECT
+  fa.depreciation_entry_id,
+  fa.fixed_asset_id,
+  fa.organization_id AS org_id,
+  fa.asset_no,
+  fa.asset_name,
+  fa.asset_category_code,
+  fa.depreciation_method,
+  fa.status AS asset_status,
+  fa.fiscal_period_ref,
+  fa.run_date,
+  CAST(fa.acquisition_cost AS NUMERIC) AS acquisition_cost_fc,
+  CAST(fa.salvage_value AS NUMERIC) AS salvage_value_fc,
+  CAST(fa.depreciation_amount AS NUMERIC) AS depreciation_amount_fc,
+  CAST(fa.accumulated_depreciation AS NUMERIC) AS accumulated_depreciation_fc,
+  CAST(fa.net_book_value AS NUMERIC) AS net_book_value_fc,
+  COALESCE(org.functional_currency, fa.currency_code, 'IDR') AS currency_fc,
+  CASE
+    WHEN COALESCE(org.functional_currency, fa.currency_code, 'IDR') = '${dataform.projectConfig.vars.holding_presentation_currency}'
+      THEN CAST(fa.net_book_value AS NUMERIC)
+    ELSE CAST(fa.net_book_value AS NUMERIC) * fx_pc.mid_rate
+  END AS net_book_value_pc,
+  CASE
+    WHEN COALESCE(org.functional_currency, fa.currency_code, 'IDR') = '${dataform.projectConfig.vars.holding_presentation_currency}'
+      THEN CAST(fa.depreciation_amount AS NUMERIC)
+    ELSE CAST(fa.depreciation_amount AS NUMERIC) * fx_pc.mid_rate
+  END AS depreciation_amount_pc,
+  '${dataform.projectConfig.vars.holding_presentation_currency}' AS currency_pc,
+  fa.source_last_updated_at
+FROM base_fa fa
+LEFT JOIN dedup_org org
+  ON org.org_id = fa.organization_id
+LEFT JOIN dedup_fx fx_pc
+  ON fx_pc.rate_date = fa.run_date
+  AND fx_pc.from_currency = COALESCE(org.functional_currency, fa.currency_code, 'IDR')
+  AND fx_pc.to_currency = '${dataform.projectConfig.vars.holding_presentation_currency}'

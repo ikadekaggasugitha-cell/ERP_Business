@@ -1,0 +1,69 @@
+name: partition-maintenance
+
+on:
+  schedule:
+    # Run on the 1st of every month at 02:00 UTC to pre-create future partitions (+6 months).
+    - cron: "0 2 1 * *"
+  workflow_dispatch:
+    inputs:
+      months_ahead:
+        description: "Number of future monthly partitions to pre-create"
+        required: false
+        default: "6"
+      dry_run:
+        description: "Dry run only (do not mutate partitions)"
+        required: false
+        default: "false"
+
+jobs:
+  verify-partition-script:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate bash syntax
+        run: bash -n deploy/maintain-partitions.sh
+
+      - name: Install golang-migrate
+        run: |
+          curl -fsSL https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz
+          sudo mv migrate /usr/local/bin/
+
+      - name: Migrate sample partitioned DBs and run partition maintenance
+        run: |
+          for db in gl_db ap_db ar_db audit_db inventory_db fixedasset_db budget_db project_db; do
+            psql -h localhost -U postgres -d postgres -c "CREATE DATABASE $db"
+            migrate -path "db/migrations/$db" -database "postgres://postgres:postgres@localhost:5432/$db?sslmode=disable" up
+          done
+          MONTHS_AHEAD="${{ inputs.months_ahead || '6' }}" DRY_RUN="${{ inputs.dry_run || 'false' }}" bash deploy/maintain-partitions.sh
+
+  run-live-maintenance:
+    runs-on: ubuntu-latest
+    needs: [verify-partition-script]
+    if: vars.PARTITION_MAINTENANCE_ENABLED == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run monthly partition maintenance against target PostgreSQL cluster
+        env:
+          PGHOST: ${{ secrets.ERP_PGHOST }}
+          PGPORT: ${{ secrets.ERP_PGPORT }}
+          POSTGRES_USER: ${{ secrets.ERP_PGUSER }}
+          POSTGRES_PASSWORD: ${{ secrets.ERP_PGPASSWORD }}
+          MONTHS_AHEAD: ${{ inputs.months_ahead || '6' }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: bash deploy/maintain-partitions.sh

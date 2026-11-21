@@ -27,6 +27,21 @@ type GlAccountBalance struct {
 	RowVersion     int32              `json:"row_version"`
 }
 
+type GlDocumentNumberRegistry struct {
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	DocumentType   string             `json:"document_type"`
+	DocumentNumber string             `json:"document_number"`
+	FiscalYear     int32              `json:"fiscal_year"`
+	Status         string             `json:"status"`
+	SourceRef      *string            `json:"source_ref"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	CreatedBy      *uuid.UUID         `json:"created_by"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy      *uuid.UUID         `json:"updated_by"`
+	RowVersion     int32              `json:"row_version"`
+}
+
 type GlJournalEntry struct {
 	ID                      uuid.UUID          `json:"id"`
 	OrganizationID          uuid.UUID          `json:"organization_id"`
@@ -90,4 +105,19 @@ type GlProcessedEvent struct {
 	EventID     uuid.UUID          `json:"event_id"`
 	EventType   string             `json:"event_type"`
 	ProcessedAt pgtype.Timestamptz `json:"processed_at"`
+}
+
+type GlRecurringJournalTemplate struct {
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	Code           string             `json:"code"`
+	Frequency      string             `json:"frequency"`
+	NextRunDate    pgtype.Date        `json:"next_run_date"`
+	TemplateLines  []byte             `json:"template_lines"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	CreatedBy      uuid.UUID          `json:"created_by"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy      *uuid.UUID         `json:"updated_by"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	RowVersion     int32              `json:"row_version"`
 }

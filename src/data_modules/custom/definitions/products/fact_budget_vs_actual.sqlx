@@ -1,0 +1,59 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["fact", "cortex_v7", "budget", "variance"],
+  clusterBy: ["org_id", "fiscal_year_ref", "account_code"],
+  description: "Budget vs Commitment vs GL Actual variance analysis across organizations and accounts"
+}
+
+WITH budget_rollup AS (
+  SELECT
+    b.organization_id AS org_id,
+    b.budget_id,
+    b.budget_code,
+    b.fiscal_year_ref,
+    b.period_no,
+    b.account_ref,
+    b.account_code,
+    b.cost_center_ref,
+    SUM(CAST(b.budget_amount AS NUMERIC)) AS budget_amount_fc,
+    SUM(CAST(COALESCE(b.committed_amount, 0) AS NUMERIC)) AS committed_amount_fc
+  FROM ${ref("erp_staging", "stg_budgets_cdc")} b
+  WHERE b.budget_status IN ('Approved', 'Closed')
+  GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+),
+
+gl_actuals AS (
+  SELECT
+    org_id,
+    account_code,
+    EXTRACT(MONTH FROM posting_date) AS period_no,
+    SUM(amount_fc) AS actual_amount_fc,
+    SUM(amount_pc) AS actual_amount_pc
+  FROM ${ref("fact_gl_transaction")}
+  GROUP BY 1, 2, 3
+)
+
+SELECT
+  b.org_id,
+  b.budget_id,
+  b.budget_code,
+  b.fiscal_year_ref,
+  b.period_no,
+  b.account_ref,
+  b.account_code,
+  b.cost_center_ref,
+  b.budget_amount_fc,
+  b.committed_amount_fc,
+  COALESCE(g.actual_amount_fc, NUMERIC '0') AS actual_amount_fc,
+  COALESCE(g.actual_amount_pc, NUMERIC '0') AS actual_amount_pc,
+  b.budget_amount_fc - b.committed_amount_fc - COALESCE(g.actual_amount_fc, NUMERIC '0') AS available_budget_fc,
+  SAFE_DIVIDE(
+    CAST(b.committed_amount_fc + COALESCE(g.actual_amount_fc, NUMERIC '0') AS BIGNUMERIC),
+    NULLIF(CAST(b.budget_amount_fc AS BIGNUMERIC), 0)
+  ) * 100 AS utilization_pct
+FROM budget_rollup b
+LEFT JOIN gl_actuals g
+  ON g.org_id = b.org_id
+  AND g.account_code = b.account_code
+  AND g.period_no = b.period_no

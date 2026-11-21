@@ -173,29 +173,40 @@ func BeginIdempotent(w http.ResponseWriter, r *http.Request, idem *IdemStore, sc
 	}
 	idemKey = strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 	sk := ScopeKey(scope)
-	if idem.ReplayWithHash(w, sk, idemKey, reqHash) {
-		return idemKey, reqHash, func() {}, true
+	if idem != nil {
+		if idem.ReplayWithHash(w, sk, idemKey, reqHash) {
+			return idemKey, reqHash, func() {}, true
+		}
+		switch idem.ReserveWithHash(sk, idemKey, reqHash) {
+		case ReserveCompleted:
+			_ = idem.ReplayWithHash(w, sk, idemKey, reqHash)
+			return idemKey, reqHash, func() {}, true
+		case ReserveHashMismatch:
+			WriteError(w, r, Conflict("IDEMPOTENCY_KEY_REUSED", "Idempotency-Key reused with different request payload"))
+			return idemKey, reqHash, func() {}, true
+		case ReserveInFlight:
+			WriteError(w, r, Conflict("REQUEST_IN_PROGRESS", "Idempotency-Key sedang diproses"))
+			return idemKey, reqHash, func() {}, true
+		default:
+			return idemKey, reqHash, func() { idem.Unreserve(sk, idemKey) }, false
+		}
 	}
-	switch idem.ReserveWithHash(sk, idemKey, reqHash) {
-	case ReserveCompleted:
-		_ = idem.ReplayWithHash(w, sk, idemKey, reqHash)
-		return idemKey, reqHash, func() {}, true
-	case ReserveHashMismatch:
-		WriteError(w, r, Conflict("IDEMPOTENCY_KEY_REUSED", "Idempotency-Key reused with different request payload"))
-		return idemKey, reqHash, func() {}, true
-	case ReserveInFlight:
-		WriteError(w, r, Conflict("REQUEST_IN_PROGRESS", "Idempotency-Key sedang diproses"))
-		return idemKey, reqHash, func() {}, true
-	default:
-		return idemKey, reqHash, func() { idem.Unreserve(sk, idemKey) }, false
-	}
+	return idemKey, reqHash, func() {}, false
 }
 
 // SaveIDResponse marshals v, records it in idem (if key != ""), sets ETag when version > 0, and writes JSON.
 func SaveIDResponse(w http.ResponseWriter, idem *IdemStore, scope []uuid.UUID, key, reqHash string, status int, version int32, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
-		WriteError(w, &http.Request{}, Internal("encode json failed"))
+		log.Printf("[error] code=INTERNAL_ERROR status=500: encode json failed: %v", err)
+		WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": map[string]any{
+				"code":          "INTERNAL_ERROR",
+				"message":       "internal server error",
+				"correlationId": "",
+				"details":       nil,
+			},
+		})
 		return
 	}
 	if idem != nil && key != "" {

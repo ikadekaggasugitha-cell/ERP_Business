@@ -15,7 +15,12 @@ duplicates or overwrites.
 | `tax_db`         | Indonesian tax codes (PPN 11%, PPh 21/22/23/4(2), …) |
 | `coa_db`         | Fiscal calendar template `STD-MONTHLY` + FY2026 + 12 monthly periods |
 | `fixedasset_db`  | Asset categories (building, vehicle, machine, office equipment, computer, land) with default depreciation method / useful life |
+| `budget_db`      | Default budget control policies (`HardStop` PO, `ApprovalOverride` APInvoice, `SoftWarning` JournalEntry) |
 | `financialclose_db` | Standard closing checklist templates (bank reconciliation → financial statement preparation, 10 tasks) |
+| `consolidation_db` | Reference holding consolidation group (`GRP-HOLDING`) + 4 standard elimination rules |
+| `project_db`     | Reference CapEx project template (`TMPL-CAPEX`) + 3 standard WBS phases |
+| `asset_db`       | Reference operational asset templates (`AST-TMPL-HVAC`, `AST-TMPL-GEN`) |
+| `maintenance_db` | Standard preventive maintenance schedules (30-day HVAC, 6-month Generator) |
 | `crm_db`         | Customer segments (SMB, Enterprise, Key Account, Government, Retail) with segment criteria |
 
 Transactional/demo data is **not** seeded (chosen scope: standard reference only).
@@ -35,7 +40,7 @@ psql -d currency_db -v org_id=<tenant-uuid> -v actor=<user-uuid> -f db/seeds/cur
 ## Run order (after migrations + grants)
 
 ```bash
-for db in currency_db localization_db org_db security_db tax_db coa_db fixedasset_db financialclose_db crm_db; do
+for db in currency_db localization_db org_db security_db tax_db coa_db fixedasset_db budget_db financialclose_db consolidation_db project_db asset_db maintenance_db crm_db; do
   psql -U postgres -d "$db" -f "db/seeds/$db/seed.sql"
 done
 ```

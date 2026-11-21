@@ -94,3 +94,20 @@ CREATE TABLE ar.masterdata_cache (
     updated_at      timestamptz  NOT NULL DEFAULT now(),
     PRIMARY KEY (organization_id, party_id)
 );
+
+CREATE TABLE ar.document_number_registry (
+    id               uuid         NOT NULL DEFAULT gen_random_uuid(),
+    organization_id  uuid         NOT NULL,
+    document_type    varchar(50)  NOT NULL,
+    document_number  varchar(50)  NOT NULL,
+    fiscal_year      integer      NOT NULL,
+    status           varchar(20)  NOT NULL DEFAULT 'Issued',
+    source_ref       varchar(100),
+    created_at       timestamptz  NOT NULL DEFAULT now(),
+    created_by       uuid,
+    updated_at       timestamptz  NOT NULL DEFAULT now(),
+    updated_by       uuid,
+    row_version      integer      NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_document_number_registry UNIQUE (organization_id, document_type, fiscal_year, document_number)
+);

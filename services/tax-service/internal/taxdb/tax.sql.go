@@ -171,7 +171,7 @@ const ensureSystemTaxCode = `-- name: EnsureSystemTaxCode :one
 INSERT INTO tax.tax_code (organization_id, code, rate, tax_type, created_by)
 VALUES ($1, 'SYS-VAT', 11.0, 'VAT', $2)
 ON CONFLICT (organization_id, code) DO UPDATE SET code = EXCLUDED.code
-RETURNING id
+RETURNING id, code, rate
 `
 
 type EnsureSystemTaxCodeParams struct {
@@ -179,11 +179,44 @@ type EnsureSystemTaxCodeParams struct {
 	CreatedBy      uuid.UUID `json:"created_by"`
 }
 
-func (q *Queries) EnsureSystemTaxCode(ctx context.Context, arg EnsureSystemTaxCodeParams) (uuid.UUID, error) {
+type EnsureSystemTaxCodeRow struct {
+	ID   uuid.UUID      `json:"id"`
+	Code string         `json:"code"`
+	Rate pgtype.Numeric `json:"rate"`
+}
+
+func (q *Queries) EnsureSystemTaxCode(ctx context.Context, arg EnsureSystemTaxCodeParams) (EnsureSystemTaxCodeRow, error) {
 	row := q.db.QueryRow(ctx, ensureSystemTaxCode, arg.OrganizationID, arg.CreatedBy)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i EnsureSystemTaxCodeRow
+	err := row.Scan(&i.ID, &i.Code, &i.Rate)
+	return i, err
+}
+
+const getDefaultVATTaxCode = `-- name: GetDefaultVATTaxCode :one
+SELECT id, code, rate, tax_type
+FROM tax.tax_code
+WHERE organization_id = $1 AND tax_type = 'VAT' AND deleted_at IS NULL
+ORDER BY created_at ASC
+LIMIT 1
+`
+
+type GetDefaultVATTaxCodeRow struct {
+	ID      uuid.UUID      `json:"id"`
+	Code    string         `json:"code"`
+	Rate    pgtype.Numeric `json:"rate"`
+	TaxType string         `json:"tax_type"`
+}
+
+func (q *Queries) GetDefaultVATTaxCode(ctx context.Context, organizationID uuid.UUID) (GetDefaultVATTaxCodeRow, error) {
+	row := q.db.QueryRow(ctx, getDefaultVATTaxCode, organizationID)
+	var i GetDefaultVATTaxCodeRow
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Rate,
+		&i.TaxType,
+	)
+	return i, err
 }
 
 const getTaxCode = `-- name: GetTaxCode :one
@@ -207,6 +240,36 @@ func (q *Queries) GetTaxCode(ctx context.Context, id uuid.UUID) (TaxTaxCode, err
 		&i.UpdatedBy,
 		&i.DeletedAt,
 		&i.RowVersion,
+	)
+	return i, err
+}
+
+const getTaxCodeByCode = `-- name: GetTaxCodeByCode :one
+SELECT id, code, rate, tax_type
+FROM tax.tax_code
+WHERE organization_id = $1 AND code = $2 AND deleted_at IS NULL
+`
+
+type GetTaxCodeByCodeParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	Code           string    `json:"code"`
+}
+
+type GetTaxCodeByCodeRow struct {
+	ID      uuid.UUID      `json:"id"`
+	Code    string         `json:"code"`
+	Rate    pgtype.Numeric `json:"rate"`
+	TaxType string         `json:"tax_type"`
+}
+
+func (q *Queries) GetTaxCodeByCode(ctx context.Context, arg GetTaxCodeByCodeParams) (GetTaxCodeByCodeRow, error) {
+	row := q.db.QueryRow(ctx, getTaxCodeByCode, arg.OrganizationID, arg.Code)
+	var i GetTaxCodeByCodeRow
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Rate,
+		&i.TaxType,
 	)
 	return i, err
 }

@@ -432,12 +432,19 @@ func (q *Queries) ListAccountBalances(ctx context.Context, arg ListAccountBalanc
 }
 
 const listJournalEntries = `-- name: ListJournalEntries :many
-SELECT id, journal_no, financial_organization_id, ledger_id, fiscal_period_id,
-       posting_date, journal_source, currency_code, status, source_document_ref,
-       reversed_entry_id, row_version, posted_at, created_at
-FROM gl.journal_entry
-WHERE deleted_at IS NULL
-ORDER BY posting_date DESC, created_at DESC, journal_no
+SELECT je.id, je.journal_no, je.financial_organization_id, je.ledger_id, je.fiscal_period_id,
+       je.posting_date, je.journal_source, je.currency_code, je.exchange_rate, je.status,
+       je.source_document_ref, je.reversed_entry_id, je.row_version, je.posted_at, je.created_at,
+       COALESCE(SUM(jl.debit_amount), 0)::numeric(20,4) AS total_debit,
+       COALESCE(SUM(jl.credit_amount), 0)::numeric(20,4) AS total_credit
+FROM gl.journal_entry je
+LEFT JOIN gl.journal_line jl
+  ON jl.journal_entry_id = je.id
+ AND jl.posting_date = je.posting_date
+ AND jl.deleted_at IS NULL
+WHERE je.deleted_at IS NULL
+GROUP BY je.id, je.posting_date
+ORDER BY je.posting_date DESC, je.created_at DESC, je.journal_no
 LIMIT $1 OFFSET $2
 `
 
@@ -455,12 +462,15 @@ type ListJournalEntriesRow struct {
 	PostingDate             pgtype.Date        `json:"posting_date"`
 	JournalSource           string             `json:"journal_source"`
 	CurrencyCode            string             `json:"currency_code"`
+	ExchangeRate            pgtype.Numeric     `json:"exchange_rate"`
 	Status                  string             `json:"status"`
 	SourceDocumentRef       *string            `json:"source_document_ref"`
 	ReversedEntryID         *uuid.UUID         `json:"reversed_entry_id"`
 	RowVersion              int32              `json:"row_version"`
 	PostedAt                pgtype.Timestamptz `json:"posted_at"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	TotalDebit              pgtype.Numeric     `json:"total_debit"`
+	TotalCredit             pgtype.Numeric     `json:"total_credit"`
 }
 
 func (q *Queries) ListJournalEntries(ctx context.Context, arg ListJournalEntriesParams) ([]ListJournalEntriesRow, error) {
@@ -481,12 +491,15 @@ func (q *Queries) ListJournalEntries(ctx context.Context, arg ListJournalEntries
 			&i.PostingDate,
 			&i.JournalSource,
 			&i.CurrencyCode,
+			&i.ExchangeRate,
 			&i.Status,
 			&i.SourceDocumentRef,
 			&i.ReversedEntryID,
 			&i.RowVersion,
 			&i.PostedAt,
 			&i.CreatedAt,
+			&i.TotalDebit,
+			&i.TotalCredit,
 		); err != nil {
 			return nil, err
 		}

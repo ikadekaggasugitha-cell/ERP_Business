@@ -44,6 +44,19 @@ type CcCostCenter struct {
 	RowVersion     int32              `json:"row_version"`
 }
 
+type CcCostCenterAssignment struct {
+	ID              uuid.UUID          `json:"id"`
+	OrganizationID  uuid.UUID          `json:"organization_id"`
+	CostCenterID    uuid.UUID          `json:"cost_center_id"`
+	OrganizationRef uuid.UUID          `json:"organization_ref"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	CreatedBy       uuid.UUID          `json:"created_by"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy       *uuid.UUID         `json:"updated_by"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
+	RowVersion      int32              `json:"row_version"`
+}
+
 type CcOutbox struct {
 	ID             uuid.UUID          `json:"id"`
 	AggregateType  string             `json:"aggregate_type"`
@@ -54,6 +67,12 @@ type CcOutbox struct {
 	CorrelationID  uuid.UUID          `json:"correlation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	PublishedAt    pgtype.Timestamptz `json:"published_at"`
+}
+
+type CcProcessedEvent struct {
+	EventID     uuid.UUID          `json:"event_id"`
+	EventType   string             `json:"event_type"`
+	ProcessedAt pgtype.Timestamptz `json:"processed_at"`
 }
 
 type PcProfitCenter struct {
@@ -71,4 +90,17 @@ type PcProfitCenter struct {
 	UpdatedBy      *uuid.UUID         `json:"updated_by"`
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 	RowVersion     int32              `json:"row_version"`
+}
+
+type PcProfitCenterAssignment struct {
+	ID              uuid.UUID          `json:"id"`
+	OrganizationID  uuid.UUID          `json:"organization_id"`
+	ProfitCenterID  uuid.UUID          `json:"profit_center_id"`
+	OrganizationRef uuid.UUID          `json:"organization_ref"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	CreatedBy       uuid.UUID          `json:"created_by"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy       *uuid.UUID         `json:"updated_by"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
+	RowVersion      int32              `json:"row_version"`
 }

@@ -41,9 +41,12 @@ func (f *fakeStore) GetByID(context.Context, []uuid.UUID, uuid.UUID) (gldb.GlJou
 	return f.entry, f.lines, nil
 }
 func (f *fakeStore) ListWithCount(context.Context, []uuid.UUID, gldb.ListJournalEntriesParams) ([]gldb.ListJournalEntriesRow, int64, error) {
+	dr, _ := platform.ParseNumeric(f.totDebit)
+	cr, _ := platform.ParseNumeric(f.totCredit)
 	return []gldb.ListJournalEntriesRow{{
 		ID: f.entry.ID, JournalNo: f.entry.JournalNo, PostingDate: f.entry.PostingDate,
-		CurrencyCode: "IDR", Status: f.entry.Status, RowVersion: f.entry.RowVersion,
+		CurrencyCode: "IDR", ExchangeRate: f.entry.ExchangeRate, Status: f.entry.Status, RowVersion: f.entry.RowVersion,
+		TotalDebit: dr, TotalCredit: cr,
 	}}, 1, nil
 }
 func (f *fakeStore) UpdateDraftEntry(context.Context, []uuid.UUID, gldb.UpdateJournalEntryDraftParams, []gldb.CreateJournalLineParams) (int64, error) {
@@ -160,6 +163,47 @@ func TestCreateRejectsInvalidNumericAndPostEnforcesBR556(t *testing.T) {
 	row := listResp.Data[0]
 	if row.ExchangeRate != "1.0000" || row.TotalDebit != "1000.0000" || row.TotalCredit != "1000.0000" {
 		t.Fatalf("expected list item to include exchangeRate=1.0000 totalDebit=1000.0000 totalCredit=1000.0000, got %+v", row)
+	}
+}
+
+func TestBuildLineParamsValidationAndFXFunctionalAmount(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	acctID := uuid.NewString()
+	rate, _ := platform.ParseNumeric("15850.0000")
+
+	// 1. Reject negative debit/credit
+	if _, err := buildLineParams(orgID, userID, rate, []lineReq{
+		{LineNo: 1, AccountID: acctID, DebitAmount: "-10", CreditAmount: "0"},
+	}); err == nil {
+		t.Fatal("expected error for negative debitAmount")
+	}
+
+	// 2. Reject both debit and credit > 0 on the same line
+	if _, err := buildLineParams(orgID, userID, rate, []lineReq{
+		{LineNo: 1, AccountID: acctID, DebitAmount: "10", CreditAmount: "5"},
+	}); err == nil {
+		t.Fatal("expected error when both debitAmount and creditAmount > 0")
+	}
+
+	// 3. Reject duplicate lineNo
+	if _, err := buildLineParams(orgID, userID, rate, []lineReq{
+		{LineNo: 1, AccountID: acctID, DebitAmount: "10", CreditAmount: "0"},
+		{LineNo: 1, AccountID: acctID, DebitAmount: "0", CreditAmount: "10"},
+	}); err == nil {
+		t.Fatal("expected error for duplicate lineNo")
+	}
+
+	// 4. Compute functionalAmount = amount * exchangeRate when omitted
+	lines, err := buildLineParams(orgID, userID, rate, []lineReq{
+		{LineNo: 1, AccountID: acctID, DebitAmount: "100.0000", CreditAmount: "0"},
+		{LineNo: 2, AccountID: acctID, DebitAmount: "0", CreditAmount: "100.0000"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := platform.FormatNumeric(lines[0].FunctionalAmount, 4); got != "1585000.0000" {
+		t.Fatalf("functionalAmount = %s, want 1585000.0000", got)
 	}
 }
 

@@ -112,6 +112,12 @@ func TestSecurityRolesPermissionsAndSystemLock(t *testing.T) {
 	if rr := sendReq(t, h, http.MethodDelete, "/roles/10000000-0000-0000-0000-000000000021", nil, hdrs); rr.Code != http.StatusConflict {
 		t.Fatalf("expected 409 deleting system role, got %d", rr.Code)
 	}
+	if rr := sendReq(t, h, http.MethodPut, "/roles/10000000-0000-0000-0000-000000000021", map[string]any{"name": "Tampered", "isSystem": false}, hdrs); rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409 updating system role, got %d", rr.Code)
+	}
+	if rr := sendReq(t, h, http.MethodPost, "/roles/10000000-0000-0000-0000-000000000021/permissions", map[string]any{"permissionId": "20000000-0000-0000-0000-000000000001"}, hdrs); rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409 granting permission to system role, got %d", rr.Code)
+	}
 
 	store.sysRole = false
 	if rr := sendReq(t, h, http.MethodDelete, "/roles/10000000-0000-0000-0000-000000000021", nil, hdrs); rr.Code != http.StatusNoContent {
@@ -122,6 +128,10 @@ func TestSecurityRolesPermissionsAndSystemLock(t *testing.T) {
 		"permissionId": "20000000-0000-0000-0000-000000000001",
 	}, hdrs); rr.Code != http.StatusCreated {
 		t.Fatalf("expected 201 granting permission, got %d", rr.Code)
+	}
+
+	if rr := sendReq(t, h, http.MethodPost, "/roles", map[string]any{"code": "ROOT_FAKE", "name": "Fake Root", "isSystem": true}, hdrs); rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 creating system role from tenant endpoint, got %d", rr.Code)
 	}
 
 	rr := sendReq(t, h, http.MethodGet, "/permissions", nil, hdrs)

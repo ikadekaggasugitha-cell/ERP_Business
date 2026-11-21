@@ -23,7 +23,15 @@ HR=http://localhost:8097
 PAY=http://localhost:8098
 REP=http://localhost:8099
 CUR=http://localhost:8100
+FA=http://localhost:8101
 DIM=http://localhost:8102
+BDG=http://localhost:8103
+FCL=http://localhost:8104
+CON=http://localhost:8105
+PRJ=http://localhost:8106
+AST=http://localhost:8107
+MNT=http://localhost:8108
+CRM=http://localhost:8109
 LOC=http://localhost:8110
 AUD=http://localhost:8083
 GW=http://localhost:8000/api/v1
@@ -51,7 +59,7 @@ ckc() { # ck contains: "desc" haystack needle
 }
 
 echo "== waiting for services =="
-for p in 8081 8082 8083 8100 8000; do
+for p in 8081 8082 8083 8084 8085 8086 8087 8088 8089 8090 8091 8092 8093 8094 8095 8096 8097 8098 8099 8100 8101 8102 8103 8104 8105 8106 8107 8108 8109 8110 8000; do
   for i in $(seq 1 60); do curl -fsS "localhost:$p/healthz" >/dev/null 2>&1 && break; sleep 2; done
 done
 
@@ -213,16 +221,22 @@ CODE=$(printf '%s' "$R" | tail -1); BODY=$(printf '%s' "$R" | sed '$d')
 ck "create employee -> 201" "$CODE" "201"
 EMPID=$(printf '%s' "$BODY" | jq -r .id)
 
-echo "== 5p. payroll: create + calculate run (emits payroll.run.completed) =="
+echo "== 5p. payroll: create + calculate + approve + post run (emits payroll.run.calculated -> approved -> posted/completed) =="
 R=$(curl -sS -w $'\n%{http_code}' "${AH[@]}" -H "Idempotency-Key: run-$TS" -d '{"runNo":"RUN-'"$TS"'","periodMonth":3,"periodYear":2026}' "$PAY/payroll-runs")
 CODE=$(printf '%s' "$R" | tail -1); BODY=$(printf '%s' "$R" | sed '$d')
 ck "create payroll run -> 201" "$CODE" "201"
 RUNID=$(printf '%s' "$BODY" | jq -r .id); RUNVER=$(printf '%s' "$BODY" | jq -r .rowVersion)
-CODE=$(curl -sS -o /dev/null -w '%{http_code}' "${AH[@]}" -H "If-Match: $RUNVER" -d '{"totalAmount":"5000.0000"}' "$PAY/payroll-runs/$RUNID/calculate")
+R=$(curl -sS -w $'\n%{http_code}' "${AH[@]}" -H "If-Match: $RUNVER" -d '{"employees":[{"employeeId":"'"$EMPID"'","basicSalary":"5000000.0000","ptkp":"TK/0","hasNpwp":true}]}' "$PAY/payroll-runs/$RUNID/calculate")
+CODE=$(printf '%s' "$R" | tail -1); RUNVER2=$(printf '%s' "$R" | sed '$d' | jq -r .rowVersion)
 ck "calculate payroll run -> 200" "$CODE" "200"
+R=$(curl -sS -w $'\n%{http_code}' "${AH[@]}" -H "If-Match: $RUNVER2" -X POST "$PAY/payroll-runs/$RUNID/approve")
+CODE=$(printf '%s' "$R" | tail -1); RUNVER3=$(printf '%s' "$R" | sed '$d' | jq -r .rowVersion)
+ck "approve payroll run -> 200" "$CODE" "200"
+CODE=$(curl -sS -o /dev/null -w '%{http_code}' "${AH[@]}" -H "If-Match: $RUNVER3" -d '{"glJournalRef":"AUTO-RUN-'"$TS"'"}' "$PAY/payroll-runs/$RUNID/post")
+ck "post payroll run (emits payroll.run.completed) -> 200" "$CODE" "200"
 
 echo "== 6. audit + reporting: poll until all events consumed/projected (<=40s) =="
-found_gl=0; found_ap=0; found_ar=0; found_coa=0; found_tax=0; found_trs=0; found_usr=0; found_sec=0; found_md=0; found_org=0; found_wf=0; found_proc=0; found_inv=0; found_mfg=0; found_so=0; found_hr=0; found_pay=0; found_rep=0
+found_gl=0; found_ap=0; found_ar=0; found_coa=0; found_tax=0; found_trs=0; found_usr=0; found_sec=0; found_md=0; found_org=0; found_wf=0; found_proc=0; found_inv=0; found_mfg=0; found_so=0; found_hr=0; found_pay=0; found_rep=0; no_double_count=1
 for i in $(seq 1 20); do
   A=$(curl -sS -H "X-Organization-Id: $ORGA" "$AUD/audit-events?size=500")
   printf '%s' "$A" | jq -e '.data[] | select(.action=="gl.journal.posted" and .entityId=="'"$JID"'")' >/dev/null 2>&1 && found_gl=1
@@ -242,7 +256,9 @@ for i in $(seq 1 20); do
   printf '%s' "$A" | jq -e '.data[] | select(.action=="sales.order.confirmed" and .entityId=="'"$SOID"'")' >/dev/null 2>&1 && found_so=1
   printf '%s' "$A" | jq -e '.data[] | select(.action=="hr.employee.updated" and .entityId=="'"$EMPID"'")' >/dev/null 2>&1 && found_hr=1
   printf '%s' "$A" | jq -e '.data[] | select(.action=="payroll.run.completed" and .entityId=="'"$RUNID"'")' >/dev/null 2>&1 && found_pay=1
-  printf '%s' "$(curl -sS -H "X-Organization-Id: $ORGA" "$REP/gl-balance-snapshots?size=200")" | jq -e '.data[] | select(.accountCode=="JV-'"$TS"'")' >/dev/null 2>&1 && found_rep=1
+  RS=$(curl -sS -H "X-Organization-Id: $ORGA" "$REP/gl-balance-snapshots?size=200")
+  printf '%s' "$RS" | jq -e '.data[] | select(.accountCode=="ACCT:'"$ACC1"'")' >/dev/null 2>&1 && found_rep=1
+  printf '%s' "$RS" | jq -e '.data[] | select(.accountCode=="JV-'"$TS"'")' >/dev/null 2>&1 && no_double_count=0
   [ "$found_gl" = 1 ] && [ "$found_ap" = 1 ] && [ "$found_ar" = 1 ] && [ "$found_coa" = 1 ] && [ "$found_tax" = 1 ] && [ "$found_trs" = 1 ] && [ "$found_usr" = 1 ] && [ "$found_sec" = 1 ] && [ "$found_md" = 1 ] && [ "$found_org" = 1 ] && [ "$found_wf" = 1 ] && [ "$found_proc" = 1 ] && [ "$found_inv" = 1 ] && [ "$found_mfg" = 1 ] && [ "$found_so" = 1 ] && [ "$found_hr" = 1 ] && [ "$found_pay" = 1 ] && [ "$found_rep" = 1 ] && break
   sleep 2
 done
@@ -263,7 +279,8 @@ ck "audit consumed manufacturing.workorder.completed" "$found_mfg" "1"
 ck "audit consumed sales.order.confirmed" "$found_so" "1"
 ck "audit consumed hr.employee.updated" "$found_hr" "1"
 ck "audit consumed payroll.run.completed" "$found_pay" "1"
-ck "reporting projected gl.journal.posted (CQRS)" "$found_rep" "1"
+ck "reporting projected gl.journal.posted per account (CQRS)" "$found_rep" "1"
+ck "reporting avoided journal-number double counting" "$no_double_count" "1"
 
 echo "== 6b. audit: RLS — org B sees none of org A's audit events =="
 BCOUNT=$(curl -sS -H "X-Organization-Id: $ORGB" "$AUD/audit-events?size=100" | jq '[.data[] | select(.entityId=="'"$JID"'" or .entityId=="'"$IID"'")] | length')
@@ -272,7 +289,7 @@ ck "audit RLS org B count" "$BCOUNT" "0"
 echo "== 7. gl consumer: subledger events -> auto-posted GL journals (SAD 5.4.1 muara->GL) =="
 # ar.invoice.issued (5b) and ap.invoice.recorded (5) are consumed by gl-service,
 # which auto-posts a balanced journal (AUTO-<invoiceNo>) and emits gl.journal.posted,
-# which reporting then projects. Proves the full inbound consumer chain end-to-end.
+# which reporting then projects per COA accountCode.
 AR_AUTO="AUTO-AR-$TS"; AP_AUTO="AUTO-INV-$TS"; PAY_AUTO="AUTO-RUN-$TS"; GI_AUTO="AUTO-$RESID"
 gl_ar=0; gl_ap=0; gl_pay=0; gl_gi=0; rep_ar=0; rep_ap=0; rep_pay=0; rep_gi=0
 for i in $(seq 1 25); do
@@ -282,10 +299,10 @@ for i in $(seq 1 25); do
   printf '%s' "$J" | jq -e '.data[] | select(.journalNo=="'"$PAY_AUTO"'" and .status=="Posted")' >/dev/null 2>&1 && gl_pay=1
   printf '%s' "$J" | jq -e '.data[] | select(.journalNo=="'"$GI_AUTO"'" and .status=="Posted")' >/dev/null 2>&1 && gl_gi=1
   S=$(curl -sS -H "X-Organization-Id: $ORGA" "$REP/gl-balance-snapshots?size=200")
-  printf '%s' "$S" | jq -e '.data[] | select(.accountCode=="'"$AR_AUTO"'")' >/dev/null 2>&1 && rep_ar=1
-  printf '%s' "$S" | jq -e '.data[] | select(.accountCode=="'"$AP_AUTO"'")' >/dev/null 2>&1 && rep_ap=1
-  printf '%s' "$S" | jq -e '.data[] | select(.accountCode=="'"$PAY_AUTO"'")' >/dev/null 2>&1 && rep_pay=1
-  printf '%s' "$S" | jq -e '.data[] | select(.accountCode=="'"$GI_AUTO"'")' >/dev/null 2>&1 && rep_gi=1
+  printf '%s' "$S" | jq -e '.data[] | select(.accountCode=="1120")' >/dev/null 2>&1 && rep_ar=1
+  printf '%s' "$S" | jq -e '.data[] | select(.accountCode=="2110")' >/dev/null 2>&1 && rep_ap=1
+  printf '%s' "$S" | jq -e '.data[] | select(.accountCode=="5300")' >/dev/null 2>&1 && rep_pay=1
+  printf '%s' "$S" | jq -e '.data[] | select(.accountCode=="5200")' >/dev/null 2>&1 && rep_gi=1
   [ "$gl_ar" = 1 ] && [ "$gl_ap" = 1 ] && [ "$gl_pay" = 1 ] && [ "$gl_gi" = 1 ] && [ "$rep_ar" = 1 ] && [ "$rep_ap" = 1 ] && [ "$rep_pay" = 1 ] && [ "$rep_gi" = 1 ] && break
   sleep 2
 done
@@ -293,10 +310,10 @@ ck "gl auto-posted journal from ar.invoice.issued" "$gl_ar" "1"
 ck "gl auto-posted journal from ap.invoice.recorded" "$gl_ap" "1"
 ck "gl auto-posted journal from payroll.run.completed (INT-003)" "$gl_pay" "1"
 ck "gl auto-posted journal from inventory.goods.issued (INT-001)" "$gl_gi" "1"
-ck "reporting projected AR auto-journal (ar->gl->reporting)" "$rep_ar" "1"
-ck "reporting projected AP auto-journal (ap->gl->reporting)" "$rep_ap" "1"
-ck "reporting projected payroll auto-journal (payroll->gl->reporting)" "$rep_pay" "1"
-ck "reporting projected goods-issued auto-journal (inventory->gl->reporting)" "$rep_gi" "1"
+ck "reporting projected AR control account 1120 (ar->gl->reporting)" "$rep_ar" "1"
+ck "reporting projected AP control account 2110 (ap->gl->reporting)" "$rep_ap" "1"
+ck "reporting projected payroll expense account 5300 (payroll->gl->reporting)" "$rep_pay" "1"
+ck "reporting projected COGS account 5200 (inventory->gl->reporting)" "$rep_gi" "1"
 
 echo "== 7b. INT-001 full Saga chain: sales.order.confirmed -> inventory -> ar -> gl -> reporting =="
 # Confirming the SO (5n) cascades: inventory consumes it -> emits goods.issued ->
@@ -307,13 +324,13 @@ ar_si=0; gl_si=0; rep_si=0
 for i in $(seq 1 30); do
   printf '%s' "$(curl -sS "${AH[@]}" "$AR/customer-invoices?size=200")" | jq -e '.data[] | select(.invoiceNo=="'"$SI_NO"'")' >/dev/null 2>&1 && ar_si=1
   printf '%s' "$(curl -sS "${AH[@]}" "$GL/journal-entries?size=100")" | jq -e '.data[] | select(.journalNo=="'"$SI_AUTO"'" and .status=="Posted")' >/dev/null 2>&1 && gl_si=1
-  printf '%s' "$(curl -sS -H "X-Organization-Id: $ORGA" "$REP/gl-balance-snapshots?size=200")" | jq -e '.data[] | select(.accountCode=="'"$SI_AUTO"'")' >/dev/null 2>&1 && rep_si=1
+  printf '%s' "$(curl -sS -H "X-Organization-Id: $ORGA" "$REP/gl-balance-snapshots?size=200")" | jq -e '.data[] | select(.accountCode=="4100")' >/dev/null 2>&1 && rep_si=1
   [ "$ar_si" = 1 ] && [ "$gl_si" = 1 ] && [ "$rep_si" = 1 ] && break
   sleep 2
 done
 ck "ar issued invoice from goods.issued (sales->inventory->ar)" "$ar_si" "1"
 ck "gl auto-posted from derived ar invoice (ar->gl)" "$gl_si" "1"
-ck "reporting projected full-chain journal (->reporting)" "$rep_si" "1"
+ck "reporting projected full-chain revenue account 4100 (->reporting)" "$rep_si" "1"
 
 echo "== 8. INT-002 chain: procurement.goods.received -> ap -> gl -> reporting =="
 # Receiving the PO (5k) emits goods.received -> ap records invoice PI-PO-$TS ->
@@ -323,13 +340,13 @@ ap_pi=0; gl_pi=0; rep_pi=0
 for i in $(seq 1 30); do
   printf '%s' "$(curl -sS "${AH[@]}" "$AP/vendor-invoices?size=200")" | jq -e '.data[] | select(.invoiceNo=="'"$PI_NO"'")' >/dev/null 2>&1 && ap_pi=1
   printf '%s' "$(curl -sS "${AH[@]}" "$GL/journal-entries?size=100")" | jq -e '.data[] | select(.journalNo=="'"$PI_AUTO"'" and .status=="Posted")' >/dev/null 2>&1 && gl_pi=1
-  printf '%s' "$(curl -sS -H "X-Organization-Id: $ORGA" "$REP/gl-balance-snapshots?size=200")" | jq -e '.data[] | select(.accountCode=="'"$PI_AUTO"'")' >/dev/null 2>&1 && rep_pi=1
+  printf '%s' "$(curl -sS -H "X-Organization-Id: $ORGA" "$REP/gl-balance-snapshots?size=200")" | jq -e '.data[] | select(.accountCode=="5100")' >/dev/null 2>&1 && rep_pi=1
   [ "$ap_pi" = 1 ] && [ "$gl_pi" = 1 ] && [ "$rep_pi" = 1 ] && break
   sleep 2
 done
 ck "ap recorded invoice from goods.received (procurement->ap)" "$ap_pi" "1"
 ck "gl auto-posted from goods-received ap invoice (ap->gl)" "$gl_pi" "1"
-ck "reporting projected INT-002 journal (->reporting)" "$rep_pi" "1"
+ck "reporting projected INT-002 expense account 5100 (->reporting)" "$rep_pi" "1"
 
 echo "== 9. INT-001 compensation: out-of-stock SO -> reservation.failed -> SO Cancelled =="
 # An order whose requested quantity exceeds available inventory stock triggers
@@ -395,14 +412,22 @@ SYS_ORG=00000000-0000-0000-0000-000000000000
 SYS_AH=(-H "X-Organization-Id: $SYS_ORG" -H "X-User-Id: $USER" -H "Content-Type: application/json")
 CUR_AH=(-H "X-Organization-Id: $ORGA,$SYS_ORG" -H "X-User-Id: $USER" -H "Content-Type: application/json")
 
-# 13a. Direct port 8100 readyz
+# 13a. Direct port 8100 readyz & system org write protection
 cur_ready=$(curl -s -o /dev/null -w "%{http_code}" "$CUR/readyz" || true)
 ck "13a. currency-service direct /readyz (8100)" "$cur_ready" "200"
+cur_sys_write=$(curl -s -o /dev/null -w "%{http_code}" "${SYS_AH[@]}" -H "Idempotency-Key: sys-block-$TS" -d '{"code":"ZZZ","name":"Blocked","precision":2}' "$CUR/currencies" || true)
+ck "13a-sec. currency-service rejects write to system org -> 403" "$cur_sys_write" "403"
 
-# Ensure base currencies (IDR, USD) and SPOT rate type exist in system org if DB was started without seed job
-curl -s -o /dev/null "${SYS_AH[@]}" -H "Idempotency-Key: seed-idr-$TS" -d '{"code":"IDR","numericCode":"360","name":"Indonesian Rupiah","precision":2}' "$CUR/currencies" || true
-curl -s -o /dev/null "${SYS_AH[@]}" -H "Idempotency-Key: seed-usd-$TS" -d '{"code":"USD","numericCode":"840","name":"US Dollar","precision":2}' "$CUR/currencies" || true
-curl -s -o /dev/null "${SYS_AH[@]}" -H "Idempotency-Key: seed-spot-$TS" -d '{"code":"SPOT","name":"Spot Rate"}' "$CUR/exchange-rate-types" || true
+# Ensure base currencies (IDR, USD) and SPOT rate type exist in system org via DB seed if unseeded
+docker exec erp-slice-db-1 psql -U postgres -d currency_db -q -v ON_ERROR_STOP=1 -c "
+  INSERT INTO cur.currency (organization_id, code, numeric_code, name, precision, is_active, created_by) VALUES
+    ('$SYS_ORG', 'IDR', '360', 'Indonesian Rupiah', 2, true, '$USER'),
+    ('$SYS_ORG', 'USD', '840', 'US Dollar', 2, true, '$USER')
+  ON CONFLICT (organization_id, code) DO NOTHING;
+  INSERT INTO cur.exchange_rate_type (organization_id, code, name, created_by) VALUES
+    ('$SYS_ORG', 'SPOT', 'Spot Rate', '$USER')
+  ON CONFLICT (organization_id, code) DO NOTHING;
+" >/dev/null 2>&1 || true
 
 # 13b. Direct port 8100 list currencies (200 + includes IDR)
 cur_list_res=$(curl -sS -w $'\n%{http_code}' "${CUR_AH[@]}" "$CUR/currencies?page=1&size=20" || true)
@@ -501,6 +526,20 @@ for i in $(seq 1 20); do
 done
 ck "14g. audit consumed dimension.cost_center.upserted" "$a_dim" "1"
 ck "14g. audit consumed localization.bundle.updated" "$a_loc" "1"
+
+echo "== 15. Extended Microservices (fixedasset, budget, financialclose, consolidation, project, asset, maintenance, crm) =="
+for pair in "fixedasset:$FA" "budget:$BDG" "financialclose:$FCL" "consolidation:$CON" "project:$PRJ" "asset:$AST" "maintenance:$MNT" "crm:$CRM"; do
+  svc="${pair%%:*}"; url="${pair#*:}"
+  ck "15a. $svc /readyz" "$(curl -s -o /dev/null -w '%{http_code}' "$url/readyz" || true)" "200"
+done
+ck "15b. gw /fixed-assets" "$(curl -s -o /dev/null -w '%{http_code}' "${GW_AH[@]}" "$GW/fixed-assets?size=5" || true)" "200"
+ck "15b. gw /budgets" "$(curl -s -o /dev/null -w '%{http_code}' "${GW_AH[@]}" "$GW/budgets?size=5" || true)" "200"
+ck "15b. gw /closing-runs" "$(curl -s -o /dev/null -w '%{http_code}' "${GW_AH[@]}" "$GW/closing-runs?size=5" || true)" "200"
+ck "15b. gw /consolidation-runs" "$(curl -s -o /dev/null -w '%{http_code}' "${GW_AH[@]}" "$GW/consolidation-runs?size=5" || true)" "200"
+ck "15b. gw /projects" "$(curl -s -o /dev/null -w '%{http_code}' "${GW_AH[@]}" "$GW/projects?size=5" || true)" "200"
+ck "15b. gw /assets" "$(curl -s -o /dev/null -w '%{http_code}' "${GW_AH[@]}" "$GW/assets?size=5" || true)" "200"
+ck "15b. gw /maintenance-work-orders" "$(curl -s -o /dev/null -w '%{http_code}' "${GW_AH[@]}" "$GW/maintenance-work-orders?size=5" || true)" "200"
+ck "15b. gw /opportunities" "$(curl -s -o /dev/null -w '%{http_code}' "${GW_AH[@]}" "$GW/opportunities?size=5" || true)" "200"
 
 echo ""
 echo "==================== RESULT: $pass passed, $fail failed ===================="

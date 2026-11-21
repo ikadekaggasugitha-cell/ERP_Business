@@ -55,6 +55,14 @@ jobs:
           - currency-service
           - dimension-service
           - localization-service
+          - fixedasset-service
+          - budget-service
+          - financialclose-service
+          - consolidation-service
+          - project-service
+          - asset-service
+          - maintenance-service
+          - crm-service
     defaults:
       run:
         working-directory: services/${{ matrix.service }}

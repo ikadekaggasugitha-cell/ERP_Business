@@ -112,7 +112,7 @@ func (m *memPayrollStore) PostAndEmit(_ context.Context, _ []uuid.UUID, id uuid.
 	if !ok {
 		return repository.PayrollRunDetail{}, httpx.NotFound("payroll run tidak ditemukan")
 	}
-	if (d.Status != "Calculated" && d.Status != "Approved") || d.RowVersion != version {
+	if d.Status != "Approved" || d.RowVersion != version {
 		return repository.PayrollRunDetail{}, httpx.Conflict("INVALID_STATE", "conflict")
 	}
 	d.Status = "Posted"
@@ -171,7 +171,13 @@ func TestPayrollRunLifecycleCalculationAndRBAC(t *testing.T) {
 	var created repository.PayrollRunDetail
 	_ = json.Unmarshal(rec.Body.Bytes(), &created)
 
-	// 3. Calculate batched employee -> 200
+	// 3a. Reject Calculate with empty employees -> 422
+	rec = doPayReq(t, router, http.MethodPost, "/payroll-runs/"+created.ID.String()+"/calculate", `{"totalAmount":"5000.0000"}`, "payroll:write", `"1"`)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for empty employees, got %d %s", rec.Code, rec.Body.String())
+	}
+
+	// 3b. Calculate batched employee -> 200
 	empID := uuid.NewString()
 	calcBody := `{"employees":[{"employeeId":"` + empID + `","basicSalary":"15000000.0000","ptkp":"TK/0"}]}`
 	rec = doPayReq(t, router, http.MethodPost, "/payroll-runs/"+created.ID.String()+"/calculate", calcBody, "payroll:write", `"1"`)
@@ -184,7 +190,13 @@ func TestPayrollRunLifecycleCalculationAndRBAC(t *testing.T) {
 		t.Fatalf("unexpected calculated run: %+v", calced)
 	}
 
-	// 4. Approve -> Post
+	// 4a. Reject Post directly from Calculated -> 409
+	rec = doPayReq(t, router, http.MethodPost, "/payroll-runs/"+created.ID.String()+"/post", `{"glJournalRef":"JV-PAY-01"}`, "payroll:write", `"2"`)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 posting unapproved run, got %d %s", rec.Code, rec.Body.String())
+	}
+
+	// 4b. Approve -> Post
 	rec = doPayReq(t, router, http.MethodPost, "/payroll-runs/"+created.ID.String()+"/approve", "", "payroll:write", `"2"`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 approve, got %d %s", rec.Code, rec.Body.String())

@@ -75,6 +75,10 @@ func requireWrite(w http.ResponseWriter, r *http.Request) ([]uuid.UUID, uuid.UUI
 		httpx.WriteError(w, r, err)
 		return nil, uuid.Nil, false
 	}
+	if scope[0] == uuid.Nil {
+		httpx.WriteError(w, r, httpx.Forbidden("system organization cannot be used as active tenant"))
+		return nil, uuid.Nil, false
+	}
 	user, err := httpx.RequireUser(r)
 	if err != nil {
 		httpx.WriteError(w, r, err)
@@ -300,7 +304,7 @@ func (s *Server) updateCurrency(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"rowVersion": nextVer})
+	httpx.WriteIDResponse(w, http.StatusOK, nextVer, map[string]any{"rowVersion": nextVer})
 }
 
 func (s *Server) deleteCurrency(w http.ResponseWriter, r *http.Request) {
@@ -709,7 +713,7 @@ func (s *Server) updateRate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"rowVersion": nextVer})
+	httpx.WriteIDResponse(w, http.StatusOK, nextVer, map[string]any{"rowVersion": nextVer})
 }
 
 func (s *Server) deleteRate(w http.ResponseWriter, r *http.Request) {

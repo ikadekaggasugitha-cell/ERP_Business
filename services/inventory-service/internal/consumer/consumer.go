@@ -23,7 +23,11 @@ import (
 var Topics = []string{
 	eventbus.TopicFor("sales.order.confirmed"),
 	eventbus.TopicFor("procurement.goods.received"),
+	eventbus.TopicFor("manufacturing.workorder.completed"),
+	eventbus.TopicFor("maintenance.workorder.parts_requested"),
 }
+
+var sysActor = uuid.MustParse("00000000-0000-0000-0000-0000000000c1")
 
 // EventStore abstracts inventory repository methods invoked by the Kafka consumer.
 type EventStore interface {
@@ -82,6 +86,10 @@ func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 		return x.handleSalesOrderConfirmed(ctx, env)
 	case "procurement.goods.received":
 		return x.handleGoodsReceived(ctx, env)
+	case "manufacturing.workorder.completed":
+		return x.handleWorkOrderCompleted(ctx, env)
+	case "maintenance.workorder.parts_requested":
+		return x.handleMaintenancePartsRequested(ctx, env)
 	default:
 		return nil
 	}
@@ -178,8 +186,12 @@ func (x *Consumer) handleSalesOrderConfirmed(ctx context.Context, env eventbus.E
 		OrganizationID: org,
 		CorrelationID:  corr,
 	}
-	moveDate := pgtype.Date{Time: time.Now().UTC(), Valid: true}
-	_, err = x.repo.FulfillSalesOrder(ctx, org, corr, org, moveDate, ref, whPtr, lines,
+	ts := env.OccurredAt
+	if ts.IsZero() {
+		ts = time.Now().UTC()
+	}
+	moveDate := pgtype.Date{Time: ts.UTC(), Valid: true}
+	_, err = x.repo.FulfillSalesOrder(ctx, org, corr, sysActor, moveDate, ref, whPtr, lines,
 		inventorydb.MarkEventProcessedParams{EventID: eventID, EventType: env.EventType}, evOK, evFail)
 	return err
 }
@@ -233,8 +245,150 @@ func (x *Consumer) handleGoodsReceived(ctx context.Context, env eventbus.Envelop
 	if ref == "" {
 		ref = env.AggregateID
 	}
-	moveDate := pgtype.Date{Time: time.Now().UTC(), Valid: true}
-	_, err = x.repo.ReceiveProcurementGoods(ctx, org, corr, org, moveDate, ref, whPtr, lines,
+	ts := env.OccurredAt
+	if ts.IsZero() {
+		ts = time.Now().UTC()
+	}
+	moveDate := pgtype.Date{Time: ts.UTC(), Valid: true}
+	_, err = x.repo.ReceiveProcurementGoods(ctx, org, corr, sysActor, moveDate, ref, whPtr, lines,
 		inventorydb.MarkEventProcessedParams{EventID: eventID, EventType: env.EventType})
+	return err
+}
+
+func (x *Consumer) handleWorkOrderCompleted(ctx context.Context, env eventbus.Envelope) error {
+	org, err := uuid.Parse(env.OrganizationID)
+	if err != nil {
+		return &eventbus.ErrPoison{Err: fmt.Errorf("invalid organizationId %q: %w", env.OrganizationID, err)}
+	}
+	eventID, err := uuid.Parse(env.EventID)
+	if err != nil {
+		return &eventbus.ErrPoison{Err: fmt.Errorf("invalid eventId %q: %w", env.EventID, err)}
+	}
+	corr, err := uuid.Parse(env.CorrelationID)
+	if err != nil {
+		corr = eventID
+	}
+	var p struct {
+		WoNo          string `json:"woNo"`
+		ProductItemID string `json:"productItemId"`
+		ProducedQty   string `json:"producedQty"`
+		PlannedQty    string `json:"plannedQty"`
+		WarehouseID   string `json:"warehouseId"`
+	}
+	if len(env.Data) > 0 {
+		if err := json.Unmarshal(env.Data, &p); err != nil {
+			return &eventbus.ErrPoison{Err: fmt.Errorf("invalid manufacturing.workorder.completed payload: %w", err)}
+		}
+	}
+	itemID, err := uuid.Parse(strings.TrimSpace(p.ProductItemID))
+	if err != nil {
+		return &eventbus.ErrPoison{Err: fmt.Errorf("invalid productItemId %q: %w", p.ProductItemID, err)}
+	}
+	rawQty := strings.TrimSpace(p.ProducedQty)
+	if rawQty == "" {
+		rawQty = strings.TrimSpace(p.PlannedQty)
+	}
+	qtyNum, err := platform.ParseNumeric(rawQty)
+	if err != nil {
+		return &eventbus.ErrPoison{Err: fmt.Errorf("invalid producedQty %q: %w", rawQty, err)}
+	}
+	if qr := platform.NumericToRat(qtyNum); qr == nil || qr.Sign() <= 0 {
+		return &eventbus.ErrPoison{Err: fmt.Errorf("producedQty must be > 0, got %q", rawQty)}
+	}
+	var whPtr *uuid.UUID
+	if strings.TrimSpace(p.WarehouseID) != "" {
+		if wh, err := uuid.Parse(strings.TrimSpace(p.WarehouseID)); err == nil {
+			whPtr = &wh
+		}
+	}
+	zeroCost, _ := platform.ParseNumeric("0")
+	lines := []repository.StockLineRequest{{
+		ItemID:    itemID,
+		Qty:       qtyNum,
+		UnitPrice: zeroCost,
+	}}
+	ref := strings.TrimSpace(p.WoNo)
+	if ref == "" {
+		ref = env.AggregateID
+	}
+	ts := env.OccurredAt
+	if ts.IsZero() {
+		ts = time.Now().UTC()
+	}
+	moveDate := pgtype.Date{Time: ts.UTC(), Valid: true}
+	_, err = x.repo.ReceiveProcurementGoods(ctx, org, corr, sysActor, moveDate, "WO-"+ref, whPtr, lines,
+		inventorydb.MarkEventProcessedParams{EventID: eventID, EventType: env.EventType})
+	return err
+}
+
+func (x *Consumer) handleMaintenancePartsRequested(ctx context.Context, env eventbus.Envelope) error {
+	org, err := uuid.Parse(env.OrganizationID)
+	if err != nil {
+		return &eventbus.ErrPoison{Err: fmt.Errorf("invalid organizationId %q: %w", env.OrganizationID, err)}
+	}
+	eventID, err := uuid.Parse(env.EventID)
+	if err != nil {
+		return &eventbus.ErrPoison{Err: fmt.Errorf("invalid eventId %q: %w", env.EventID, err)}
+	}
+	corr, err := uuid.Parse(env.CorrelationID)
+	if err != nil {
+		corr = eventID
+	}
+	aggID, err := uuid.Parse(env.AggregateID)
+	if err != nil {
+		return &eventbus.ErrPoison{Err: fmt.Errorf("invalid aggregateId %q: %w", env.AggregateID, err)}
+	}
+	var p struct {
+		WoNo        string `json:"woNo"`
+		ItemID      string `json:"itemId"`
+		Quantity    string `json:"quantity"`
+		UnitCost    string `json:"unitCost"`
+		WarehouseID string `json:"warehouseId"`
+	}
+	if len(env.Data) > 0 {
+		if err := json.Unmarshal(env.Data, &p); err != nil {
+			return &eventbus.ErrPoison{Err: fmt.Errorf("invalid maintenance.workorder.parts_requested payload: %w", err)}
+		}
+	}
+	itemID, err := uuid.Parse(strings.TrimSpace(p.ItemID))
+	if err != nil {
+		return &eventbus.ErrPoison{Err: fmt.Errorf("invalid itemId %q: %w", p.ItemID, err)}
+	}
+	qtyNum, err := platform.ParseNumeric(strings.TrimSpace(p.Quantity))
+	if err != nil {
+		return &eventbus.ErrPoison{Err: fmt.Errorf("invalid quantity %q: %w", p.Quantity, err)}
+	}
+	if qr := platform.NumericToRat(qtyNum); qr == nil || qr.Sign() <= 0 {
+		return &eventbus.ErrPoison{Err: fmt.Errorf("quantity must be > 0, got %q", p.Quantity)}
+	}
+	costNum, _ := platform.ParseOptionalNumeric(p.UnitCost)
+	var whPtr *uuid.UUID
+	if strings.TrimSpace(p.WarehouseID) != "" {
+		if wh, err := uuid.Parse(strings.TrimSpace(p.WarehouseID)); err == nil {
+			whPtr = &wh
+		}
+	}
+	ref := "MNT-" + strings.TrimSpace(p.WoNo)
+	if ref == "MNT-" {
+		ref = "MNT-" + env.AggregateID
+	}
+	okPayload, _ := json.Marshal(map[string]any{"reference": ref, "sourceEventType": env.EventType})
+	failPayload, _ := json.Marshal(map[string]any{"reference": ref, "sourceEventType": env.EventType, "reason": "insufficient spare parts stock"})
+	evOK := inventorydb.InsertOutboxParams{
+		AggregateType: "StockReservation", AggregateID: aggID, EventType: "inventory.goods.issued",
+		Payload: okPayload, OrganizationID: org, CorrelationID: corr,
+	}
+	evFail := inventorydb.InsertOutboxParams{
+		AggregateType: "StockReservation", AggregateID: aggID, EventType: "inventory.reservation.failed",
+		Payload: failPayload, OrganizationID: org, CorrelationID: corr,
+	}
+	ts := env.OccurredAt
+	if ts.IsZero() {
+		ts = time.Now().UTC()
+	}
+	moveDate := pgtype.Date{Time: ts.UTC(), Valid: true}
+	lines := []repository.StockLineRequest{{ItemID: itemID, Qty: qtyNum, UnitPrice: costNum}}
+	_, err = x.repo.FulfillSalesOrder(ctx, org, corr, sysActor, moveDate, ref, whPtr, lines,
+		inventorydb.MarkEventProcessedParams{EventID: eventID, EventType: env.EventType}, evOK, evFail)
 	return err
 }

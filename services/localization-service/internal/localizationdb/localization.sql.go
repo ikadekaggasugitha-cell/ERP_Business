@@ -49,6 +49,19 @@ func (q *Queries) CountLocaleFormats(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countOrganizationLanguages = `-- name: CountOrganizationLanguages :one
+SELECT COUNT(*)
+FROM loc.organization_language
+WHERE deleted_at IS NULL
+`
+
+func (q *Queries) CountOrganizationLanguages(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrganizationLanguages)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countTranslations = `-- name: CountTranslations :one
 SELECT COUNT(*) FROM loc.translation
 WHERE deleted_at IS NULL
@@ -170,9 +183,51 @@ func (q *Queries) CreateTranslation(ctx context.Context, arg CreateTranslationPa
 	return i, err
 }
 
+const deleteLanguage = `-- name: DeleteLanguage :execrows
+UPDATE loc.language SET deleted_at = now(), updated_by = $3
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND is_fallback = FALSE
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
+`
+
+type DeleteLanguageParams struct {
+	ID         uuid.UUID  `json:"id"`
+	RowVersion int32      `json:"row_version"`
+	UpdatedBy  *uuid.UUID `json:"updated_by"`
+}
+
+func (q *Queries) DeleteLanguage(ctx context.Context, arg DeleteLanguageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteLanguage, arg.ID, arg.RowVersion, arg.UpdatedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteLocaleFormat = `-- name: DeleteLocaleFormat :execrows
+UPDATE loc.locale_format SET deleted_at = now(), updated_by = $3
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
+`
+
+type DeleteLocaleFormatParams struct {
+	ID         uuid.UUID  `json:"id"`
+	RowVersion int32      `json:"row_version"`
+	UpdatedBy  *uuid.UUID `json:"updated_by"`
+}
+
+func (q *Queries) DeleteLocaleFormat(ctx context.Context, arg DeleteLocaleFormatParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteLocaleFormat, arg.ID, arg.RowVersion, arg.UpdatedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteTranslation = `-- name: DeleteTranslation :execrows
 UPDATE loc.translation SET deleted_at = now(), updated_by = $3
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type DeleteTranslationParams struct {
@@ -336,6 +391,38 @@ func (q *Queries) GetLocaleFormat(ctx context.Context, id uuid.UUID) (LocLocaleF
 	return i, err
 }
 
+const getOrganizationLanguage = `-- name: GetOrganizationLanguage :one
+SELECT id, organization_id, organization_ref, default_language_code, row_version
+FROM loc.organization_language
+WHERE organization_id = $1 AND organization_ref = $2 AND deleted_at IS NULL
+`
+
+type GetOrganizationLanguageParams struct {
+	OrganizationID  uuid.UUID `json:"organization_id"`
+	OrganizationRef uuid.UUID `json:"organization_ref"`
+}
+
+type GetOrganizationLanguageRow struct {
+	ID                  uuid.UUID `json:"id"`
+	OrganizationID      uuid.UUID `json:"organization_id"`
+	OrganizationRef     uuid.UUID `json:"organization_ref"`
+	DefaultLanguageCode string    `json:"default_language_code"`
+	RowVersion          int32     `json:"row_version"`
+}
+
+func (q *Queries) GetOrganizationLanguage(ctx context.Context, arg GetOrganizationLanguageParams) (GetOrganizationLanguageRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationLanguage, arg.OrganizationID, arg.OrganizationRef)
+	var i GetOrganizationLanguageRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.OrganizationRef,
+		&i.DefaultLanguageCode,
+		&i.RowVersion,
+	)
+	return i, err
+}
+
 const getTranslation = `-- name: GetTranslation :one
 SELECT id, organization_id, language_code, resource_key, resource_value, module, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM loc.translation WHERE id = $1 AND deleted_at IS NULL
 `
@@ -355,6 +442,38 @@ func (q *Queries) GetTranslation(ctx context.Context, id uuid.UUID) (LocTranslat
 		&i.UpdatedAt,
 		&i.UpdatedBy,
 		&i.DeletedAt,
+		&i.RowVersion,
+	)
+	return i, err
+}
+
+const getUserLanguagePreference = `-- name: GetUserLanguagePreference :one
+SELECT id, organization_id, user_ref, language_code, row_version
+FROM loc.user_language_preference
+WHERE organization_id = $1 AND user_ref = $2 AND deleted_at IS NULL
+`
+
+type GetUserLanguagePreferenceParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	UserRef        uuid.UUID `json:"user_ref"`
+}
+
+type GetUserLanguagePreferenceRow struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+	UserRef        uuid.UUID `json:"user_ref"`
+	LanguageCode   string    `json:"language_code"`
+	RowVersion     int32     `json:"row_version"`
+}
+
+func (q *Queries) GetUserLanguagePreference(ctx context.Context, arg GetUserLanguagePreferenceParams) (GetUserLanguagePreferenceRow, error) {
+	row := q.db.QueryRow(ctx, getUserLanguagePreference, arg.OrganizationID, arg.UserRef)
+	var i GetUserLanguagePreferenceRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UserRef,
+		&i.LanguageCode,
 		&i.RowVersion,
 	)
 	return i, err
@@ -470,6 +589,53 @@ func (q *Queries) ListLocaleFormats(ctx context.Context, arg ListLocaleFormatsPa
 	return items, nil
 }
 
+const listOrganizationLanguages = `-- name: ListOrganizationLanguages :many
+SELECT id, organization_id, organization_ref, default_language_code, row_version
+FROM loc.organization_language
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListOrganizationLanguagesParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type ListOrganizationLanguagesRow struct {
+	ID                  uuid.UUID `json:"id"`
+	OrganizationID      uuid.UUID `json:"organization_id"`
+	OrganizationRef     uuid.UUID `json:"organization_ref"`
+	DefaultLanguageCode string    `json:"default_language_code"`
+	RowVersion          int32     `json:"row_version"`
+}
+
+func (q *Queries) ListOrganizationLanguages(ctx context.Context, arg ListOrganizationLanguagesParams) ([]ListOrganizationLanguagesRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationLanguages, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationLanguagesRow
+	for rows.Next() {
+		var i ListOrganizationLanguagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OrganizationRef,
+			&i.DefaultLanguageCode,
+			&i.RowVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTranslations = `-- name: ListTranslations :many
 SELECT id, organization_id, language_code, resource_key, resource_value, module, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM loc.translation
 WHERE deleted_at IS NULL
@@ -573,6 +739,7 @@ func (q *Queries) MarkOutboxPublished(ctx context.Context, arg MarkOutboxPublish
 const updateLanguage = `-- name: UpdateLanguage :one
 UPDATE loc.language SET name = $3, is_active = $4, is_fallback = $5, updated_by = $6
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 
@@ -602,6 +769,7 @@ func (q *Queries) UpdateLanguage(ctx context.Context, arg UpdateLanguageParams) 
 const updateLocaleFormat = `-- name: UpdateLocaleFormat :one
 UPDATE loc.locale_format SET date_format = $3, number_format = $4, currency_format = $5, updated_by = $6
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 
@@ -631,6 +799,7 @@ func (q *Queries) UpdateLocaleFormat(ctx context.Context, arg UpdateLocaleFormat
 const updateTranslation = `-- name: UpdateTranslation :one
 UPDATE loc.translation SET resource_value = $3, module = $4, updated_by = $5
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 
@@ -653,4 +822,86 @@ func (q *Queries) UpdateTranslation(ctx context.Context, arg UpdateTranslationPa
 	var row_version int32
 	err := row.Scan(&row_version)
 	return row_version, err
+}
+
+const upsertOrganizationLanguage = `-- name: UpsertOrganizationLanguage :one
+INSERT INTO loc.organization_language (organization_id, organization_ref, default_language_code, created_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, organization_ref) DO UPDATE
+SET default_language_code = EXCLUDED.default_language_code, deleted_at = NULL, updated_by = EXCLUDED.created_by
+RETURNING id, organization_id, organization_ref, default_language_code, row_version
+`
+
+type UpsertOrganizationLanguageParams struct {
+	OrganizationID      uuid.UUID `json:"organization_id"`
+	OrganizationRef     uuid.UUID `json:"organization_ref"`
+	DefaultLanguageCode string    `json:"default_language_code"`
+	CreatedBy           uuid.UUID `json:"created_by"`
+}
+
+type UpsertOrganizationLanguageRow struct {
+	ID                  uuid.UUID `json:"id"`
+	OrganizationID      uuid.UUID `json:"organization_id"`
+	OrganizationRef     uuid.UUID `json:"organization_ref"`
+	DefaultLanguageCode string    `json:"default_language_code"`
+	RowVersion          int32     `json:"row_version"`
+}
+
+func (q *Queries) UpsertOrganizationLanguage(ctx context.Context, arg UpsertOrganizationLanguageParams) (UpsertOrganizationLanguageRow, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationLanguage,
+		arg.OrganizationID,
+		arg.OrganizationRef,
+		arg.DefaultLanguageCode,
+		arg.CreatedBy,
+	)
+	var i UpsertOrganizationLanguageRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.OrganizationRef,
+		&i.DefaultLanguageCode,
+		&i.RowVersion,
+	)
+	return i, err
+}
+
+const upsertUserLanguagePreference = `-- name: UpsertUserLanguagePreference :one
+INSERT INTO loc.user_language_preference (organization_id, user_ref, language_code, created_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, user_ref) DO UPDATE
+SET language_code = EXCLUDED.language_code, deleted_at = NULL, updated_by = EXCLUDED.created_by
+RETURNING id, organization_id, user_ref, language_code, row_version
+`
+
+type UpsertUserLanguagePreferenceParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	UserRef        uuid.UUID `json:"user_ref"`
+	LanguageCode   string    `json:"language_code"`
+	CreatedBy      uuid.UUID `json:"created_by"`
+}
+
+type UpsertUserLanguagePreferenceRow struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+	UserRef        uuid.UUID `json:"user_ref"`
+	LanguageCode   string    `json:"language_code"`
+	RowVersion     int32     `json:"row_version"`
+}
+
+func (q *Queries) UpsertUserLanguagePreference(ctx context.Context, arg UpsertUserLanguagePreferenceParams) (UpsertUserLanguagePreferenceRow, error) {
+	row := q.db.QueryRow(ctx, upsertUserLanguagePreference,
+		arg.OrganizationID,
+		arg.UserRef,
+		arg.LanguageCode,
+		arg.CreatedBy,
+	)
+	var i UpsertUserLanguagePreferenceRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UserRef,
+		&i.LanguageCode,
+		&i.RowVersion,
+	)
+	return i, err
 }

@@ -68,8 +68,8 @@ ORDER BY created_at;
 
 -- name: RemoveUserOrgAssignment :execrows
 UPDATE usr.user_org_assignment
-SET deleted_at = now(), updated_by = $3
-WHERE user_id = $1 AND role_id = $2 AND deleted_at IS NULL;
+SET deleted_at = now(), updated_by = $4
+WHERE user_id = $1 AND role_id = $2 AND organization_ref_id = $3 AND deleted_at IS NULL;
 
 -- name: InsertOutbox :exec
 -- Written inside the domain transaction (SDD-022): no dual-write.

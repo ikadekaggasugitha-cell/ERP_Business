@@ -432,5 +432,44 @@ func TestRolePermissionsColonAndDotCoverage(t *testing.T) {
 	}
 }
 
+func TestGatewayRejectsSystemOrgAsActiveTenant(t *testing.T) {
+	t.Setenv("GL_SERVICE_URL", "http://gl-service.internal:8080")
+	router, err := proxy.NewRouter()
+	if err != nil {
+		t.Fatalf("NewRouter: %v", err)
+	}
+	secret := []byte("test-gateway-secret")
+	mux := newGatewayMux(router, sse.NewHub(), secret, true, false)
+
+	loginBody := bytes.NewBufferString(`{"username":"admin.finance","password":"dev","orgCode":"HLD-01"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", loginBody)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login failed: %d %s", rec.Code, rec.Body.String())
+	}
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &loginResp)
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/journal-entries", bytes.NewBufferString(`{}`))
+	req.Header.Set("Authorization", "Bearer "+loginResp.Token)
+	req.Header.Set("X-Organization-Id", systemOrgID)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 when X-Organization-Id is systemOrgID, got %d %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/stream/events?orgId="+systemOrgID, nil)
+	req.Header.Set("Authorization", "Bearer "+loginResp.Token)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 when SSE orgId is systemOrgID, got %d %s", rec.Code, rec.Body.String())
+	}
+}
+
 
 

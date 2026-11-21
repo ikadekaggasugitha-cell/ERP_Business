@@ -13,6 +13,7 @@ import (
 
 	"github.com/sinergiinvestasiproperti/erp/services/gl-service/internal/gldb"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/eventbus"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
 )
 
@@ -143,8 +144,8 @@ func (r *JournalRepository) Totals(ctx context.Context, scope []uuid.UUID, p gld
 	return out, err
 }
 
-// PostAndEmit atomically transitions Draft->Posted, accumulates gl.account_balance,
-// and appends the enriched gl.journal.posted outbox event inside the same tx.
+// PostAndEmit atomically verifies BR-556 balance, transitions Draft->Posted,
+// accumulates gl.account_balance, and appends the enriched gl.journal.posted outbox event inside the same tx.
 func (r *JournalRepository) PostAndEmit(
 	ctx context.Context,
 	scope []uuid.UUID,
@@ -155,7 +156,19 @@ func (r *JournalRepository) PostAndEmit(
 	var n int64
 	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
 		q := gldb.New(tx)
-		var err error
+		tot, err := q.JournalEntryTotals(ctx, gldb.JournalEntryTotalsParams{
+			JournalEntryID: entry.ID,
+			PostingDate:    entry.PostingDate,
+		})
+		if err != nil {
+			return err
+		}
+		dr := platform.NumericToRat(tot.TotalDebit)
+		cr := platform.NumericToRat(tot.TotalCredit)
+		if tot.LineCount < 2 || dr.Sign() <= 0 || dr.Cmp(cr) != 0 {
+			return httpx.Unprocessable("GL_JOURNAL_UNBALANCED", "total debit tidak sama dengan total kredit",
+				httpx.Detail{Field: "lines", Issue: "debit=" + dr.FloatString(4) + ", credit=" + cr.FloatString(4)})
+		}
 		n, err = q.PostJournalEntry(ctx, gldb.PostJournalEntryParams{
 			ID:          entry.ID,
 			PostingDate: entry.PostingDate,
@@ -374,6 +387,21 @@ func (r *JournalRepository) ConsumeAndPost(
 	return applied, err
 }
 
+var wellKnownAccountCodes = map[string]string{
+	"10000000-0000-0000-0000-0000000000f1": "1120", // AR Control (Asset)
+	"10000000-0000-0000-0000-0000000000f2": "4100", // Revenue
+	"10000000-0000-0000-0000-0000000000f3": "5100", // Operating Expense
+	"10000000-0000-0000-0000-0000000000f4": "2110", // AP Control (Liability)
+	"10000000-0000-0000-0000-0000000000f5": "5200", // COGS (Expense)
+	"10000000-0000-0000-0000-0000000000f6": "1140", // Inventory (Asset)
+	"10000000-0000-0000-0000-0000000000f7": "5300", // Payroll Expense
+	"10000000-0000-0000-0000-0000000000f8": "2130", // Payroll Payable (Liability)
+	"10000000-0000-0000-0000-0000000000f9": "1210", // Fixed Assets (Asset)
+	"10000000-0000-0000-0000-0000000000fa": "1219", // Accumulated Depreciation (Contra-Asset)
+	"10000000-0000-0000-0000-0000000000fb": "5400", // Depreciation Expense
+	"10000000-0000-0000-0000-0000000000fc": "1110", // Cash / Asset Clearing
+}
+
 func upsertBalancesAndEmitOutbox(
 	ctx context.Context,
 	q *gldb.Queries,
@@ -399,13 +427,17 @@ func upsertBalancesAndEmitOutbox(
 		}); err != nil {
 			return err
 		}
-		linePayloads = append(linePayloads, map[string]any{
+		lp := map[string]any{
 			"lineNo":           l.LineNo,
 			"accountId":        l.AccountID.String(),
 			"debitAmount":      platform.FormatNumeric(l.DebitAmount, 4),
 			"creditAmount":     platform.FormatNumeric(l.CreditAmount, 4),
 			"functionalAmount": platform.FormatNumeric(l.FunctionalAmount, 4),
-		})
+		}
+		if code, ok := wellKnownAccountCodes[l.AccountID.String()]; ok {
+			lp["accountCode"] = code
+		}
+		linePayloads = append(linePayloads, lp)
 	}
 	payloadMap := map[string]any{
 		"journalNo":               entry.JournalNo,
@@ -489,7 +521,7 @@ func (r *JournalRepository) DrainAndPublish(ctx context.Context, limit int32, pu
 			OccurredAt:     row.CreatedAt.Time,
 			CorrelationID:  row.CorrelationID.String(),
 			OrganizationID: row.OrganizationID.String(),
-			SchemaVersion:  "1.0",
+			SchemaVersion:  "v1",
 			Data:           row.Payload,
 		}); err != nil {
 			pubErr = err
@@ -504,9 +536,11 @@ func (r *JournalRepository) DrainAndPublish(ctx context.Context, limit int32, pu
 		}
 		published++
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("commit outbox: %w", err)
+	if published > 0 {
+		if err := tx.Commit(ctx); err != nil {
+			return 0, fmt.Errorf("commit outbox: %w", err)
+		}
+		committed = true
 	}
-	committed = true
 	return published, pubErr
 }

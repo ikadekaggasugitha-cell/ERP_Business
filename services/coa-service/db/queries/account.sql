@@ -23,12 +23,14 @@ WHERE deleted_at IS NULL;
 UPDATE coa.chart_of_accounts
 SET name = $3, structure = $4, updated_by = $5
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: DeleteChartOfAccounts :execrows
 UPDATE coa.chart_of_accounts
 SET deleted_at = now(), updated_by = $3
-WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL;
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
 
 -- name: CreateAccount :one
 INSERT INTO coa.account (
@@ -77,12 +79,19 @@ SET name = $3,
     parent_id = $9,
     updated_by = $10
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: DeleteAccount :execrows
 UPDATE coa.account
 SET deleted_at = now(), updated_by = $3
-WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL;
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
+
+-- name: CountChildAccounts :one
+SELECT COUNT(*)
+FROM coa.account
+WHERE parent_id = $1 AND deleted_at IS NULL;
 
 -- name: CreatePostingRule :one
 INSERT INTO coa.posting_rule (
@@ -208,7 +217,19 @@ WHERE deleted_at IS NULL
 UPDATE fin.fiscal_period
 SET status = sqlc.arg(new_status)::varchar(20), updated_by = $3
 WHERE id = $1 AND row_version = $2 AND status = sqlc.arg(expected_status)::varchar(20) AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
+
+-- name: SyncFiscalPeriodStatus :execrows
+UPDATE fin.fiscal_period
+SET status = sqlc.arg(new_status)::varchar(20), updated_by = $2
+WHERE id = $1 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
+
+-- name: MarkEventProcessed :execrows
+INSERT INTO coa.processed_event (event_id, event_type)
+VALUES ($1, $2)
+ON CONFLICT (event_id) DO NOTHING;
 
 -- name: InsertOutbox :exec
 INSERT INTO coa.outbox (aggregate_type, aggregate_id, event_type, payload, organization_id, correlation_id)

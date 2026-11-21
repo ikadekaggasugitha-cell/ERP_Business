@@ -32,6 +32,14 @@ type Store interface {
 	GetLocaleFormat(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (localizationdb.LocLocaleFormat, error)
 	ListLocaleFormats(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]localizationdb.LocLocaleFormat, int64, error)
 	UpdateLocaleFormat(ctx context.Context, scope []uuid.UUID, arg localizationdb.UpdateLocaleFormatParams, corr uuid.UUID) (int32, error)
+	DeleteLanguage(ctx context.Context, scope []uuid.UUID, arg localizationdb.DeleteLanguageParams, corr uuid.UUID) error
+	DeleteLocaleFormat(ctx context.Context, scope []uuid.UUID, arg localizationdb.DeleteLocaleFormatParams, corr uuid.UUID) error
+
+	UpsertUserLanguagePreference(ctx context.Context, scope []uuid.UUID, arg localizationdb.UpsertUserLanguagePreferenceParams) (localizationdb.UpsertUserLanguagePreferenceRow, error)
+	GetUserLanguagePreference(ctx context.Context, scope []uuid.UUID, orgID, userRef uuid.UUID) (localizationdb.GetUserLanguagePreferenceRow, error)
+	UpsertOrganizationLanguage(ctx context.Context, scope []uuid.UUID, arg localizationdb.UpsertOrganizationLanguageParams) (localizationdb.UpsertOrganizationLanguageRow, error)
+	GetOrganizationLanguage(ctx context.Context, scope []uuid.UUID, orgID, orgRef uuid.UUID) (localizationdb.GetOrganizationLanguageRow, error)
+	ListOrganizationLanguages(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]localizationdb.ListOrganizationLanguagesRow, int64, error)
 }
 
 type Server struct {
@@ -48,6 +56,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /languages", s.createLanguage)
 	mux.HandleFunc("GET /languages/{id}", s.getLanguage)
 	mux.HandleFunc("PUT /languages/{id}", s.updateLanguage)
+	mux.HandleFunc("DELETE /languages/{id}", s.deleteLanguage)
 
 	mux.HandleFunc("GET /translations", s.listTranslations)
 	mux.HandleFunc("POST /translations", s.createTranslation)
@@ -60,12 +69,24 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /locale-formats", s.createLocaleFormat)
 	mux.HandleFunc("GET /locale-formats/{id}", s.getLocaleFormat)
 	mux.HandleFunc("PUT /locale-formats/{id}", s.updateLocaleFormat)
+	mux.HandleFunc("DELETE /locale-formats/{id}", s.deleteLocaleFormat)
+
+	mux.HandleFunc("GET /user-preferences/{userRef}", s.getUserPreference)
+	mux.HandleFunc("PUT /user-preferences/{userRef}", s.upsertUserPreference)
+
+	mux.HandleFunc("GET /organization-languages", s.listOrganizationLanguages)
+	mux.HandleFunc("GET /organization-languages/{orgRef}", s.getOrganizationLanguage)
+	mux.HandleFunc("PUT /organization-languages/{orgRef}", s.upsertOrganizationLanguage)
 }
 
 func requireWrite(w http.ResponseWriter, r *http.Request) ([]uuid.UUID, uuid.UUID, bool) {
 	scope, err := httpx.RequireScope(r)
 	if err != nil {
 		httpx.WriteError(w, r, err)
+		return nil, uuid.Nil, false
+	}
+	if scope[0] == uuid.Nil {
+		httpx.WriteError(w, r, httpx.Forbidden("system organization cannot be used as active tenant"))
 		return nil, uuid.Nil, false
 	}
 	user, err := httpx.RequireUser(r)
@@ -254,7 +275,7 @@ func (s *Server) updateLanguage(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"rowVersion": next})
+	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"rowVersion": next})
 }
 
 // -----------------------------------------------------------------------------
@@ -379,7 +400,7 @@ func (s *Server) updateTranslation(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"rowVersion": next})
+	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"rowVersion": next})
 }
 
 func (s *Server) deleteTranslation(w http.ResponseWriter, r *http.Request) {
@@ -551,6 +572,180 @@ func (s *Server) updateLocaleFormat(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"rowVersion": next})
+	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"rowVersion": next})
+}
+
+func (s *Server) deleteLanguage(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	id, ok := pathID(w, r, "language")
+	if !ok {
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := s.repo.DeleteLanguage(r.Context(), scope, localizationdb.DeleteLanguageParams{
+		ID: id, RowVersion: rowVer, UpdatedBy: &user,
+	}, httpx.CorrelationUUID(r)); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) deleteLocaleFormat(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	id, ok := pathID(w, r, "locale format")
+	if !ok {
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := s.repo.DeleteLocaleFormat(r.Context(), scope, localizationdb.DeleteLocaleFormatParams{
+		ID: id, RowVersion: rowVer, UpdatedBy: &user,
+	}, httpx.CorrelationUUID(r)); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) getUserPreference(w http.ResponseWriter, r *http.Request) {
+	scope, ok := requireRead(w, r)
+	if !ok {
+		return
+	}
+	userRef, err := uuid.Parse(r.PathValue("userRef"))
+	if err != nil {
+		httpx.WriteError(w, r, httpx.BadRequest("invalid userRef"))
+		return
+	}
+	row, err := s.repo.GetUserLanguagePreference(r.Context(), scope, scope[0], userRef)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, map[string]any{
+		"id": row.ID, "userRef": row.UserRef, "languageCode": row.LanguageCode, "rowVersion": row.RowVersion,
+	})
+}
+
+func (s *Server) upsertUserPreference(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	userRef, err := uuid.Parse(r.PathValue("userRef"))
+	if err != nil {
+		httpx.WriteError(w, r, httpx.BadRequest("invalid userRef"))
+		return
+	}
+	var req struct {
+		LanguageCode string `json:"languageCode"`
+	}
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	req.LanguageCode = strings.TrimSpace(req.LanguageCode)
+	if !langCodeRe.MatchString(req.LanguageCode) {
+		httpx.WriteError(w, r, httpx.BadRequest("languageCode must be a valid BCP-47 code"))
+		return
+	}
+	row, err := s.repo.UpsertUserLanguagePreference(r.Context(), scope, localizationdb.UpsertUserLanguagePreferenceParams{
+		OrganizationID: scope[0], UserRef: userRef, LanguageCode: req.LanguageCode, CreatedBy: user,
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, map[string]any{
+		"id": row.ID, "userRef": row.UserRef, "languageCode": row.LanguageCode, "rowVersion": row.RowVersion,
+	})
+}
+
+func (s *Server) listOrganizationLanguages(w http.ResponseWriter, r *http.Request) {
+	scope, ok := requireRead(w, r)
+	if !ok {
+		return
+	}
+	page, size, limit, offset := httpx.PaginateParams(r)
+	rows, total, err := s.repo.ListOrganizationLanguages(r.Context(), scope, limit, offset)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	data := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		data = append(data, map[string]any{
+			"id": row.ID, "organizationRef": row.OrganizationRef, "defaultLanguageCode": row.DefaultLanguageCode, "rowVersion": row.RowVersion,
+		})
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: data, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+}
+
+func (s *Server) getOrganizationLanguage(w http.ResponseWriter, r *http.Request) {
+	scope, ok := requireRead(w, r)
+	if !ok {
+		return
+	}
+	orgRef, err := uuid.Parse(r.PathValue("orgRef"))
+	if err != nil {
+		httpx.WriteError(w, r, httpx.BadRequest("invalid orgRef"))
+		return
+	}
+	row, err := s.repo.GetOrganizationLanguage(r.Context(), scope, scope[0], orgRef)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, map[string]any{
+		"id": row.ID, "organizationRef": row.OrganizationRef, "defaultLanguageCode": row.DefaultLanguageCode, "rowVersion": row.RowVersion,
+	})
+}
+
+func (s *Server) upsertOrganizationLanguage(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	orgRef, err := uuid.Parse(r.PathValue("orgRef"))
+	if err != nil {
+		httpx.WriteError(w, r, httpx.BadRequest("invalid orgRef"))
+		return
+	}
+	var req struct {
+		DefaultLanguageCode string `json:"defaultLanguageCode"`
+	}
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	req.DefaultLanguageCode = strings.TrimSpace(req.DefaultLanguageCode)
+	if !langCodeRe.MatchString(req.DefaultLanguageCode) {
+		httpx.WriteError(w, r, httpx.BadRequest("defaultLanguageCode must be a valid BCP-47 code"))
+		return
+	}
+	row, err := s.repo.UpsertOrganizationLanguage(r.Context(), scope, localizationdb.UpsertOrganizationLanguageParams{
+		OrganizationID: scope[0], OrganizationRef: orgRef, DefaultLanguageCode: req.DefaultLanguageCode, CreatedBy: user,
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, map[string]any{
+		"id": row.ID, "organizationRef": row.OrganizationRef, "defaultLanguageCode": row.DefaultLanguageCode, "rowVersion": row.RowVersion,
+	})
 }
 

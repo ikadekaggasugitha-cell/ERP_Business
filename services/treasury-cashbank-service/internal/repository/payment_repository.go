@@ -321,9 +321,11 @@ type matchedPair struct {
 	payment treasurydb.ListSettledPaymentsForBankRow
 }
 
-// MatchStatementLines pairs unreconciled bank statement lines with settled payments
-// using reference+amount matching first, then sign-aware amount matching, then
-// unsigned magnitude fallback for positive-only bank exports.
+// MatchStatementLines pairs unreconciled bank statement lines with settled payments:
+//   - Pass 1: exact ExternalRef match (PaymentNo or payment.ExternalRef) + exact magnitude
+//   - Pass 2: unique 1-to-1 signed direction + exact magnitude (Outgoing < 0, Incoming > 0)
+//   - Pass 3: positive-only bank exports ONLY when no negative statement lines exist AND
+//     there is a unique 1-to-1 magnitude match (ambiguous duplicate amounts remain unmatched).
 func MatchStatementLines(lines []treasurydb.ListUnreconciledStatementLinesRow, payments []treasurydb.ListSettledPaymentsForBankRow) []matchedPair {
 	usedLines := make([]bool, len(lines))
 	usedPay := make([]bool, len(payments))
@@ -331,10 +333,14 @@ func MatchStatementLines(lines []treasurydb.ListUnreconciledStatementLinesRow, p
 
 	lineAbs := make([]*big.Rat, len(lines))
 	lineRaw := make([]*big.Rat, len(lines))
+	hasNegativeLine := false
 	for i, l := range lines {
 		if r := platform.NumericToRat(l.Amount); r != nil {
 			lineRaw[i] = r
 			lineAbs[i] = new(big.Rat).Abs(r)
+			if r.Sign() < 0 {
+				hasNegativeLine = true
+			}
 		}
 	}
 	payAbs := make([]*big.Rat, len(payments))
@@ -350,7 +356,8 @@ func MatchStatementLines(lines []treasurydb.ListUnreconciledStatementLinesRow, p
 		out = append(out, matchedPair{line: lines[i], payment: payments[j]})
 	}
 
-	// Pass 1: ExternalRef matches PaymentNo or payment.ExternalRef AND exact magnitude.
+	// Pass 1: ExternalRef matches PaymentNo or payment.ExternalRef AND exact magnitude
+	// (respecting sign direction when statement lines carry explicit negative signs).
 	for i, l := range lines {
 		if lineAbs[i] == nil || l.ExternalRef == nil || *l.ExternalRef == "" {
 			continue
@@ -359,6 +366,12 @@ func MatchStatementLines(lines []treasurydb.ListUnreconciledStatementLinesRow, p
 			if usedPay[j] || payAbs[j] == nil || lineAbs[i].Cmp(payAbs[j]) != 0 {
 				continue
 			}
+			if hasNegativeLine {
+				s := lineRaw[i].Sign()
+				if (p.PaymentType == "Outgoing" && s > 0) || (p.PaymentType == "Incoming" && s < 0) {
+					continue
+				}
+			}
 			if *l.ExternalRef == p.PaymentNo || (p.ExternalRef != nil && *l.ExternalRef == *p.ExternalRef) {
 				assign(i, j)
 				break
@@ -366,34 +379,66 @@ func MatchStatementLines(lines []treasurydb.ListUnreconciledStatementLinesRow, p
 		}
 	}
 
-	// Pass 2: Signed direction + exact magnitude (Outgoing <= 0, Incoming >= 0).
+	// Pass 2: Signed direction + exact magnitude, ONLY when unique 1-to-1 (no duplicate-amount ambiguity).
 	for i := range lines {
-		if usedLines[i] || lineAbs[i] == nil {
+		if usedLines[i] || lineAbs[i] == nil || lineRaw[i].Sign() == 0 {
 			continue
 		}
+		s := lineRaw[i].Sign()
+		wantType := "Incoming"
+		if s < 0 {
+			wantType = "Outgoing"
+		}
+		// Count matching unmatched lines with same direction + magnitude.
+		lineCount := 0
+		for k := range lines {
+			if !usedLines[k] && lineAbs[k] != nil && lineRaw[k].Sign() == s && lineAbs[k].Cmp(lineAbs[i]) == 0 {
+				lineCount++
+			}
+		}
+		if lineCount != 1 {
+			continue
+		}
+		// Count matching unmatched payments with same type + magnitude.
+		matchJ := -1
+		payCount := 0
 		for j, p := range payments {
-			if usedPay[j] || payAbs[j] == nil || lineAbs[i].Cmp(payAbs[j]) != 0 {
-				continue
+			if !usedPay[j] && payAbs[j] != nil && p.PaymentType == wantType && payAbs[j].Cmp(lineAbs[i]) == 0 {
+				matchJ = j
+				payCount++
 			}
-			s := lineRaw[i].Sign()
-			if (p.PaymentType == "Outgoing" && s < 0) || (p.PaymentType == "Incoming" && s > 0) {
-				assign(i, j)
-				break
-			}
+		}
+		if payCount == 1 && matchJ >= 0 {
+			assign(i, matchJ)
 		}
 	}
 
-	// Pass 3: Positive-only bank exports matching payment magnitude on the same bank account.
-	for i := range lines {
-		if usedLines[i] || lineAbs[i] == nil {
-			continue
-		}
-		for j := range payments {
-			if usedPay[j] || payAbs[j] == nil || lineAbs[i].Cmp(payAbs[j]) != 0 {
+	// Pass 3: Positive-only bank exports ONLY when no negative line exists AND unique 1-to-1 magnitude match.
+	if !hasNegativeLine {
+		for i := range lines {
+			if usedLines[i] || lineAbs[i] == nil {
 				continue
 			}
-			assign(i, j)
-			break
+			lineCount := 0
+			for k := range lines {
+				if !usedLines[k] && lineAbs[k] != nil && lineAbs[k].Cmp(lineAbs[i]) == 0 {
+					lineCount++
+				}
+			}
+			if lineCount != 1 {
+				continue
+			}
+			matchJ := -1
+			payCount := 0
+			for j := range payments {
+				if !usedPay[j] && payAbs[j] != nil && payAbs[j].Cmp(lineAbs[i]) == 0 {
+					matchJ = j
+					payCount++
+				}
+			}
+			if payCount == 1 && matchJ >= 0 {
+				assign(i, matchJ)
+			}
 		}
 	}
 
@@ -433,6 +478,7 @@ func (r *PaymentRepository) DrainAndPublish(ctx context.Context, limit int32, pu
 		}
 		if err := pub.Publish(ctx, env); err != nil {
 			log.Printf("treasury relay publish %s: %v", row.ID, err)
+			pubErr = err
 			break
 		}
 		if err := q.MarkOutboxPublished(ctx, treasurydb.MarkOutboxPublishedParams{
@@ -444,8 +490,10 @@ func (r *PaymentRepository) DrainAndPublish(ctx context.Context, limit int32, pu
 		}
 		published++
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return published, err
+	if published > 0 {
+		if err := tx.Commit(ctx); err != nil {
+			return 0, err
+		}
 	}
 	return published, pubErr
 }

@@ -558,6 +558,78 @@ services:
       KAFKA_BROKERS: broker:9092
     ports: ["8102:8080"]
 
+  fixedasset-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: fixedasset-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/fixedasset_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8101:8080"]
+
+  budget-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: budget-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/budget_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8103:8080"]
+
+  financialclose-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: financialclose-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/financialclose_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8104:8080"]
+
+  consolidation-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: consolidation-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/consolidation_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8105:8080"]
+
+  project-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: project-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/project_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8106:8080"]
+
+  asset-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: asset-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/asset_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8107:8080"]
+
+  maintenance-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: maintenance-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/maintenance_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8108:8080"]
+
+  crm-service:
+    <<: *service-base
+    build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: crm-service } }
+    environment:
+      DATABASE_URL: postgres://${ERP_APP_USER:-erp_app}:${ERP_APP_PASSWORD:-app}@db:5432/crm_db?sslmode=disable
+      HTTP_ADDR: ":8080"
+      KAFKA_BROKERS: broker:9092
+    ports: ["8109:8080"]
+
   localization-service:
     <<: *service-base
     build: { context: ./services, dockerfile: Dockerfile, args: { SERVICE: localization-service } }
@@ -588,9 +660,57 @@ services:
         condition: service_healthy
       audit-service:
         condition: service_healthy
+      ar-service:
+        condition: service_healthy
+      coa-service:
+        condition: service_healthy
+      tax-service:
+        condition: service_healthy
+      treasury-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      security-service:
+        condition: service_healthy
+      masterdata-service:
+        condition: service_healthy
+      org-service:
+        condition: service_healthy
+      workflow-service:
+        condition: service_healthy
+      procurement-service:
+        condition: service_healthy
+      inventory-service:
+        condition: service_healthy
+      manufacturing-service:
+        condition: service_healthy
+      sales-service:
+        condition: service_healthy
+      hr-service:
+        condition: service_healthy
+      payroll-service:
+        condition: service_healthy
+      reporting-service:
+        condition: service_healthy
       currency-service:
         condition: service_healthy
       dimension-service:
+        condition: service_healthy
+      fixedasset-service:
+        condition: service_healthy
+      budget-service:
+        condition: service_healthy
+      financialclose-service:
+        condition: service_healthy
+      consolidation-service:
+        condition: service_healthy
+      project-service:
+        condition: service_healthy
+      asset-service:
+        condition: service_healthy
+      maintenance-service:
+        condition: service_healthy
+      crm-service:
         condition: service_healthy
       localization-service:
         condition: service_healthy

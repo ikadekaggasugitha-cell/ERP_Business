@@ -535,6 +535,30 @@ func (r *SalesOrderRepository) ConsumeAndCancel(ctx context.Context, orgID, even
 	})
 }
 
+func (r *SalesOrderRepository) ConsumeAndCreateDraftSO(ctx context.Context, orgID, eventID uuid.UUID, eventType string, in CreateSOInput) error {
+	return r.db.WithOrgScope(ctx, []uuid.UUID{orgID}, func(tx pgx.Tx) error {
+		qt := r.q.WithTx(tx)
+		n, err := qt.MarkEventProcessed(ctx, salesdb.MarkEventProcessedParams{
+			EventID:   eventID,
+			EventType: eventType,
+		})
+		if err != nil || n == 0 {
+			return err
+		}
+		_, err = qt.CreateSalesOrder(ctx, salesdb.CreateSalesOrderParams{
+			OrganizationID: in.OrganizationID,
+			SoNo:           in.SoNo,
+			CustomerID:     in.CustomerID,
+			OrderDate:      in.OrderDate,
+			CurrencyCode:   in.CurrencyCode,
+			TotalAmount:    in.TotalAmount,
+			CorrelationID:  in.CorrelationID,
+			CreatedBy:      in.CreatedBy,
+		})
+		return err
+	})
+}
+
 func (r *SalesOrderRepository) ConsumeAndCacheParty(ctx context.Context, orgID, eventID, partyID uuid.UUID, eventType, code, name, partyType string) error {
 	return r.db.WithOrgScope(ctx, []uuid.UUID{orgID}, func(tx pgx.Tx) error {
 		qt := r.q.WithTx(tx)

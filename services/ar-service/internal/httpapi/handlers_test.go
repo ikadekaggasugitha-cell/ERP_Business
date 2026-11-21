@@ -44,7 +44,8 @@ func (s *stubStore) GetByID(_ context.Context, _ []uuid.UUID, _ uuid.UUID) (ardb
 func (s *stubStore) ListWithCount(_ context.Context, _ []uuid.UUID, _ string, _, _ int32) ([]ardb.ListInvoicesRow, int64, error) {
 	return s.list, s.total, nil
 }
-func (s *stubStore) MarkPaid(_ context.Context, _ []uuid.UUID, _ ardb.MarkInvoicePaidParams) (int64, error) {
+func (s *stubStore) MarkPaid(_ context.Context, _ []uuid.UUID, _ ardb.MarkInvoicePaidParams, ev ardb.InsertOutboxParams) (int64, error) {
+	s.outbox = ev
 	return 1, nil
 }
 func (s *stubStore) DeleteDraft(_ context.Context, _ []uuid.UUID, _ ardb.DeleteDraftInvoiceParams) (int64, error) {

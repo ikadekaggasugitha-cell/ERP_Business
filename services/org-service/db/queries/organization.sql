@@ -81,18 +81,21 @@ SET name = $3,
     effective_to = $6,
     updated_by = $7
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING status, row_version;
 
 -- name: ActivateOrganization :one
 UPDATE org.organization
 SET status = 'Active', updated_by = $3
 WHERE id = $1 AND status = 'Draft' AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: DeleteOrganization :execrows
 UPDATE org.organization
 SET deleted_at = now(), updated_by = $3
-WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL;
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
 
 -- name: InsertOutbox :exec
 INSERT INTO org.outbox (aggregate_type, aggregate_id, event_type, payload, organization_id, correlation_id)

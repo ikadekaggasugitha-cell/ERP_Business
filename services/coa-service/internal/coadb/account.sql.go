@@ -39,6 +39,19 @@ func (q *Queries) CountChartsOfAccounts(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countChildAccounts = `-- name: CountChildAccounts :one
+SELECT COUNT(*)
+FROM coa.account
+WHERE parent_id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) CountChildAccounts(ctx context.Context, parentID *uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countChildAccounts, parentID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countFinancialOrganizations = `-- name: CountFinancialOrganizations :one
 SELECT COUNT(*)
 FROM fin.financial_organization
@@ -412,6 +425,7 @@ const deleteAccount = `-- name: DeleteAccount :execrows
 UPDATE coa.account
 SET deleted_at = now(), updated_by = $3
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type DeleteAccountParams struct {
@@ -432,6 +446,7 @@ const deleteChartOfAccounts = `-- name: DeleteChartOfAccounts :execrows
 UPDATE coa.chart_of_accounts
 SET deleted_at = now(), updated_by = $3
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type DeleteChartOfAccountsParams struct {
@@ -1123,6 +1138,25 @@ func (q *Queries) ListPostingRulesBySource(ctx context.Context, arg ListPostingR
 	return items, nil
 }
 
+const markEventProcessed = `-- name: MarkEventProcessed :execrows
+INSERT INTO coa.processed_event (event_id, event_type)
+VALUES ($1, $2)
+ON CONFLICT (event_id) DO NOTHING
+`
+
+type MarkEventProcessedParams struct {
+	EventID   uuid.UUID `json:"event_id"`
+	EventType string    `json:"event_type"`
+}
+
+func (q *Queries) MarkEventProcessed(ctx context.Context, arg MarkEventProcessedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markEventProcessed, arg.EventID, arg.EventType)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const markOutboxPublished = `-- name: MarkOutboxPublished :exec
 UPDATE coa.outbox SET published_at = now()
 WHERE id = $1 AND created_at = $2
@@ -1138,6 +1172,27 @@ func (q *Queries) MarkOutboxPublished(ctx context.Context, arg MarkOutboxPublish
 	return err
 }
 
+const syncFiscalPeriodStatus = `-- name: SyncFiscalPeriodStatus :execrows
+UPDATE fin.fiscal_period
+SET status = $3::varchar(20), updated_by = $2
+WHERE id = $1 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
+`
+
+type SyncFiscalPeriodStatusParams struct {
+	ID        uuid.UUID  `json:"id"`
+	UpdatedBy *uuid.UUID `json:"updated_by"`
+	NewStatus string     `json:"new_status"`
+}
+
+func (q *Queries) SyncFiscalPeriodStatus(ctx context.Context, arg SyncFiscalPeriodStatusParams) (int64, error) {
+	result, err := q.db.Exec(ctx, syncFiscalPeriodStatus, arg.ID, arg.UpdatedBy, arg.NewStatus)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateAccount = `-- name: UpdateAccount :one
 UPDATE coa.account
 SET name = $3,
@@ -1149,6 +1204,7 @@ SET name = $3,
     parent_id = $9,
     updated_by = $10
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 
@@ -1187,6 +1243,7 @@ const updateChartOfAccounts = `-- name: UpdateChartOfAccounts :one
 UPDATE coa.chart_of_accounts
 SET name = $3, structure = $4, updated_by = $5
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 
@@ -1215,6 +1272,7 @@ const updateFiscalPeriodStatus = `-- name: UpdateFiscalPeriodStatus :one
 UPDATE fin.fiscal_period
 SET status = $4::varchar(20), updated_by = $3
 WHERE id = $1 AND row_version = $2 AND status = $5::varchar(20) AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 

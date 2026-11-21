@@ -479,6 +479,10 @@ func (s *Server) assignRole(w http.ResponseWriter, r *http.Request) {
 	if orgRef == uuid.Nil {
 		orgRef = scope[0]
 	}
+	if !orgInScope(scope, orgRef) {
+		httpx.WriteError(w, r, httpx.Forbidden("organizationRefId berada di luar scope akses"))
+		return
+	}
 	payload, _ := json.Marshal(map[string]any{"userId": userID, "roleId": req.RoleID, "organizationRefId": orgRef})
 	row, err := s.repo.AssignRoleAndEmit(r.Context(), scope, userdb.CreateUserOrgAssignmentParams{
 		OrganizationID:    scope[0],
@@ -511,6 +515,15 @@ func (s *Server) assignRole(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func orgInScope(scope []uuid.UUID, target uuid.UUID) bool {
+	for _, s := range scope {
+		if s == target {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) removeRole(w http.ResponseWriter, r *http.Request) {
 	if err := httpx.RequirePermission(r, "user:write"); err != nil {
 		httpx.WriteError(w, r, err)
@@ -536,11 +549,25 @@ func (s *Server) removeRole(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	payload, _ := json.Marshal(map[string]any{"userId": userID, "roleId": roleID, "removed": true})
+	orgRef := scope[0]
+	if rawOrg := strings.TrimSpace(r.URL.Query().Get("organizationRefId")); rawOrg != "" {
+		parsed, perr := httpx.ParseUUIDParam("organizationRefId", rawOrg)
+		if perr != nil {
+			httpx.WriteError(w, r, perr)
+			return
+		}
+		orgRef = parsed
+	}
+	if !orgInScope(scope, orgRef) {
+		httpx.WriteError(w, r, httpx.Forbidden("organizationRefId berada di luar scope akses"))
+		return
+	}
+	payload, _ := json.Marshal(map[string]any{"userId": userID, "roleId": roleID, "organizationRefId": orgRef, "removed": true})
 	n, err := s.repo.RemoveRoleAndEmit(r.Context(), scope, userdb.RemoveUserOrgAssignmentParams{
-		UserID:    userID,
-		RoleID:    roleID,
-		UpdatedBy: &actor,
+		UserID:            userID,
+		RoleID:            roleID,
+		OrganizationRefID: orgRef,
+		UpdatedBy:         &actor,
 	}, userdb.InsertOutboxParams{
 		AggregateType:  "AppUser",
 		AggregateID:    userID,

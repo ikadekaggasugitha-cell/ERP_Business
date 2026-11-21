@@ -31,6 +31,22 @@ func (m *mockStore) CreateAllocationRule(_ context.Context, _ []uuid.UUID, a dim
 	return dimensiondb.CreateAllocationRuleRow{ID: uuid.New(), RowVersion: 1}, nil
 }
 
+func (m *mockStore) ExecuteAllocationRule(_ context.Context, _ []uuid.UUID, id uuid.UUID, _ string, _ *uuid.UUID, _ uuid.UUID) (dimensiondb.CcCostAllocationRule, error) {
+	return dimensiondb.CcCostAllocationRule{
+		ID: id, SourceCostCenterID: uuid.New(), Name: "Overhead", AllocationBasis: "headcount",
+		Targets: []byte(`[{"costCenterId":"33333333-3333-3333-3333-333333333333","percentage":"60"},{"costCenterId":"44444444-4444-4444-4444-444444444444","percentage":"40"}]`),
+		IsActive: true, RowVersion: 1,
+	}, nil
+}
+
+func (m *mockStore) CreateCostCenterAssignment(_ context.Context, _ []uuid.UUID, _ dimensiondb.CreateCostCenterAssignmentParams) (dimensiondb.CreateCostCenterAssignmentRow, error) {
+	return dimensiondb.CreateCostCenterAssignmentRow{ID: uuid.New(), RowVersion: 1}, nil
+}
+
+func (m *mockStore) CreateProfitCenterAssignment(_ context.Context, _ []uuid.UUID, _ dimensiondb.CreateProfitCenterAssignmentParams) (dimensiondb.CreateProfitCenterAssignmentRow, error) {
+	return dimensiondb.CreateProfitCenterAssignmentRow{ID: uuid.New(), RowVersion: 1}, nil
+}
+
 func newMux(st httpapi.Store) http.Handler {
 	mux := http.NewServeMux()
 	httpapi.NewServer(st).Register(mux)
@@ -146,5 +162,27 @@ func TestAllocationRule_Totals(t *testing.T) {
 				t.Fatalf("want %d got %d: %s", c.want, rec.Code, rec.Body)
 			}
 		})
+	}
+}
+
+func TestExecuteAllocationAndAssignments(t *testing.T) {
+	st := &mockStore{}
+	h := newMux(st)
+
+	// Execute allocation computes exact fixed-point 60/40 distribution
+	rec := do(h, "POST", "/allocation-rules/"+uuid.NewString()+"/execute", `{"amount":"1000.0000"}`, "dimension:write", nil)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"600.0000"`) || !strings.Contains(rec.Body.String(), `"400.0000"`) {
+		t.Fatalf("unexpected execute allocation response: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// Create cost center & profit center assignments
+	ccID, pcID, orgRef := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	rec = do(h, "POST", "/cost-center-assignments", `{"costCenterId":"`+ccID+`","organizationRef":"`+orgRef+`"}`, "dimension:write", nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create cc assignment want 201 got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = do(h, "POST", "/profit-center-assignments", `{"profitCenterId":"`+pcID+`","organizationRef":"`+orgRef+`"}`, "dimension:write", nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create pc assignment want 201 got %d: %s", rec.Code, rec.Body.String())
 	}
 }

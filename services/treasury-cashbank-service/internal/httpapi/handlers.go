@@ -95,7 +95,11 @@ func (s *Server) createBankAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	defer release()
 
-	org := pickOrg(req.OrganizationID, scope)
+	org, err := pickOrg(req.OrganizationID, scope)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
 	if strings.TrimSpace(req.Code) == "" || strings.TrimSpace(req.BankName) == "" ||
 		strings.TrimSpace(req.AccountNo) == "" || req.GlAccountID == uuid.Nil {
 		httpx.WriteError(w, r, httpx.BadRequest("code, bankName, accountNo, glAccountId wajib diisi"))
@@ -247,7 +251,11 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request) {
 	}
 	defer release()
 
-	org := pickOrg(req.OrganizationID, scope)
+	org, err := pickOrg(req.OrganizationID, scope)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
 	payAmt, payRat, payDate, allocParams, err := validatePaymentFields(req, true)
 	if err != nil {
 		httpx.WriteError(w, r, err)
@@ -651,17 +659,21 @@ func (s *Server) createStatementLine(w http.ResponseWriter, r *http.Request) {
 	}
 	defer release()
 
-	org := pickOrg(req.OrganizationID, scope)
+	org, err := pickOrg(req.OrganizationID, scope)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
 
 	if len(req.Lines) > 0 {
 		bankAccountID := req.BankAccountID
+		acctNo := strings.TrimSpace(req.AccountNumber)
+		bankName := strings.TrimSpace(req.BankName)
 		if bankAccountID == uuid.Nil {
 			if banks, _, berr := s.repo.ListBanksWithCount(r.Context(), scope, treasurydb.ListBankAccountsParams{
 				Limit:  100,
 				Offset: 0,
 			}); berr == nil && len(banks) > 0 {
-				acctNo := strings.TrimSpace(req.AccountNumber)
-				bankName := strings.TrimSpace(req.BankName)
 				for _, b := range banks {
 					if acctNo != "" && strings.EqualFold(strings.TrimSpace(b.AccountNo), acctNo) {
 						bankAccountID = b.ID
@@ -677,28 +689,29 @@ func (s *Server) createStatementLine(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 				}
-				if bankAccountID == uuid.Nil {
+				if bankAccountID == uuid.Nil && acctNo == "" && bankName == "" && len(banks) == 1 {
 					bankAccountID = banks[0].ID
 				}
 			}
 		}
 
-		createdIDs := make([]uuid.UUID, 0, len(req.Lines))
-		var lastVer int32 = 1
+		type parsedLine struct {
+			bankID uuid.UUID
+			desc   string
+			date   pgtype.Date
+			amt    pgtype.Numeric
+			extRef *string
+		}
+		parsedLines := make([]parsedLine, 0, len(req.Lines))
 		for _, item := range req.Lines {
 			lineBankID := bankAccountID
 			if item.BankAccountID != nil && *item.BankAccountID != uuid.Nil {
 				lineBankID = *item.BankAccountID
 			}
 			if lineBankID == uuid.Nil {
-				httpx.WriteError(w, r, httpx.BadRequest("bankAccountId wajib diisi atau rekening bank organisasi harus tersedia"))
+				httpx.WriteError(w, r, httpx.BadRequest("bankAccountId wajib diisi atau rekening bank yang sesuai harus terdaftar"))
 				return
 			}
-			desc := strings.TrimSpace(item.Description)
-			if desc == "" {
-				desc = "Bank Statement Line"
-			}
-			stDate := parseCompanionStatementDate(item.StatementDate, item.Date)
 			amt, aerr := resolveCompanionLineAmount(item)
 			if aerr != nil {
 				httpx.WriteError(w, r, httpx.BadRequest("amount pada lines tidak valid"))
@@ -707,13 +720,29 @@ func (s *Server) createStatementLine(w http.ResponseWriter, r *http.Request) {
 			if rVal := platform.NumericToRat(amt); rVal == nil || rVal.Sign() == 0 {
 				continue
 			}
+			desc := strings.TrimSpace(item.Description)
+			if desc == "" {
+				desc = "Bank Statement Line"
+			}
+			parsedLines = append(parsedLines, parsedLine{
+				bankID: lineBankID,
+				desc:   desc,
+				date:   parseCompanionStatementDate(item.StatementDate, item.Date),
+				amt:    amt,
+				extRef: item.ExternalRef,
+			})
+		}
+
+		createdIDs := make([]uuid.UUID, 0, len(parsedLines))
+		var lastVer int32 = 1
+		for _, pl := range parsedLines {
 			row, cerr := s.repo.CreateStatementLine(r.Context(), scope, treasurydb.CreateBankStatementLineParams{
 				OrganizationID: org,
-				BankAccountID:  lineBankID,
-				StatementDate:  stDate,
-				Description:    desc,
-				Amount:         amt,
-				ExternalRef:    item.ExternalRef,
+				BankAccountID:  pl.bankID,
+				StatementDate:  pl.date,
+				Description:    pl.desc,
+				Amount:         pl.amt,
+				ExternalRef:    pl.extRef,
 				CreatedBy:      actor,
 			})
 			if cerr != nil {
@@ -998,14 +1027,17 @@ func validatePaymentFields(req paymentReq, requireNo bool) (pgtype.Numeric, *big
 	return amt, payRat, payDate, allocParams, nil
 }
 
-func pickOrg(candidate uuid.UUID, scope []uuid.UUID) uuid.UUID {
+func pickOrg(candidate uuid.UUID, scope []uuid.UUID) (uuid.UUID, error) {
+	if len(scope) == 0 || scope[0] == uuid.Nil {
+		return uuid.Nil, httpx.Forbidden("system organization cannot be used as active tenant")
+	}
 	if candidate == uuid.Nil {
-		return scope[0]
+		return scope[0], nil
 	}
 	for _, s := range scope {
-		if s == candidate {
-			return candidate
+		if s == candidate && s != uuid.Nil {
+			return candidate, nil
 		}
 	}
-	return scope[0]
+	return uuid.Nil, httpx.Forbidden("organizationId di luar cakupan akses")
 }

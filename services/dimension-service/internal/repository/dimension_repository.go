@@ -103,6 +103,25 @@ func (r *DimensionRepository) UpdateCostCenter(ctx context.Context, scope []uuid
 	var ver int32
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
+		if arg.ParentID != nil {
+			cur := *arg.ParentID
+			for depth := 0; depth < 32; depth++ {
+				if cur == arg.ID {
+					return httpx.BadRequest("parentId creates a cost center hierarchy cycle")
+				}
+				p, pe := q.GetCostCenter(ctx, cur)
+				if pe != nil {
+					if errors.Is(pe, pgx.ErrNoRows) {
+						return httpx.BadRequest("parentId cost center not found")
+					}
+					return pe
+				}
+				if p.ParentID == nil {
+					break
+				}
+				cur = *p.ParentID
+			}
+		}
 		var e error
 		ver, e = q.UpdateCostCenter(ctx, arg)
 		if errors.Is(e, pgx.ErrNoRows) {
@@ -121,7 +140,7 @@ func (r *DimensionRepository) UpdateCostCenter(ctx context.Context, scope []uuid
 }
 
 func (r *DimensionRepository) DeleteCostCenter(ctx context.Context, scope []uuid.UUID, arg dimensiondb.DeleteCostCenterParams) error {
-	return r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		n, e := r.q.WithTx(tx).DeleteCostCenter(ctx, arg)
 		if e != nil {
 			return e
@@ -131,6 +150,10 @@ func (r *DimensionRepository) DeleteCostCenter(ctx context.Context, scope []uuid
 		}
 		return nil
 	})
+	if err != nil {
+		return httpx.MapDBError(err, "")
+	}
+	return nil
 }
 
 // ---------------- Profit Center ----------------
@@ -184,6 +207,25 @@ func (r *DimensionRepository) UpdateProfitCenter(ctx context.Context, scope []uu
 	var ver int32
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
+		if arg.ParentID != nil {
+			cur := *arg.ParentID
+			for depth := 0; depth < 32; depth++ {
+				if cur == arg.ID {
+					return httpx.BadRequest("parentId creates a profit center hierarchy cycle")
+				}
+				p, pe := q.GetProfitCenter(ctx, cur)
+				if pe != nil {
+					if errors.Is(pe, pgx.ErrNoRows) {
+						return httpx.BadRequest("parentId profit center not found")
+					}
+					return pe
+				}
+				if p.ParentID == nil {
+					break
+				}
+				cur = *p.ParentID
+			}
+		}
 		var e error
 		ver, e = q.UpdateProfitCenter(ctx, arg)
 		if errors.Is(e, pgx.ErrNoRows) {
@@ -202,7 +244,7 @@ func (r *DimensionRepository) UpdateProfitCenter(ctx context.Context, scope []uu
 }
 
 func (r *DimensionRepository) DeleteProfitCenter(ctx context.Context, scope []uuid.UUID, arg dimensiondb.DeleteProfitCenterParams) error {
-	return r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		n, e := r.q.WithTx(tx).DeleteProfitCenter(ctx, arg)
 		if e != nil {
 			return e
@@ -212,6 +254,10 @@ func (r *DimensionRepository) DeleteProfitCenter(ctx context.Context, scope []uu
 		}
 		return nil
 	})
+	if err != nil {
+		return httpx.MapDBError(err, "")
+	}
+	return nil
 }
 
 // ---------------- Allocation Rule ----------------
@@ -259,6 +305,168 @@ func (r *DimensionRepository) ListAllocationRules(ctx context.Context, scope []u
 		return e
 	})
 	return rows, total, err
+}
+
+func (r *DimensionRepository) UpdateAllocationRule(ctx context.Context, scope []uuid.UUID, arg dimensiondb.UpdateAllocationRuleParams, corr uuid.UUID) (int32, error) {
+	var ver int32
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		var e error
+		ver, e = q.UpdateAllocationRule(ctx, arg)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return staleOrNotFound("allocation rule")
+		}
+		if e != nil {
+			return e
+		}
+		return emit(ctx, q, "AllocationRule", "dimension.allocation_rule.upserted", arg.ID, scope[0], corr,
+			map[string]any{"name": arg.Name, "basis": arg.AllocationBasis, "isActive": arg.IsActive})
+	})
+	if err != nil {
+		return 0, httpx.MapDBError(err, "")
+	}
+	return ver, nil
+}
+
+func (r *DimensionRepository) DeleteAllocationRule(ctx context.Context, scope []uuid.UUID, arg dimensiondb.DeleteAllocationRuleParams) error {
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		n, e := r.q.WithTx(tx).DeleteAllocationRule(ctx, arg)
+		if e != nil {
+			return e
+		}
+		if n == 0 {
+			return staleOrNotFound("allocation rule")
+		}
+		return nil
+	})
+	if err != nil {
+		return httpx.MapDBError(err, "")
+	}
+	return nil
+}
+
+func (r *DimensionRepository) ExecuteAllocationRule(ctx context.Context, scope []uuid.UUID, ruleID uuid.UUID, amount string, fiscalPeriodID *uuid.UUID, corr uuid.UUID) (dimensiondb.CcCostAllocationRule, error) {
+	var rule dimensiondb.CcCostAllocationRule
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		var e error
+		rule, e = q.GetAllocationRule(ctx, ruleID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("allocation rule not found")
+		}
+		if e != nil {
+			return e
+		}
+		if !rule.IsActive {
+			return httpx.Conflict("RULE_INACTIVE", "allocation rule is inactive")
+		}
+		payload := map[string]any{
+			"ruleId":             rule.ID.String(),
+			"name":               rule.Name,
+			"sourceCostCenterId": rule.SourceCostCenterID.String(),
+			"allocationBasis":    rule.AllocationBasis,
+			"amount":             amount,
+			"targets":            json.RawMessage(rule.Targets),
+		}
+		if fiscalPeriodID != nil {
+			payload["fiscalPeriodId"] = fiscalPeriodID.String()
+		}
+		return emit(ctx, q, "AllocationRule", "dimension.allocation_rule.executed", rule.ID, rule.OrganizationID, corr, payload)
+	})
+	if err != nil {
+		return rule, httpx.MapDBError(err, "")
+	}
+	return rule, nil
+}
+
+// ---------------- Assignments ----------------
+
+func (r *DimensionRepository) CreateCostCenterAssignment(ctx context.Context, scope []uuid.UUID, arg dimensiondb.CreateCostCenterAssignmentParams) (dimensiondb.CreateCostCenterAssignmentRow, error) {
+	var out dimensiondb.CreateCostCenterAssignmentRow
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		var e error
+		out, e = r.q.WithTx(tx).CreateCostCenterAssignment(ctx, arg)
+		return e
+	})
+	if err != nil {
+		return out, httpx.MapDBError(err, "cost center assignment conflict")
+	}
+	return out, nil
+}
+
+func (r *DimensionRepository) ListCostCenterAssignments(ctx context.Context, scope []uuid.UUID, costCenterID *uuid.UUID, limit, offset int32) ([]dimensiondb.CcCostCenterAssignment, int64, error) {
+	var rows []dimensiondb.CcCostCenterAssignment
+	var total int64
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		var e error
+		if total, e = q.CountCostCenterAssignments(ctx, costCenterID); e != nil {
+			return e
+		}
+		rows, e = q.ListCostCenterAssignments(ctx, dimensiondb.ListCostCenterAssignmentsParams{
+			CostCenterID: costCenterID, Limit: limit, Offset: offset,
+		})
+		return e
+	})
+	return rows, total, err
+}
+
+func (r *DimensionRepository) DeleteCostCenterAssignment(ctx context.Context, scope []uuid.UUID, arg dimensiondb.DeleteCostCenterAssignmentParams) error {
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		n, e := r.q.WithTx(tx).DeleteCostCenterAssignment(ctx, arg)
+		if e != nil {
+			return e
+		}
+		if n == 0 {
+			return staleOrNotFound("cost center assignment")
+		}
+		return nil
+	})
+	return httpx.MapDBError(err, "")
+}
+
+func (r *DimensionRepository) CreateProfitCenterAssignment(ctx context.Context, scope []uuid.UUID, arg dimensiondb.CreateProfitCenterAssignmentParams) (dimensiondb.CreateProfitCenterAssignmentRow, error) {
+	var out dimensiondb.CreateProfitCenterAssignmentRow
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		var e error
+		out, e = r.q.WithTx(tx).CreateProfitCenterAssignment(ctx, arg)
+		return e
+	})
+	if err != nil {
+		return out, httpx.MapDBError(err, "profit center assignment conflict")
+	}
+	return out, nil
+}
+
+func (r *DimensionRepository) ListProfitCenterAssignments(ctx context.Context, scope []uuid.UUID, profitCenterID *uuid.UUID, limit, offset int32) ([]dimensiondb.PcProfitCenterAssignment, int64, error) {
+	var rows []dimensiondb.PcProfitCenterAssignment
+	var total int64
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		var e error
+		if total, e = q.CountProfitCenterAssignments(ctx, profitCenterID); e != nil {
+			return e
+		}
+		rows, e = q.ListProfitCenterAssignments(ctx, dimensiondb.ListProfitCenterAssignmentsParams{
+			ProfitCenterID: profitCenterID, Limit: limit, Offset: offset,
+		})
+		return e
+	})
+	return rows, total, err
+}
+
+func (r *DimensionRepository) DeleteProfitCenterAssignment(ctx context.Context, scope []uuid.UUID, arg dimensiondb.DeleteProfitCenterAssignmentParams) error {
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		n, e := r.q.WithTx(tx).DeleteProfitCenterAssignment(ctx, arg)
+		if e != nil {
+			return e
+		}
+		if n == 0 {
+			return staleOrNotFound("profit center assignment")
+		}
+		return nil
+	})
+	return httpx.MapDBError(err, "")
 }
 
 // DrainAndPublish drains cc.outbox under FOR UPDATE SKIP LOCKED inside a tx.

@@ -24,7 +24,7 @@ type Store interface {
 	GetWithTasks(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (workflowdb.WfWorkflowInstance, []workflowdb.ListWorkflowTasksRow, error)
 	ListWithCount(ctx context.Context, scope []uuid.UUID, arg workflowdb.ListWorkflowInstancesParams) ([]workflowdb.ListWorkflowInstancesRow, int64, error)
 	ListTasksWithCount(ctx context.Context, scope []uuid.UUID, arg workflowdb.ListWorkflowTasksParams) ([]workflowdb.ListWorkflowTasksRow, int64, error)
-	DecideTaskAndEmit(ctx context.Context, scope []uuid.UUID, taskID, actorID, correlationID uuid.UUID, expectedVer *int32, decision string) (repository.TaskDecisionResult, error)
+	DecideTaskAndEmit(ctx context.Context, scope []uuid.UUID, taskID, actorID, correlationID uuid.UUID, expectedVer *int32, decision, comment string) (repository.TaskDecisionResult, error)
 }
 
 type Server struct {
@@ -405,16 +405,25 @@ func (s *Server) decideTask(w http.ResponseWriter, r *http.Request, decision str
 		httpx.WriteError(w, r, err)
 		return
 	}
-	var expectedVer *int32
-	if strings.TrimSpace(r.Header.Get("If-Match")) != "" {
-		v, err := httpx.IfMatch(r)
-		if err != nil {
-			httpx.WriteError(w, r, err)
-			return
-		}
-		expectedVer = &v
+	v, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
 	}
-	res, err := s.repo.DecideTaskAndEmit(r.Context(), scope, taskID, actor, httpx.CorrelationUUID(r), expectedVer, decision)
+	expectedVer := &v
+	var body struct {
+		Comment string `json:"comment"`
+		Notes   string `json:"notes"`
+	}
+	if err := httpx.DecodeOptionalJSON(w, r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	comment := strings.TrimSpace(body.Comment)
+	if comment == "" {
+		comment = strings.TrimSpace(body.Notes)
+	}
+	res, err := s.repo.DecideTaskAndEmit(r.Context(), scope, taskID, actor, httpx.CorrelationUUID(r), expectedVer, decision, comment)
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):

@@ -39,6 +39,14 @@ func (m *mockStore) GetBundle(_ context.Context, _ []uuid.UUID, _ string) (map[s
 	return m.bundle, nil
 }
 
+func (m *mockStore) UpsertUserLanguagePreference(_ context.Context, _ []uuid.UUID, a localizationdb.UpsertUserLanguagePreferenceParams) (localizationdb.UpsertUserLanguagePreferenceRow, error) {
+	return localizationdb.UpsertUserLanguagePreferenceRow{ID: uuid.New(), OrganizationID: a.OrganizationID, UserRef: a.UserRef, LanguageCode: a.LanguageCode, RowVersion: 1}, nil
+}
+
+func (m *mockStore) UpsertOrganizationLanguage(_ context.Context, _ []uuid.UUID, a localizationdb.UpsertOrganizationLanguageParams) (localizationdb.UpsertOrganizationLanguageRow, error) {
+	return localizationdb.UpsertOrganizationLanguageRow{ID: uuid.New(), OrganizationID: a.OrganizationID, OrganizationRef: a.OrganizationRef, DefaultLanguageCode: a.DefaultLanguageCode, RowVersion: 1}, nil
+}
+
 func do(st httpapi.Store, method, path, body, perms string) *httptest.ResponseRecorder {
 	mux := http.NewServeMux()
 	httpapi.NewServer(st).Register(mux)
@@ -133,6 +141,21 @@ func TestScopeWithSystemOrg(t *testing.T) {
 	}
 	if repository.ScopeWithSystemOrg(nil) != nil {
 		t.Fatal("empty scope must fail closed (nil)")
+	}
+}
+
+func TestUserPreferencesAndOrgLanguages(t *testing.T) {
+	st := &mockStore{}
+	userRef := uuid.NewString()
+	orgRef := uuid.NewString()
+	if rec := do(st, "PUT", "/user-preferences/"+userRef, `{"languageCode":"id"}`, "localization:write"); rec.Code != http.StatusOK {
+		t.Fatalf("upsert user preference want 200 got %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := do(st, "PUT", "/user-preferences/"+userRef, `{"languageCode":"INVALID!"}`, "localization:write"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad user preference code want 400 got %d", rec.Code)
+	}
+	if rec := do(st, "PUT", "/organization-languages/"+orgRef, `{"defaultLanguageCode":"en-US"}`, "localization:write"); rec.Code != http.StatusOK {
+		t.Fatalf("upsert org language want 200 got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

@@ -24,13 +24,16 @@ var (
 )
 
 type arPayload struct {
-	InvoiceNo   string `json:"invoiceNo"`
-	TotalAmount string `json:"totalAmount"`
+	InvoiceNo      string `json:"invoiceNo"`
+	TotalAmount    string `json:"totalAmount"`
+	SubtotalAmount string `json:"subtotalAmount"`
+	TaxAmount      string `json:"taxAmount"`
+	TaxCode        string `json:"taxCode"`
 }
 
 // Store abstracts tax repository operations for consumer unit testing.
 type Store interface {
-	ConsumeAndCreateTaxInvoice(ctx context.Context, scope []uuid.UUID, mark taxdb.MarkEventProcessedParams, sysActor uuid.UUID, txn taxdb.CreateTaxTransactionParams, ev taxdb.InsertOutboxParams) (bool, error)
+	ConsumeAndCreateTaxInvoice(ctx context.Context, scope []uuid.UUID, mark taxdb.MarkEventProcessedParams, sysActor uuid.UUID, taxCode string, explicitTax bool, txn taxdb.CreateTaxTransactionParams, ev taxdb.InsertOutboxParams) (bool, error)
 }
 
 type Consumer struct {
@@ -85,14 +88,60 @@ func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 	if ref == "" {
 		return eventbus.ErrPoison{Err: fmt.Errorf("missing invoiceNo/aggregateId")}
 	}
-	baseNum, err := platform.ParseOptionalNumeric(p.TotalAmount)
+	totalNum, err := platform.ParseOptionalNumeric(p.TotalAmount)
 	if err != nil {
 		return eventbus.ErrPoison{Err: fmt.Errorf("invalid totalAmount: %w", err)}
 	}
-	taxRat := new(big.Rat).Mul(platform.NumericToRat(baseNum), vatRatio)
-	taxNum, err := platform.RatToNumeric(taxRat, 4)
-	if err != nil {
-		return err
+	totalRat := platform.NumericToRat(totalNum)
+	if totalRat == nil || totalRat.Sign() < 0 {
+		return eventbus.ErrPoison{Err: fmt.Errorf("totalAmount must be >= 0")}
+	}
+
+	var baseNum, taxNum = totalNum, totalNum
+	explicitTax := false
+	if rawTax := strings.TrimSpace(p.TaxAmount); rawTax != "" {
+		parsedTax, err := platform.ParseOptionalNumeric(rawTax)
+		if err != nil {
+			return eventbus.ErrPoison{Err: fmt.Errorf("invalid taxAmount: %w", err)}
+		}
+		tRat := platform.NumericToRat(parsedTax)
+		if tRat.Sign() < 0 {
+			return eventbus.ErrPoison{Err: fmt.Errorf("taxAmount must be >= 0")}
+		}
+		if tRat.Sign() > 0 {
+			explicitTax = true
+			taxNum = parsedTax
+			if rawSub := strings.TrimSpace(p.SubtotalAmount); rawSub != "" {
+				subNum, err := platform.ParseOptionalNumeric(rawSub)
+				if err != nil {
+					return eventbus.ErrPoison{Err: fmt.Errorf("invalid subtotalAmount: %w", err)}
+				}
+				baseNum = subNum
+			} else {
+				baseRat := new(big.Rat).Sub(totalRat, tRat)
+				if baseRat.Sign() < 0 {
+					return eventbus.ErrPoison{Err: fmt.Errorf("taxAmount exceeds totalAmount")}
+				}
+				if baseNum, err = platform.RatToNumeric(baseRat, 4); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if !explicitTax {
+		if rawSub := strings.TrimSpace(p.SubtotalAmount); rawSub != "" {
+			subNum, err := platform.ParseOptionalNumeric(rawSub)
+			if err != nil {
+				return eventbus.ErrPoison{Err: fmt.Errorf("invalid subtotalAmount: %w", err)}
+			}
+			baseNum = subNum
+		}
+		// Fallback estimate using statutory default rate; repository overrides with tenant's active VAT tax_code rate.
+		taxRat := new(big.Rat).Mul(platform.NumericToRat(baseNum), vatRatio)
+		taxNum, err = platform.RatToNumeric(taxRat, 4)
+		if err != nil {
+			return err
+		}
 	}
 
 	efaktur := "EF-" + ref
@@ -114,6 +163,7 @@ func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 		"efakturNo":         efaktur,
 		"baseAmount":        baseStr,
 		"taxAmount":         taxStr,
+		"taxCode":           strings.TrimSpace(p.TaxCode),
 		"status":            "Draft",
 	})
 	ev := taxdb.InsertOutboxParams{
@@ -124,6 +174,6 @@ func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 		CorrelationID:  corr,
 	}
 	_, err = x.repo.ConsumeAndCreateTaxInvoice(ctx, []uuid.UUID{org},
-		taxdb.MarkEventProcessedParams{EventID: eventID, EventType: env.EventType}, sysActor, txn, ev)
+		taxdb.MarkEventProcessedParams{EventID: eventID, EventType: env.EventType}, sysActor, strings.TrimSpace(p.TaxCode), explicitTax, txn, ev)
 	return err
 }

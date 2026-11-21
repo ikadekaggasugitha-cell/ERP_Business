@@ -28,33 +28,37 @@ func main() {
 
 	repo := repository.NewSalesOrderRepository(db)
 	brokers := httpx.SplitCSV(httpx.Getenv("KAFKA_BROKERS", "localhost:9092"))
-	pub := eventbus.NewPublisher(brokers)
 
-	compCons := consumer.New(repo)
-	compReader := eventbus.NewConsumer(brokers, "sales-service-compensation-v1", compCons.Topics())
-	mdCons := mdcache.New(repo)
-	mdReader := eventbus.NewConsumer(brokers, "sales-service-mdcache-v1", mdCons.Topics())
-
+	var pub *eventbus.Publisher
+	var compReader, mdReader *eventbus.Consumer
 	var wg sync.WaitGroup
-	wg.Add(3)
-	go func() {
-		defer wg.Done()
-		eventbus.RunOutboxRelay(ctx, "sales-service", 300*time.Millisecond, func(c context.Context) (int, error) {
-			return repo.DrainAndPublish(c, 50, pub)
-		})
-	}()
-	go func() {
-		defer wg.Done()
-		if err := compReader.Run(ctx, compCons.Handle); err != nil {
-			log.Printf("[sales-consumer] stopped: %v", err)
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		if err := mdReader.Run(ctx, mdCons.Handle); err != nil {
-			log.Printf("[sales-mdcache] stopped: %v", err)
-		}
-	}()
+	if len(brokers) > 0 {
+		pub = eventbus.NewPublisher(brokers)
+		compCons := consumer.New(repo)
+		compReader = eventbus.NewConsumer(brokers, "sales-service-compensation-v1", compCons.Topics())
+		mdCons := mdcache.New(repo)
+		mdReader = eventbus.NewConsumer(brokers, "sales-service-mdcache-v1", mdCons.Topics())
+
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			eventbus.RunOutboxRelay(ctx, "sales-service", 300*time.Millisecond, func(c context.Context) (int, error) {
+				return repo.DrainAndPublish(c, 50, pub)
+			})
+		}()
+		go func() {
+			defer wg.Done()
+			if err := compReader.Run(ctx, compCons.Handle); err != nil {
+				log.Printf("[sales-consumer] stopped: %v", err)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			if err := mdReader.Run(ctx, mdCons.Handle); err != nil {
+				log.Printf("[sales-mdcache] stopped: %v", err)
+			}
+		}()
+	}
 
 	metrics := httpx.NewMetrics("sales-service")
 	router := httpapi.NewRouter(
@@ -66,8 +70,14 @@ func main() {
 
 	addr := httpx.Getenv("HTTP_ADDR", ":8092")
 	httpx.ServeHTTP(ctx, cancel, "sales-service", addr, router, &wg, func() {
-		_ = compReader.Close()
-		_ = mdReader.Close()
-		_ = pub.Close()
+		if compReader != nil {
+			_ = compReader.Close()
+		}
+		if mdReader != nil {
+			_ = mdReader.Close()
+		}
+		if pub != nil {
+			_ = pub.Close()
+		}
 	})
 }

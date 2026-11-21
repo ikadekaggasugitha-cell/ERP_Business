@@ -159,3 +159,53 @@ CREATE TABLE coa.processed_event (
     processed_at timestamptz  NOT NULL DEFAULT now(),
     PRIMARY KEY (event_id)
 );
+
+CREATE TABLE coa.account_segment (
+    id                    uuid         NOT NULL DEFAULT gen_random_uuid(),
+    organization_id       uuid         NOT NULL,
+    chart_of_accounts_id  uuid         NOT NULL,
+    segment_no            integer      NOT NULL,
+    name                  varchar(100) NOT NULL,
+    length                integer      NOT NULL,
+    created_at            timestamptz  NOT NULL DEFAULT now(),
+    created_by            uuid         NOT NULL,
+    updated_at            timestamptz  NOT NULL DEFAULT now(),
+    updated_by            uuid,
+    deleted_at            timestamptz,
+    row_version           integer      NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_account_segment UNIQUE (chart_of_accounts_id, segment_no)
+);
+
+CREATE TABLE coa.segment_value (
+    id               uuid         NOT NULL DEFAULT gen_random_uuid(),
+    organization_id  uuid         NOT NULL,
+    segment_id       uuid         NOT NULL,
+    value            varchar(50)  NOT NULL,
+    description      varchar(200),
+    is_active        boolean      NOT NULL DEFAULT TRUE,
+    created_at       timestamptz  NOT NULL DEFAULT now(),
+    created_by       uuid         NOT NULL,
+    updated_at       timestamptz  NOT NULL DEFAULT now(),
+    updated_by       uuid,
+    deleted_at       timestamptz,
+    row_version      integer      NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_segment_value UNIQUE (segment_id, value)
+);
+
+CREATE TABLE coa.account_combination (
+    id                    uuid         NOT NULL DEFAULT gen_random_uuid(),
+    organization_id       uuid         NOT NULL,
+    chart_of_accounts_id  uuid         NOT NULL,
+    combination_code      varchar(100) NOT NULL,
+    is_enabled            boolean      NOT NULL DEFAULT TRUE,
+    created_at            timestamptz  NOT NULL DEFAULT now(),
+    created_by            uuid         NOT NULL,
+    updated_at            timestamptz  NOT NULL DEFAULT now(),
+    updated_by            uuid,
+    deleted_at            timestamptz,
+    row_version           integer      NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_account_combination UNIQUE (chart_of_accounts_id, combination_code)
+);

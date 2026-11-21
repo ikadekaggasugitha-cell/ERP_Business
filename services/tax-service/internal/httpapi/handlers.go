@@ -5,7 +5,6 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"math/big"
 	"net/http"
 	"strings"
@@ -103,10 +102,11 @@ func (s *Server) createCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req taxCodeReq
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
 	if strings.TrimSpace(req.Code) == "" || strings.TrimSpace(req.TaxType) == "" {
 		httpx.WriteError(w, r, httpx.BadRequest("code dan taxType wajib diisi"))
 		return
@@ -147,7 +147,7 @@ func (s *Server) createCode(w http.ResponseWriter, r *http.Request) {
 	if glPtr != nil {
 		dto.GLAccountID = glPtr.String()
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, created.RowVersion, dto)
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, created.RowVersion, dto)
 }
 
 func (s *Server) listCodes(w http.ResponseWriter, r *http.Request) {
@@ -387,13 +387,9 @@ func (s *Server) reportEfaktur(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req reportReq
-	if r.Body != nil {
-		dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&req); err != nil && err != io.EOF {
-			httpx.WriteError(w, r, httpx.BadRequest("body JSON tidak valid"))
-			return
-		}
+	if err := httpx.DecodeOptionalJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, err)
+		return
 	}
 	t, err := s.repo.GetByID(r.Context(), scope, id)
 	if err != nil {

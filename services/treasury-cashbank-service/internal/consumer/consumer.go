@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -23,9 +24,18 @@ var Topics = []string{
 	eventbus.TopicFor("payroll.run.completed"), // INT-003
 }
 
+func envUUID(key string, fallback uuid.UUID) uuid.UUID {
+	if raw := strings.TrimSpace(os.Getenv(key)); raw != "" {
+		if parsed, err := uuid.Parse(raw); err == nil && parsed != uuid.Nil {
+			return parsed
+		}
+	}
+	return fallback
+}
+
 var (
 	sysActor = uuid.MustParse("00000000-0000-0000-0000-0000000000d1")
-	glClear  = uuid.MustParse("10000000-0000-0000-0000-0000000000e3")
+	glClear  = envUUID("TREASURY_DEFAULT_GL_CLEAR_ID", uuid.MustParse("10000000-0000-0000-0000-0000000000e3"))
 )
 
 type ConsumeStore interface {
@@ -109,6 +119,9 @@ func (c *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 	amt, err := platform.ParseOptionalNumeric(amtRaw)
 	if err != nil {
 		return &eventbus.ErrPoison{Err: fmt.Errorf("invalid amount %q: %w", amtRaw, err)}
+	}
+	if amtRat := platform.NumericToRat(amt); amtRat == nil || amtRat.Sign() <= 0 {
+		return &eventbus.ErrPoison{Err: fmt.Errorf("payment amount must be > 0, got %q", amtRaw)}
 	}
 
 	var partyID *uuid.UUID

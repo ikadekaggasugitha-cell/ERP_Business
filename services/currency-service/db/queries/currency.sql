@@ -9,7 +9,9 @@ WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: GetCurrencyByCode :one
 SELECT * FROM cur.currency
-WHERE code = $1 AND deleted_at IS NULL;
+WHERE code = $1 AND deleted_at IS NULL
+ORDER BY (organization_id = '00000000-0000-0000-0000-000000000000'::uuid) ASC
+LIMIT 1;
 
 -- name: ListCurrencies :many
 SELECT id, organization_id, code, numeric_code, name, precision, is_active, row_version
@@ -29,12 +31,14 @@ WHERE deleted_at IS NULL
 UPDATE cur.currency
 SET name = $3, numeric_code = $4, precision = $5, is_active = $6, updated_by = $7
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: DeleteCurrency :execrows
 UPDATE cur.currency
 SET deleted_at = now(), updated_by = $3
-WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL;
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
 
 -- name: CreateExchangeRateType :one
 INSERT INTO cur.exchange_rate_type (organization_id, code, name, created_by)
@@ -47,7 +51,9 @@ WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: GetExchangeRateTypeByCode :one
 SELECT * FROM cur.exchange_rate_type
-WHERE code = $1 AND deleted_at IS NULL;
+WHERE code = $1 AND deleted_at IS NULL
+ORDER BY (organization_id = '00000000-0000-0000-0000-000000000000'::uuid) ASC
+LIMIT 1;
 
 -- name: ListExchangeRateTypes :many
 SELECT id, organization_id, code, name, row_version
@@ -105,19 +111,21 @@ WHERE er.deleted_at IS NULL
   AND er.rate_type_id = $3
   AND er.valid_from <= $4
   AND (er.valid_to IS NULL OR er.valid_to >= $4)
-ORDER BY er.valid_from DESC
+ORDER BY er.valid_from DESC, (er.organization_id = '00000000-0000-0000-0000-000000000000'::uuid) ASC
 LIMIT 1;
 
 -- name: UpdateExchangeRate :one
 UPDATE cur.exchange_rate
 SET rate = $3, valid_to = $4, updated_by = $5
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: DeleteExchangeRate :execrows
 UPDATE cur.exchange_rate
 SET deleted_at = now(), updated_by = $3
-WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL;
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
 
 -- name: InsertOutbox :exec
 INSERT INTO cur.outbox (aggregate_type, aggregate_id, event_type, payload, organization_id, correlation_id)

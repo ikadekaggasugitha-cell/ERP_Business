@@ -1,0 +1,15 @@
+config {
+  type: "assertion",
+  tags: ["assert", "fixed_assets", "cortex_v7"],
+  description: "Asserts fixed asset net book value never drops below salvage value or zero"
+}
+
+SELECT
+  depreciation_entry_id,
+  fixed_asset_id,
+  asset_no,
+  net_book_value_fc,
+  salvage_value_fc
+FROM ${ref("fact_fixed_asset_depreciation")}
+WHERE net_book_value_fc < NUMERIC '0'
+   OR (asset_status != 'Disposed' AND net_book_value_fc < salvage_value_fc)

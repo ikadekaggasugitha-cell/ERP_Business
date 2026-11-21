@@ -31,8 +31,18 @@ Bab penutup ini mengonsolidasikan **katalog resource API (API-xxx)**, matriks **
 | API-019 | Manufacturing               | `/v1/work-orders`, `/v1/bills-of-material` | SVC-014| 5.5  |
 | API-020 | Human Resource              | `/v1/employees`, `/v1/positions`   | SVC-016       | 6.2  |
 | API-021 | Payroll                     | `/v1/payroll-runs`                 | SVC-017       | 6.3  |
+| API-022 | Fixed Asset                 | `/v1/asset-categories`, `/v1/fixed-assets` | SVC-020 | Ext  |
+| API-023 | Dimension                   | `/v1/cost-centers`, `/v1/profit-centers`, `/v1/allocation-rules` | SVC-021 | Ext |
+| API-024 | Budget                      | `/v1/budgets`, `/v1/budget-policies`, `/v1/budget-commitments` | SVC-022 | Ext |
+| API-025 | Financial Close             | `/v1/closing-templates`, `/v1/closing-runs`, `/v1/period-statuses`, `/v1/period-reopenings` | SVC-023 | Ext |
+| API-026 | Consolidation               | `/v1/consolidation-groups`, `/v1/elimination-rules`, `/v1/consolidation-runs` | SVC-024 | Ext |
+| API-027 | Project Management          | `/v1/projects`, `/v1/wbs-elements`, `/v1/project-billings`, `/v1/change-orders` | SVC-025 | Ext |
+| API-028 | Asset Management (Ops)      | `/v1/assets`, `/v1/asset-movements`, `/v1/asset-verifications` | SVC-026 | Ext |
+| API-029 | Maintenance Management      | `/v1/maintenance-schedules`, `/v1/maintenance-work-orders` | SVC-027 | Ext |
+| API-030 | CRM                         | `/v1/leads`, `/v1/opportunities`, `/v1/customer-segments`, `/v1/support-cases` | SVC-028 | Ext |
+| API-031 | Localization                | `/v1/languages`, `/v1/translations`, `/v1/translation-bundles`, `/v1/locale-formats` | SVC-029 | Ext |
 
-Domain lain (Fixed Asset, Budget, Project, Asset, Maintenance, CRM, dll.) mengikuti pola yang sama dan dilengkapi pada revisi berikutnya.
+Seluruh **30 Go microservices** (+ `api-gateway` pada prefix `/api/v1`) kini terpetakan secara konsisten terhadap tabel basis data DBDD dan katalog event BAB 7.
 
 ---
 
@@ -133,6 +143,7 @@ components:
 | Version | Date       | Author             | Description                                                        | Status |
 | ------- | ---------- | ------------------ | ------------------------------------------------------------------ | ------ |
 | 0.1     | 2026-08-05 | Solution Architect | Rilis awal API Specification — BAB 1–8 (standar, REST per domain, event catalog, traceability). | Draft  |
+| 1.0     | 2026-11-22 | Backend Engineering | Penyelarasan wire contract (flat decimal strings, `data` envelope key, partition key `orgId:aggregateId`), katalog 58 topic event, serta penambahan API-022..API-031 untuk seluruh 10 layanan extended. | Active |
 
 ---
 

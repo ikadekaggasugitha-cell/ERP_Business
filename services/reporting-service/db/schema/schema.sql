@@ -52,3 +52,13 @@ CREATE TABLE rpt.processed_event (
     processed_at timestamptz  NOT NULL DEFAULT now(),
     PRIMARY KEY (event_id)
 );
+
+CREATE TABLE rpt.coa_cache (
+    organization_id  uuid          NOT NULL,
+    account_id       uuid          NOT NULL,
+    account_code     varchar(50)   NOT NULL,
+    account_name     varchar(200)  NOT NULL DEFAULT '',
+    account_type     varchar(50)   NOT NULL DEFAULT '',
+    refreshed_at     timestamptz   NOT NULL DEFAULT now(),
+    PRIMARY KEY (organization_id, account_id)
+);

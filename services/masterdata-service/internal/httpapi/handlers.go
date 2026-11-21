@@ -235,15 +235,16 @@ func (s *Server) getParty(w http.ResponseWriter, r *http.Request) {
 	addrOut := make([]map[string]any, 0, len(addrs))
 	for _, a := range addrs {
 		addrOut = append(addrOut, map[string]any{
-			"id":          a.ID,
-			"addressType": a.AddressType,
-			"line1":       a.Line1,
-			"line2":       a.Line2,
-			"city":        a.City,
-			"postalCode":  a.PostalCode,
-			"countryCode": a.CountryCode,
-			"isPrimary":   a.IsPrimary,
-			"rowVersion":  a.RowVersion,
+			"id":            a.ID,
+			"addressType":   a.AddressType,
+			"line1":         a.Line1,
+			"line2":         a.Line2,
+			"city":          a.City,
+			"stateProvince": a.StateProvince,
+			"postalCode":    a.PostalCode,
+			"countryCode":   a.CountryCode,
+			"isPrimary":     a.IsPrimary,
+			"rowVersion":    a.RowVersion,
 		})
 	}
 	httpx.WriteIDResponse(w, http.StatusOK, p.RowVersion, map[string]any{
@@ -308,7 +309,7 @@ func (s *Server) updateParty(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.Conflict("VERSION_CONFLICT", "row_version party tidak cocok"))
 		return
 	}
-	var taxID *string
+	taxID := existing.TaxID
 	if t := strings.TrimSpace(req.TaxID); t != "" {
 		taxID = &t
 	}
@@ -595,7 +596,7 @@ func (s *Server) updateItem(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.Conflict("VERSION_CONFLICT", "row_version item tidak cocok"))
 		return
 	}
-	payload, _ := json.Marshal(map[string]any{"code": existing.Code, "name": name, "itemType": it, "baseUom": uom})
+	payload, _ := json.Marshal(map[string]any{"id": id.String(), "code": existing.Code, "name": name, "itemType": it, "baseUom": uom})
 	newVer, err := s.repo.UpdateItemAndEmit(r.Context(), scope, masterdatadb.UpdateItemParams{
 		ID:         id,
 		RowVersion: ver,

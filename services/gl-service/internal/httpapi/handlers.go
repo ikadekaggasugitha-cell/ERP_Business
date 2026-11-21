@@ -47,7 +47,6 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /journal-entries/{id}/post", s.post)
 	mux.HandleFunc("POST /journal-entries/{id}/reverse", s.reverse)
 	mux.HandleFunc("GET /trial-balance", s.trialBalance)
-	mux.HandleFunc("GET /ledgers", s.listLedgers)
 }
 
 // ---- DTOs ------------------------------------------------------------------
@@ -188,7 +187,11 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.BadRequest("exchangeRate bukan angka desimal valid"))
 		return
 	}
-	lines, err := buildLineParams(scope[0], user, req.Lines)
+	if rVal := platform.NumericToRat(exRate); rVal == nil || rVal.Sign() <= 0 {
+		httpx.WriteError(w, r, httpx.BadRequest("exchangeRate harus > 0"))
+		return
+	}
+	lines, err := buildLineParams(scope[0], user, exRate, req.Lines)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
@@ -305,19 +308,9 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 		if e.ReversedEntryID != nil {
 			rev = e.ReversedEntryID.String()
 		}
-		exRateStr := "1.0000"
-		if full, _, gerr := s.repo.GetByID(r.Context(), scope, e.ID); gerr == nil {
-			exRateStr = formatExchangeRate(full.ExchangeRate)
-		}
-		totDrStr := "0.0000"
-		totCrStr := "0.0000"
-		if tot, terr := s.repo.Totals(r.Context(), scope, gldb.JournalEntryTotalsParams{
-			JournalEntryID: e.ID,
-			PostingDate:    e.PostingDate,
-		}); terr == nil {
-			totDrStr = platform.FormatNumeric(tot.TotalDebit, 4)
-			totCrStr = platform.FormatNumeric(tot.TotalCredit, 4)
-		}
+		exRateStr := formatExchangeRate(e.ExchangeRate)
+		totDrStr := platform.FormatNumeric(e.TotalDebit, 4)
+		totCrStr := platform.FormatNumeric(e.TotalCredit, 4)
 		out = append(out, entryDTO{
 			ID:                      e.ID.String(),
 			JournalNo:               e.JournalNo,
@@ -377,20 +370,27 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
-	exRate, err := platform.ParseOptionalNumeric(deflt(req.ExchangeRate, "1"))
-	if err != nil {
-		httpx.WriteError(w, r, httpx.BadRequest("exchangeRate bukan angka desimal valid"))
-		return
+	exRate := e.ExchangeRate
+	if strings.TrimSpace(req.ExchangeRate) != "" {
+		exRate, err = platform.ParseOptionalNumeric(req.ExchangeRate)
+		if err != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("exchangeRate bukan angka desimal valid"))
+			return
+		}
+		if rVal := platform.NumericToRat(exRate); rVal == nil || rVal.Sign() <= 0 {
+			httpx.WriteError(w, r, httpx.BadRequest("exchangeRate harus > 0"))
+			return
+		}
 	}
 	var lines []gldb.CreateJournalLineParams
 	if len(req.Lines) > 0 {
-		lines, err = buildLineParams(e.OrganizationID, user, req.Lines)
+		lines, err = buildLineParams(e.OrganizationID, user, exRate, req.Lines)
 		if err != nil {
 			httpx.WriteError(w, r, err)
 			return
 		}
 	}
-	var srcRef *string
+	srcRef := e.SourceDocumentRef
 	if v := strings.TrimSpace(req.SourceDocumentRef); v != "" {
 		srcRef = &v
 	}
@@ -569,7 +569,7 @@ func (s *Server) reverse(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	orig, _, err := s.repo.GetByID(r.Context(), scope, id)
+	orig, origLines, err := s.repo.GetByID(r.Context(), scope, id)
 	if err != nil {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
@@ -583,17 +583,32 @@ func (s *Server) reverse(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.Conflict("STALE_ROW_VERSION", "rowVersion basi atau status bukan Posted"))
 		return
 	}
+	revDr := new(big.Rat)
+	revCr := new(big.Rat)
+	for _, l := range origLines {
+		revDr.Add(revDr, platform.NumericToRat(l.CreditAmount))
+		revCr.Add(revCr, platform.NumericToRat(l.DebitAmount))
+	}
+	revNo := "REV-" + orig.JournalNo
+	if len(revNo) > 50 {
+		revNo = revNo[:50]
+	}
 	httpx.WriteIDResponse(w, http.StatusCreated, revRow.RowVersion, entryDTO{
-		ID:              revRow.ID.String(),
-		JournalNo:       "REV-" + orig.JournalNo,
-		PostingDate:     dateStr(revRow.PostingDate),
-		CurrencyCode:    orig.CurrencyCode,
-		ExchangeRate:    formatExchangeRate(orig.ExchangeRate),
-		TotalDebit:      "0.0000",
-		TotalCredit:     "0.0000",
-		ReversedEntryID: orig.ID.String(),
-		Status:          revRow.Status,
-		RowVersion:      revRow.RowVersion,
+		ID:                      revRow.ID.String(),
+		JournalNo:               revNo,
+		FinancialOrganizationID: orig.FinancialOrganizationID.String(),
+		LedgerID:                orig.LedgerID.String(),
+		FiscalPeriodID:          orig.FiscalPeriodID.String(),
+		PostingDate:             dateStr(revRow.PostingDate),
+		JournalSource:           "Reversal",
+		CurrencyCode:            orig.CurrencyCode,
+		ExchangeRate:            formatExchangeRate(orig.ExchangeRate),
+		TotalDebit:              revDr.FloatString(4),
+		TotalCredit:             revCr.FloatString(4),
+		SourceDocumentRef:       orig.JournalNo,
+		ReversedEntryID:         orig.ID.String(),
+		Status:                  revRow.Status,
+		RowVersion:              revRow.RowVersion,
 	})
 }
 
@@ -646,39 +661,27 @@ func (s *Server) trialBalance(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) listLedgers(w http.ResponseWriter, r *http.Request) {
-	scope, err := httpx.RequireScope(r)
-	if err != nil {
-		httpx.WriteError(w, r, err)
-		return
-	}
-	if err := httpx.RequirePermission(r, "gl.read"); err != nil {
-		httpx.WriteError(w, r, err)
-		return
-	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{
-		Data: []map[string]any{
-			{
-				"id":             "10000000-0000-0000-0000-000000000002",
-				"organizationId": scope[0].String(),
-				"code":           "PRIMARY-PSAK",
-				"name":           "Primary Statutory Ledger (PSAK/IFRS)",
-				"currencyCode":   "IDR",
-				"isPrimary":      true,
-			},
-		},
-		Page: httpx.NewPageMeta(1, 25, 1),
-	})
-}
-
 // ---- helpers ---------------------------------------------------------------
 
-func buildLineParams(orgID, user uuid.UUID, reqLines []lineReq) ([]gldb.CreateJournalLineParams, error) {
+func buildLineParams(orgID, user uuid.UUID, exRate pgtype.Numeric, reqLines []lineReq) ([]gldb.CreateJournalLineParams, error) {
 	if len(reqLines) == 0 {
 		return nil, httpx.BadRequest("lines minimal berisi 1 baris")
 	}
+	rateRat := platform.NumericToRat(exRate)
+	if rateRat == nil || rateRat.Sign() <= 0 {
+		rateRat = big.NewRat(1, 1)
+	}
+	seenLineNo := make(map[int32]bool, len(reqLines))
 	lines := make([]gldb.CreateJournalLineParams, 0, len(reqLines))
 	for _, l := range reqLines {
+		if l.LineNo <= 0 {
+			return nil, httpx.BadRequest("lines[].lineNo harus > 0")
+		}
+		if seenLineNo[l.LineNo] {
+			return nil, httpx.BadRequest("lines[].lineNo tidak boleh duplikat")
+		}
+		seenLineNo[l.LineNo] = true
+
 		acct, err := uuid.Parse(strings.TrimSpace(l.AccountID))
 		if err != nil {
 			return nil, httpx.BadRequest("lines[].accountId harus UUID valid")
@@ -691,17 +694,34 @@ func buildLineParams(orgID, user uuid.UUID, reqLines []lineReq) ([]gldb.CreateJo
 		if err != nil {
 			return nil, httpx.BadRequest("lines[].creditAmount tidak valid: " + err.Error())
 		}
-		funcRaw := l.FunctionalAmount
-		if strings.TrimSpace(funcRaw) == "" {
-			if platform.NumericToRat(dr).Sign() > 0 {
-				funcRaw = l.DebitAmount
-			} else {
-				funcRaw = l.CreditAmount
-			}
+		drRat := platform.NumericToRat(dr)
+		crRat := platform.NumericToRat(cr)
+		if drRat.Sign() < 0 || crRat.Sign() < 0 {
+			return nil, httpx.BadRequest("lines[].debitAmount dan creditAmount tidak boleh negatif")
 		}
-		fnAmt, err := platform.ParseOptionalNumeric(funcRaw)
-		if err != nil {
-			return nil, httpx.BadRequest("lines[].functionalAmount tidak valid: " + err.Error())
+		if (drRat.Sign() > 0 && crRat.Sign() > 0) || (drRat.Sign() == 0 && crRat.Sign() == 0) {
+			return nil, httpx.BadRequest("setiap baris jurnal harus mengisi tepat satu sisi debit atau kredit (> 0)")
+		}
+
+		var fnAmt pgtype.Numeric
+		if strings.TrimSpace(l.FunctionalAmount) != "" {
+			fnAmt, err = platform.ParseOptionalNumeric(l.FunctionalAmount)
+			if err != nil {
+				return nil, httpx.BadRequest("lines[].functionalAmount tidak valid: " + err.Error())
+			}
+			if fRat := platform.NumericToRat(fnAmt); fRat != nil && fRat.Sign() < 0 {
+				return nil, httpx.BadRequest("lines[].functionalAmount tidak boleh negatif")
+			}
+		} else {
+			base := drRat
+			if crRat.Sign() > 0 {
+				base = crRat
+			}
+			fnRat := new(big.Rat).Mul(base, rateRat)
+			fnAmt, err = platform.RatToNumeric(fnRat, 4)
+			if err != nil {
+				return nil, httpx.BadRequest("gagal menghitung functionalAmount: " + err.Error())
+			}
 		}
 		var desc *string
 		if d := strings.TrimSpace(l.Description); d != "" {

@@ -69,7 +69,7 @@ CREATE TABLE cur.outbox (
     correlation_id   uuid         NOT NULL,
     created_at       timestamptz  NOT NULL DEFAULT now(),
     published_at     timestamptz,
-    PRIMARY KEY (id)
+    PRIMARY KEY (id, created_at)
 );
 
 CREATE TABLE cur.processed_event (

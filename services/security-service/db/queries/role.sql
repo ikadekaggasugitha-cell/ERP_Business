@@ -29,13 +29,15 @@ WHERE deleted_at IS NULL
 -- name: UpdateRole :one
 UPDATE sec.role
 SET name = $3, is_system = $4, updated_by = $5
-WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+WHERE id = $1 AND row_version = $2 AND is_system = false AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: DeleteRole :execrows
 UPDATE sec.role
 SET deleted_at = now(), updated_by = $3
-WHERE id = $1 AND row_version = $2 AND is_system = false AND deleted_at IS NULL;
+WHERE id = $1 AND row_version = $2 AND is_system = false AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
 
 -- name: CreatePermission :one
 INSERT INTO sec.permission (
@@ -76,7 +78,8 @@ ORDER BY p.code;
 
 -- name: DeleteRolePermission :execrows
 DELETE FROM sec.role_permission
-WHERE role_id = $1 AND permission_id = $2;
+WHERE role_id = $1 AND permission_id = $2
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
 
 -- name: InsertOutbox :exec
 INSERT INTO sec.outbox (aggregate_type, aggregate_id, event_type, payload, organization_id, correlation_id)

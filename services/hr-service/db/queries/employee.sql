@@ -66,7 +66,14 @@ RETURNING row_version;
 -- name: SoftDeleteEmployee :execrows
 UPDATE hr.employee
 SET deleted_at = now(), updated_by = $3
-WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL;
+WHERE id = $1 AND status <> 'Active' AND row_version = $2 AND deleted_at IS NULL;
+
+-- name: CountActiveEmploymentsByEmployee :one
+SELECT count(*)::bigint
+FROM hr.employment
+WHERE employee_id = $1
+  AND deleted_at IS NULL
+  AND (effective_to IS NULL OR effective_to >= CURRENT_DATE);
 
 -- name: CreatePosition :one
 INSERT INTO hr.position (

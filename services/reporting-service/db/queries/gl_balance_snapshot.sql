@@ -89,3 +89,21 @@ FROM rpt.inventory_position;
 INSERT INTO rpt.processed_event (event_id, event_type)
 VALUES ($1, $2)
 ON CONFLICT (event_id) DO NOTHING;
+
+-- name: UpsertCOACache :exec
+INSERT INTO rpt.coa_cache (
+    organization_id, account_id, account_code, account_name, account_type
+) VALUES (
+    $1, $2, $3, $4, $5
+)
+ON CONFLICT (organization_id, account_id)
+DO UPDATE SET
+    account_code = EXCLUDED.account_code,
+    account_name = EXCLUDED.account_name,
+    account_type = EXCLUDED.account_type,
+    refreshed_at = now();
+
+-- name: GetCOACacheCode :one
+SELECT account_code
+FROM rpt.coa_cache
+WHERE organization_id = $1 AND account_id = $2;

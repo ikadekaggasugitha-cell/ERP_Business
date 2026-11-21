@@ -65,8 +65,8 @@ WHERE id = $1 AND invoice_date = $2 AND status = 'Issued' AND row_version = $3 A
 
 -- name: DeleteDraftInvoice :execrows
 UPDATE ar.ar_invoice
-SET deleted_at = now(), updated_by = $4
-WHERE id = $1 AND invoice_date = $2 AND status = 'Draft' AND row_version = $3 AND deleted_at IS NULL;
+SET status = 'Cancelled', deleted_at = now(), updated_by = $4
+WHERE id = $1 AND invoice_date = $2 AND status = 'Issued' AND row_version = $3 AND deleted_at IS NULL;
 
 -- name: InsertOutbox :exec
 INSERT INTO ar.outbox (aggregate_type, aggregate_id, event_type, payload, organization_id, correlation_id)

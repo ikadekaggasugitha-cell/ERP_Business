@@ -3,11 +3,9 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -512,7 +510,7 @@ func (s *Server) issueReservation(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Amount string `json:"amount"`
 	}
-	if err := decodeOptionalJSON(r, &body); err != nil {
+	if err := httpx.DecodeOptionalJSON(w, r, &body); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
@@ -705,24 +703,4 @@ func parseStockFilters(r *http.Request) (*uuid.UUID, *uuid.UUID, error) {
 		itemPtr = &id
 	}
 	return whPtr, itemPtr, nil
-}
-
-func decodeOptionalJSON(r *http.Request, dst any) error {
-	if r.Body == nil {
-		return nil
-	}
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		return httpx.BadRequest("gagal membaca body")
-	}
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 {
-		return nil
-	}
-	dec := json.NewDecoder(bytes.NewReader(trimmed))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(dst); err != nil {
-		return httpx.BadRequest("JSON tidak valid: " + err.Error())
-	}
-	return nil
 }

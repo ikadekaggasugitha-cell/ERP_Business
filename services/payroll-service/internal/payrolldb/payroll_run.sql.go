@@ -567,7 +567,7 @@ func (q *Queries) MarkOutboxPublished(ctx context.Context, arg MarkOutboxPublish
 const postPayrollRun = `-- name: PostPayrollRun :one
 UPDATE pay.payroll_run
 SET status = 'Posted', gl_journal_ref = $4, updated_by = $3
-WHERE id = $1 AND status IN ('Calculated', 'Approved') AND row_version = $2 AND deleted_at IS NULL
+WHERE id = $1 AND status = 'Approved' AND row_version = $2 AND deleted_at IS NULL
 RETURNING row_version
 `
 

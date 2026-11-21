@@ -52,7 +52,7 @@ func (f *fakeWFStore) ListTasksWithCount(_ context.Context, scope []uuid.UUID, _
 	}}, 1, nil
 }
 
-func (f *fakeWFStore) DecideTaskAndEmit(_ context.Context, _ []uuid.UUID, taskID, actorID, _ uuid.UUID, _ *int32, decision string) (repository.TaskDecisionResult, error) {
+func (f *fakeWFStore) DecideTaskAndEmit(_ context.Context, _ []uuid.UUID, taskID, actorID, _ uuid.UUID, _ *int32, decision, comment string) (repository.TaskDecisionResult, error) {
 	if decision == "Approve" && actorID == f.requesterID {
 		return repository.TaskDecisionResult{}, repository.ErrSoDViolation
 	}
@@ -65,6 +65,7 @@ func (f *fakeWFStore) DecideTaskAndEmit(_ context.Context, _ []uuid.UUID, taskID
 		InstanceID:     uuid.MustParse("10000000-0000-0000-0000-000000000051"),
 		DocumentRef:    "PO-001",
 		Decision:       decision,
+		Comment:        comment,
 		InstanceStatus: st,
 		TaskRowVersion: 2,
 	}, nil
@@ -105,17 +106,31 @@ func TestWorkflowSoDRBACApproveAndReject(t *testing.T) {
 		t.Fatalf("expected 403 without workflow:read, got %d", rr.Code)
 	}
 
-	rr := callWF(t, h, http.MethodPost, "/workflow-tasks/10000000-0000-0000-0000-000000000052/approve", nil, wfHdrs(requester, "workflow:approve"))
+	// Missing If-Match must be rejected with 428 Precondition Required.
+	if rr := callWF(t, h, http.MethodPost, "/workflow-tasks/10000000-0000-0000-0000-000000000052/approve", nil, wfHdrs(approver, "workflow:approve")); rr.Code != http.StatusPreconditionRequired {
+		t.Fatalf("expected 428 without If-Match, got %d (%s)", rr.Code, rr.Body.String())
+	}
+
+	reqHdrs := wfHdrs(requester, "workflow:approve")
+	reqHdrs["If-Match"] = `"1"`
+	rr := callWF(t, h, http.MethodPost, "/workflow-tasks/10000000-0000-0000-0000-000000000052/approve", nil, reqHdrs)
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 SOD_VIOLATION when requester self-approves, got %d (%s)", rr.Code, rr.Body.String())
 	}
 
-	rr = callWF(t, h, http.MethodPost, "/workflow-tasks/10000000-0000-0000-0000-000000000052/approve", nil, wfHdrs(approver, "workflow:approve"))
+	aprHdrs := wfHdrs(approver, "workflow:approve")
+	aprHdrs["If-Match"] = `"1"`
+	rr = callWF(t, h, http.MethodPost, "/workflow-tasks/10000000-0000-0000-0000-000000000052/approve", map[string]any{"comment": "disetujui finance"}, aprHdrs)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 when distinct approver approves, got %d (%s)", rr.Code, rr.Body.String())
 	}
+	var dec repository.TaskDecisionResult
+	_ = json.Unmarshal(rr.Body.Bytes(), &dec)
+	if dec.Comment != "disetujui finance" {
+		t.Fatalf("expected comment to be preserved, got %q", dec.Comment)
+	}
 
-	rr = callWF(t, h, http.MethodPost, "/workflow-tasks/10000000-0000-0000-0000-000000000052/reject", nil, wfHdrs(approver, "workflow:approve"))
+	rr = callWF(t, h, http.MethodPost, "/workflow-tasks/10000000-0000-0000-0000-000000000052/reject", map[string]any{"notes": "kurang dokumen"}, aprHdrs)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 on reject, got %d (%s)", rr.Code, rr.Body.String())
 	}

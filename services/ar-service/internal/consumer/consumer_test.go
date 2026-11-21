@@ -53,5 +53,23 @@ func TestHandleGoodsIssuedARConsumer(t *testing.T) {
 	if payload["invoiceNo"] != "SI-SO-55" || payload["customerId"] != custID.String() {
 		t.Fatalf("unexpected AR outbox payload: %+v", payload)
 	}
+
+	// project.billing.approved creates AR invoice with PB- reference & currency
+	err = c.Handle(context.Background(), eventbus.Envelope{
+		EventID:        uuid.NewString(),
+		EventType:      "project.billing.approved",
+		AggregateID:    uuid.NewString(),
+		OrganizationID: uuid.NewString(),
+		OccurredAt:     time.Date(2026, 11, 4, 0, 0, 0, 0, time.UTC),
+		Data:           []byte(`{"arInvoiceRef":"PB-PRJ01-001","customerId":"` + custID.String() + `","amount":"750000.0000","currencyCode":"USD"}`),
+	})
+	if err != nil {
+		t.Fatalf("unexpected project billing error: %v", err)
+	}
+	payload = map[string]any{}
+	_ = json.Unmarshal(s.ev.Payload, &payload)
+	if payload["invoiceNo"] != "PB-PRJ01-001" || payload["currencyCode"] != "USD" {
+		t.Fatalf("unexpected project billing AR payload: %+v", payload)
+	}
 }
 

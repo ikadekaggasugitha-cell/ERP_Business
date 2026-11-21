@@ -1,0 +1,58 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["fact", "cortex_v7", "crm", "pipeline"],
+  clusterBy: ["org_id", "opportunity_status", "stage"],
+  description: "CRM opportunity pipeline and maintenance backlog analytics with weighted expected revenue"
+}
+
+WITH dedup_org AS (
+  SELECT *
+  FROM ${ref("dim_organization")}
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY org_id
+    ORDER BY is_active DESC
+  ) = 1
+),
+
+dedup_fx AS (
+  SELECT
+    rate_date,
+    from_currency,
+    to_currency,
+    mid_rate
+  FROM ${ref("dim_currency")}
+  WHERE rate_type IN ('M', 'SPOT', 'DEFAULT')
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY rate_date, from_currency, to_currency
+    ORDER BY mid_rate DESC
+  ) = 1
+)
+
+SELECT
+  o.opportunity_id,
+  o.organization_id AS org_id,
+  o.opportunity_code,
+  o.lead_id,
+  o.customer_ref,
+  o.stage,
+  o.opportunity_status,
+  o.expected_close_date,
+  CAST(COALESCE(o.probability_pct, 0) AS NUMERIC) AS probability_pct,
+  CAST(COALESCE(o.estimated_value, 0) AS NUMERIC) AS estimated_value_fc,
+  CAST(COALESCE(o.estimated_value, 0) AS NUMERIC) * (CAST(COALESCE(o.probability_pct, 0) AS NUMERIC) / NUMERIC '100') AS weighted_value_fc,
+  COALESCE(org.functional_currency, o.currency_code, 'IDR') AS currency_fc,
+  CASE
+    WHEN COALESCE(org.functional_currency, o.currency_code, 'IDR') = '${dataform.projectConfig.vars.holding_presentation_currency}'
+      THEN CAST(COALESCE(o.estimated_value, 0) AS NUMERIC) * (CAST(COALESCE(o.probability_pct, 0) AS NUMERIC) / NUMERIC '100')
+    ELSE CAST(COALESCE(o.estimated_value, 0) AS NUMERIC) * (CAST(COALESCE(o.probability_pct, 0) AS NUMERIC) / NUMERIC '100') * fx_pc.mid_rate
+  END AS weighted_value_pc,
+  '${dataform.projectConfig.vars.holding_presentation_currency}' AS currency_pc,
+  o.source_last_updated_at
+FROM ${ref("erp_staging", "stg_crm_opportunities_cdc")} o
+LEFT JOIN dedup_org org
+  ON org.org_id = o.organization_id
+LEFT JOIN dedup_fx fx_pc
+  ON fx_pc.rate_date = COALESCE(o.expected_close_date, CURRENT_DATE())
+  AND fx_pc.from_currency = COALESCE(org.functional_currency, o.currency_code, 'IDR')
+  AND fx_pc.to_currency = '${dataform.projectConfig.vars.holding_presentation_currency}'

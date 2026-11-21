@@ -9,6 +9,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type RptCoaCache struct {
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	AccountID      uuid.UUID          `json:"account_id"`
+	AccountCode    string             `json:"account_code"`
+	AccountName    string             `json:"account_name"`
+	AccountType    string             `json:"account_type"`
+	RefreshedAt    pgtype.Timestamptz `json:"refreshed_at"`
+}
+
 type RptGlBalanceSnapshot struct {
 	ID             uuid.UUID          `json:"id"`
 	OrganizationID uuid.UUID          `json:"organization_id"`

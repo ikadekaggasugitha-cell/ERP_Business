@@ -91,4 +91,16 @@ ON CONFLICT (event_id) DO NOTHING;
 INSERT INTO tax.tax_code (organization_id, code, rate, tax_type, created_by)
 VALUES ($1, 'SYS-VAT', 11.0, 'VAT', $2)
 ON CONFLICT (organization_id, code) DO UPDATE SET code = EXCLUDED.code
-RETURNING id;
+RETURNING id, code, rate;
+
+-- name: GetTaxCodeByCode :one
+SELECT id, code, rate, tax_type
+FROM tax.tax_code
+WHERE organization_id = $1 AND code = $2 AND deleted_at IS NULL;
+
+-- name: GetDefaultVATTaxCode :one
+SELECT id, code, rate, tax_type
+FROM tax.tax_code
+WHERE organization_id = $1 AND tax_type = 'VAT' AND deleted_at IS NULL
+ORDER BY created_at ASC
+LIMIT 1;

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -20,35 +21,57 @@ import (
 )
 
 var Topics = []string{
-	eventbus.TopicFor("ar.invoice.issued"),      // INT-001
-	eventbus.TopicFor("ap.invoice.recorded"),    // INT-002
-	eventbus.TopicFor("inventory.goods.issued"), // INT-001 (COGS)
-	eventbus.TopicFor("payroll.run.completed"),  // INT-003
+	eventbus.TopicFor("ar.invoice.issued"),             // INT-001
+	eventbus.TopicFor("ap.invoice.recorded"),           // INT-002
+	eventbus.TopicFor("inventory.goods.issued"),        // INT-001 (COGS)
+	eventbus.TopicFor("payroll.run.completed"),         // INT-003
+	eventbus.TopicFor("fixedasset.asset.acquired"),     // Fixed Asset Capitalization
+	eventbus.TopicFor("fixedasset.depreciation.posted"), // Fixed Asset Depreciation
+	eventbus.TopicFor("fixedasset.asset.disposed"),     // Fixed Asset Disposal
+}
+
+func envUUID(key string, fallback uuid.UUID) uuid.UUID {
+	if raw := strings.TrimSpace(os.Getenv(key)); raw != "" {
+		if parsed, err := uuid.Parse(raw); err == nil && parsed != uuid.Nil {
+			return parsed
+		}
+	}
+	return fallback
 }
 
 var (
 	sysActor         = uuid.MustParse("00000000-0000-0000-0000-0000000000a1")
-	glFinOrg         = uuid.MustParse("10000000-0000-0000-0000-000000000001")
-	glLedger         = uuid.MustParse("10000000-0000-0000-0000-000000000002")
-	glPeriod         = uuid.MustParse("10000000-0000-0000-0000-000000000003")
-	acctARControl    = uuid.MustParse("10000000-0000-0000-0000-0000000000f1")
-	acctRevenue      = uuid.MustParse("10000000-0000-0000-0000-0000000000f2")
-	acctExpense      = uuid.MustParse("10000000-0000-0000-0000-0000000000f3")
-	acctAPControl    = uuid.MustParse("10000000-0000-0000-0000-0000000000f4")
-	acctCOGS         = uuid.MustParse("10000000-0000-0000-0000-0000000000f5")
-	acctInventory    = uuid.MustParse("10000000-0000-0000-0000-0000000000f6")
-	acctPayrollExp   = uuid.MustParse("10000000-0000-0000-0000-0000000000f7")
-	acctPayrollPayab = uuid.MustParse("10000000-0000-0000-0000-0000000000f8")
+	glFinOrg         = envUUID("GL_AUTO_FIN_ORG_ID", uuid.MustParse("10000000-0000-0000-0000-000000000001"))
+	glLedger         = envUUID("GL_AUTO_LEDGER_ID", uuid.MustParse("10000000-0000-0000-0000-000000000002"))
+	glPeriod         = envUUID("GL_AUTO_PERIOD_ID", uuid.MustParse("10000000-0000-0000-0000-000000000003"))
+	acctARControl    = envUUID("GL_ACCT_AR_CONTROL", uuid.MustParse("10000000-0000-0000-0000-0000000000f1"))
+	acctRevenue      = envUUID("GL_ACCT_REVENUE", uuid.MustParse("10000000-0000-0000-0000-0000000000f2"))
+	acctExpense      = envUUID("GL_ACCT_EXPENSE", uuid.MustParse("10000000-0000-0000-0000-0000000000f3"))
+	acctAPControl    = envUUID("GL_ACCT_AP_CONTROL", uuid.MustParse("10000000-0000-0000-0000-0000000000f4"))
+	acctCOGS         = envUUID("GL_ACCT_COGS", uuid.MustParse("10000000-0000-0000-0000-0000000000f5"))
+	acctInventory    = envUUID("GL_ACCT_INVENTORY", uuid.MustParse("10000000-0000-0000-0000-0000000000f6"))
+	acctPayrollExp   = envUUID("GL_ACCT_PAYROLL_EXP", uuid.MustParse("10000000-0000-0000-0000-0000000000f7"))
+	acctPayrollPayab = envUUID("GL_ACCT_PAYROLL_PAYABLE", uuid.MustParse("10000000-0000-0000-0000-0000000000f8"))
+	acctFixedAsset   = envUUID("GL_ACCT_FIXED_ASSET", uuid.MustParse("10000000-0000-0000-0000-0000000000f9"))
+	acctAccumDep     = envUUID("GL_ACCT_ACCUM_DEP", uuid.MustParse("10000000-0000-0000-0000-0000000000fa"))
+	acctDepExpense   = envUUID("GL_ACCT_DEP_EXPENSE", uuid.MustParse("10000000-0000-0000-0000-0000000000fb"))
+	acctCashClear    = envUUID("GL_ACCT_CASH_CLEAR", uuid.MustParse("10000000-0000-0000-0000-0000000000fc"))
 )
 
 type srcPayload struct {
-	InvoiceNo    string `json:"invoiceNo"`
-	RunNo        string `json:"runNo"`
-	Reference    string `json:"reference"`
-	InvoiceDate  string `json:"invoiceDate"`
-	CurrencyCode string `json:"currencyCode"`
-	TotalAmount  string `json:"totalAmount"`
-	Amount       string `json:"amount"`
+	InvoiceNo        string `json:"invoiceNo"`
+	RunNo            string `json:"runNo"`
+	AssetNo          string `json:"assetNo"`
+	Reference        string `json:"reference"`
+	InvoiceDate      string `json:"invoiceDate"`
+	CurrencyCode     string `json:"currencyCode"`
+	TotalAmount      string `json:"totalAmount"`
+	Amount           string `json:"amount"`
+	NetBookValue     string `json:"netBookValue"`
+	AssetAccountID   string `json:"assetAccountId"`
+	ExpenseAccountID string `json:"expenseAccountId"`
+	AccumAccountID   string `json:"accumAccountId"`
+	FiscalPeriodID   string `json:"fiscalPeriodId"`
 }
 
 type Consumer struct {
@@ -96,15 +119,40 @@ func (x *Consumer) handle(ctx context.Context, env eventbus.Envelope) error {
 		}
 		pd = pgtype.Date{Time: t, Valid: true}
 	}
-	amtRaw := firstNonEmpty(p.TotalAmount, p.Amount, "0")
+	amtRaw := firstNonEmpty(p.TotalAmount, p.Amount, p.NetBookValue, "0")
 	amtNum, err := platform.ParseNumeric(amtRaw)
 	if err != nil {
 		return eventbus.ErrPoison{Err: fmt.Errorf("invalid subledger amount %q: %w", amtRaw, err)}
 	}
+	if amtRat := platform.NumericToRat(amtNum); amtRat == nil || amtRat.Sign() <= 0 {
+		return eventbus.ErrPoison{Err: fmt.Errorf("subledger amount must be > 0, got %q", amtRaw)}
+	}
+	// Honor asset-specific COA accounts when provided by fixedasset-service events.
+	switch env.EventType {
+	case "fixedasset.asset.acquired":
+		if u, e := uuid.Parse(strings.TrimSpace(p.AssetAccountID)); e == nil && u != uuid.Nil {
+			debitAcct = u
+		}
+	case "fixedasset.depreciation.posted":
+		if u, e := uuid.Parse(strings.TrimSpace(p.ExpenseAccountID)); e == nil && u != uuid.Nil {
+			debitAcct = u
+		}
+		if u, e := uuid.Parse(strings.TrimSpace(p.AccumAccountID)); e == nil && u != uuid.Nil {
+			creditAcct = u
+		}
+	case "fixedasset.asset.disposed":
+		if u, e := uuid.Parse(strings.TrimSpace(p.AssetAccountID)); e == nil && u != uuid.Nil {
+			creditAcct = u
+		}
+	}
+	periodID := glPeriod
+	if u, e := uuid.Parse(strings.TrimSpace(p.FiscalPeriodID)); e == nil && u != uuid.Nil {
+		periodID = u
+	}
 	zeroNum, _ := platform.ParseNumeric("0")
 	exRate, _ := platform.ParseNumeric("1")
 
-	src := firstNonEmpty(p.InvoiceNo, p.RunNo, p.Reference, env.AggregateID)
+	src := firstNonEmpty(p.InvoiceNo, p.RunNo, p.Reference, p.AssetNo, env.AggregateID)
 	journalNo := "AUTO-" + src
 	if len(journalNo) > 50 {
 		journalNo = journalNo[:50]
@@ -116,7 +164,7 @@ func (x *Consumer) handle(ctx context.Context, env eventbus.Envelope) error {
 		JournalNo:               journalNo,
 		FinancialOrganizationID: glFinOrg,
 		LedgerID:                glLedger,
-		FiscalPeriodID:          glPeriod,
+		FiscalPeriodID:          periodID,
 		PostingDate:             pd,
 		JournalSource:           "SubLedger",
 		SourceModule:            &srcModule,
@@ -145,6 +193,12 @@ func resolveAccounts(eventType string) (debit, credit uuid.UUID, ok bool) {
 		return acctCOGS, acctInventory, true
 	case "payroll.run.completed":
 		return acctPayrollExp, acctPayrollPayab, true
+	case "fixedasset.asset.acquired":
+		return acctFixedAsset, acctCashClear, true
+	case "fixedasset.depreciation.posted":
+		return acctDepExpense, acctAccumDep, true
+	case "fixedasset.asset.disposed":
+		return acctCashClear, acctFixedAsset, true
 	default:
 		return uuid.Nil, uuid.Nil, false
 	}

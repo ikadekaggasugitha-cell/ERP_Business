@@ -12,24 +12,26 @@ Setiap event dipetakan ke tabel `outbox` sumbernya (DBDD BAB 2.10); konsumen waj
 
 ### 7.2.1 Envelope Standar
 
-Seluruh event memakai *envelope* konsisten (header + payload):
+Seluruh event memakai *envelope* konsisten (`services/shared/eventbus.Envelope`):
 
 ```json
 {
   "eventId": "uuid",
-  "eventType": "erp.gl.journal.posted.v1",
+  "eventType": "gl.journal.posted",
+  "aggregateType": "JournalEntry",
+  "aggregateId": "uuid",
   "occurredAt": "2026-08-05T10:00:00Z",
   "organizationId": "uuid",
   "correlationId": "uuid",
-  "causationId": "uuid",
-  "producer": "gl-service",
-  "schemaVersion": 1,
-  "payload": { /* skema spesifik event */ }
+  "schemaVersion": "v1",
+  "data": { /* payload spesifik event */ }
 }
 ```
 
-* `eventId` — identitas unik (deduplikasi/idempotensi konsumen).
-* `correlationId` — korelasi lintas layanan (SAD BAB 11.6); `causationId` — event/permintaan pemicu.
+* `eventId` — identitas unik (deduplikasi/idempotensi konsumen via `processed_event`).
+* `eventType` — nama kanonis event (mis. `gl.journal.posted`); topic Kafka dibentuk otomatis `erp.<eventType>.v1`.
+* `correlationId` — korelasi lintas layanan (SAD BAB 11.6); `data` — objek payload JSON (pada SSE bridge `api-gateway`, field `data` disalin pula ke `payload` untuk kompatibilitas klien web).
+* **Kafka Partition Key**: `<organizationId>:<aggregateId>` (dibentuk via `eventbus.PartitionKey`), menjamin *ordering* ketat per agregat di dalam satu tenant sekaligus menghindari *hot partition* pada tenant besar.
 * Header Kafka menyalin `eventId`, `eventType`, `correlationId`, `organizationId` untuk *routing*/*filtering* tanpa deserialisasi payload.
 
 ### 7.2.2 Tata Kelola Skema (Apicurio)
@@ -45,27 +47,42 @@ Seluruh event memakai *envelope* konsisten (header + payload):
 
 ## 7.3 Topic Catalog
 
-Konvensi nama: `erp.<domain>.<entity>.<event>.v<versi>` (SAD BAB 13.10.2). *Partition key* = `organization_id`/*aggregate id*.
+Konvensi nama: `erp.<domain>.<entity>.<event>.v<versi>` (SAD BAB 13.10.2). *Partition key* = `organizationId:aggregateId`. Total **58 domain event topics** tersinkronisasi 1:1 antara `audit-service` (`AllTopics`) dan `api-gateway` SSE bridge (`DomainTopics`).
 
-| Topic                                  | Produsen (SVC)        | Konsumen Utama                     | Delivery            | INT      |
-| -------------------------------------- | --------------------- | ----------------------------------- | ------------------- | -------- |
-| `erp.masterdata.customer.upserted.v1`  | SVC-005               | sales, ar, crm                      | At-Least-Once       | BO-010   |
-| `erp.masterdata.vendor.upserted.v1`    | SVC-005               | procurement, ap                     | At-Least-Once       | BO-010   |
-| `erp.masterdata.item.upserted.v1`      | SVC-005               | inventory, sales, procurement       | At-Least-Once       | BO-010   |
-| `erp.workflow.approval.completed.v1`   | SVC-004               | modul asal dokumen                  | At-Least-Once       | INT-004  |
-| `erp.sales.order.confirmed.v1`         | SVC-015               | inventory, reporting                | At-Least-Once       | INT-001  |
-| `erp.inventory.stock.reserved.v1`      | SVC-013               | sales, manufacturing                | **Exactly-Once**    | INT-001  |
-| `erp.inventory.goods.issued.v1`        | SVC-013               | ar, gl                              | **Exactly-Once**    | INT-001  |
-| `erp.procurement.po.approved.v1`       | SVC-012               | inventory                           | At-Least-Once       | INT-002  |
-| `erp.procurement.goods.received.v1`    | SVC-012               | ap, inventory                       | At-Least-Once       | INT-002  |
-| `erp.ap.invoice.recorded.v1`           | SVC-008               | gl, treasury                        | **Exactly-Once**    | INT-002  |
-| `erp.ar.invoice.issued.v1`             | SVC-009               | gl, tax                             | **Exactly-Once**    | INT-001  |
-| `erp.gl.journal.posted.v1`             | SVC-007               | reporting, audit                    | **Exactly-Once**    | muara    |
-| `erp.cashbank.payment.settled.v1`      | SVC-011               | ar, ap, gl                          | **Exactly-Once**    | INT-005  |
-| `erp.hr.employee.updated.v1`           | SVC-016               | payroll                             | At-Least-Once       | INT-003  |
-| `erp.payroll.run.completed.v1`         | SVC-017               | gl, treasury                        | **Exactly-Once**    | INT-003  |
-| `erp.manufacturing.workorder.completed.v1` | SVC-014           | inventory                           | At-Least-Once       | 9.9      |
-| `erp.audit.event.recorded.v1`          | seluruh layanan       | audit                               | At-Least-Once       | 9.20     |
+| Topic                                         | Produsen (SVC)   | Konsumen Utama                         | Delivery         | INT / Ref |
+| --------------------------------------------- | ---------------- | -------------------------------------- | ---------------- | --------- |
+| `erp.masterdata.party.upserted.v1`            | SVC-005          | ap, ar, sales, inventory, procurement  | At-Least-Once    | BO-010    |
+| `erp.masterdata.item.upserted.v1`             | SVC-005          | inventory, sales, procurement          | At-Least-Once    | BO-010    |
+| `erp.org.unit.upserted.v1`                    | SVC-001          | audit, gateway SSE                     | At-Least-Once    | BR-001    |
+| `erp.user.account.upserted.v1`                | SVC-002          | audit, gateway SSE                     | At-Least-Once    | 9.2       |
+| `erp.security.role.upserted.v1`               | SVC-003          | audit, gateway SSE                     | At-Least-Once    | 9.2       |
+| `erp.workflow.approval.requested.v1` / `.completed.v1` | SVC-004 | audit, modul asal dokumen              | At-Least-Once    | INT-004   |
+| `erp.coa.account.upserted.v1` / `.period.updated.v1`   | SVC-006 | reporting (COA cache), audit           | At-Least-Once    | 9.5.1     |
+| `erp.currency.created.v1` / `.rate.created.v1` / `.rate.updated.v1` | SVC-010-CUR | audit, gateway SSE         | At-Least-Once    | ADR-014   |
+| `erp.sales.order.confirmed.v1` / `.delivery.completed.v1` | SVC-015 | inventory, reporting, audit         | At-Least-Once    | INT-001   |
+| `erp.inventory.stock.reserved.v1`             | SVC-013          | sales, manufacturing, audit            | **Exactly-Once** | INT-001   |
+| `erp.inventory.goods.issued.v1`               | SVC-013          | ar, gl, audit                          | **Exactly-Once** | INT-001   |
+| `erp.inventory.reservation.failed.v1`         | SVC-013          | sales (compensation), audit            | At-Least-Once    | INT-001   |
+| `erp.procurement.po.approved.v1`              | SVC-012          | budget (encumbrance), inventory, audit | At-Least-Once    | INT-002   |
+| `erp.procurement.goods.received.v1`           | SVC-012          | ap, inventory, audit                   | At-Least-Once    | INT-002   |
+| `erp.ap.invoice.recorded.v1`                  | SVC-008          | gl, treasury, budget, audit            | **Exactly-Once** | INT-002   |
+| `erp.ar.invoice.issued.v1` / `.paid.v1`       | SVC-009          | gl, tax, audit                         | **Exactly-Once** | INT-001   |
+| `erp.tax.invoice.issued.v1` / `.efaktur.reported.v1` | SVC-010   | audit, gateway SSE                     | At-Least-Once    | 9.5.7     |
+| `erp.gl.journal.posted.v1` / `.reversed.v1`   | SVC-007          | reporting (CQRS per-account), audit    | **Exactly-Once** | muara     |
+| `erp.treasury.payment.settled.v1` / `.reconciled.v1` (legacy alias `cashbank.payment.settled`) | SVC-011 | ar, ap, gl, audit | **Exactly-Once** | INT-005 |
+| `erp.hr.employee.updated.v1`                  | SVC-016          | payroll, audit                         | At-Least-Once    | INT-003   |
+| `erp.payroll.run.calculated.v1` / `.approved.v1` / `.posted.v1` / `.completed.v1` | SVC-017 | gl, treasury (on posted/completed), audit | **Exactly-Once** | INT-003 |
+| `erp.manufacturing.workorder.released.v1` / `.completed.v1` | SVC-014 | inventory (FG receipt), audit     | At-Least-Once    | 9.9       |
+| `erp.dimension.cost_center.upserted.v1` / `.profit_center.upserted.v1` / `.allocation_rule.upserted.v1` / `.executed.v1` | SVC-021 | audit, gateway SSE | At-Least-Once | BR-626..635 |
+| `erp.localization.language.updated.v1` / `.bundle.updated.v1` / `.locale_format.updated.v1` | SVC-029 | audit, gateway SSE | At-Least-Once | BR-816..825 |
+| `erp.fixedasset.asset.acquired.v1` / `.depreciation.posted.v1` / `.asset.disposed.v1` | SVC-020 | gl (auto-journal), audit | **Exactly-Once** | BR-606..625 |
+| `erp.budget.approved.v1` / `.commitment.created.v1` | SVC-022    | audit, gateway SSE                     | At-Least-Once    | BR-636..645 |
+| `erp.financialclose.period.closed.v1` / `.locked.v1` / `.reopened.v1` | SVC-023 | coa (fiscal_period sync), audit | **Exactly-Once** | BR-656..665 |
+| `erp.consolidation.run.finalized.v1`          | SVC-024          | audit, gateway SSE                     | At-Least-Once    | BR-666..675 |
+| `erp.project.billing.approved.v1`             | SVC-025          | ar (auto-invoice), audit               | **Exactly-Once** | BR-726..735 |
+| `erp.asset.movement.completed.v1` / `.verification.recorded.v1` | SVC-026 | audit, gateway SSE            | At-Least-Once    | BR-736..745 |
+| `erp.maintenance.workorder.parts_requested.v1` / `.completed.v1` | SVC-027 | inventory (spare parts issue), audit | At-Least-Once | BR-786..795 |
+| `erp.crm.opportunity.won.v1`                  | SVC-028          | sales (draft SO), audit                | At-Least-Once    | BR-776..785 |
 
 Setiap topic memiliki pasangan `.dlq` dan (opsional) `.retry` (BAB 7.6).
 

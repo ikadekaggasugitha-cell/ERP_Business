@@ -1,44 +1,57 @@
-# Runnable Baseline — 20 Go Microservices + API Gateway, 30 PostgreSQL Databases, 20 Redpanda Domain Event Topics
+# Runnable Baseline — 30 Go Microservices + API Gateway, 30 PostgreSQL Databases, 58 Redpanda Domain Event Topics
 
-The full backend stack, runnable end-to-end: **18 event producers + 2 consumers (`audit-service`, `reporting-service`) + `api-gateway` (:8000)** on **Postgres 16 (30 PostgreSQL databases)** + **Redpanda (20 Redpanda domain event topics)**, serving the **React 19 + Vite + TanStack** SPA (`apps/web-spa`) and Enterprise Chrome Companion (`apps/chrome-companion`), built against the shared module `services/shared` (`platform` + `httpx` + `eventbus`).
+The full backend stack, runnable end-to-end: **28 event producers + 2 consumers (`audit-service`, `reporting-service`) + `api-gateway` (:8000)** on **Postgres 16 (30 PostgreSQL databases)** + **Redpanda (58 Redpanda domain event topics)**, serving the **React 19 + Vite + TanStack** SPA (`apps/web-spa`) and Enterprise Chrome Companion (`apps/chrome-companion`), built against the shared module `services/shared` (`platform` + `httpx` + `eventbus`).
 
 ```text
 React 19 + Vite + TanStack SPA ──JWT/SSE──▶ api-gateway (:8000)
                                                  │
-client / gateway ──REST──▶ 18 producer services ─┴─outbox(same tx)──▶ relay ──▶ Redpanda (20 domain event topics)
+client / gateway ──REST──▶ 28 producer services ─┴─outbox(same tx)──▶ relay ──▶ Redpanda (58 domain event topics)
                                                                                         │
                                          ┌──────────────────────────────────────────────┼───────────────┐
                                          ▼                                              ▼               ▼
                                    audit-service                               reporting-service   domain sagas
-                              (consumes 20 topics →                         (CQRS read models:     (gl, ap, ar,
-                               immutable audit_log)                          gl_balance_snapshot)   inv, trs, tax)
+                              (consumes 58 topics →                         (CQRS read models:     (gl, coa, ap, ar,
+                               immutable audit_log)                          gl_balance_snapshot)   inv, sales, trs, tax, bdg)
 ```
 
 ## Run it
 
 ```bash
-docker compose up -d --build     # Postgres (30 DBs) + Redpanda (20 topics) + bootstrap/migrate/grants/seeds + 20 Go microservices + api-gateway
-bash deploy/smoke-test.sh        # 104 checks (Steps 1–14, 13a–13g, 14a–14g); prints E2E_SMOKE_PASS, exits non-zero on any fail
+docker compose up -d --build     # Postgres (30 DBs) + Redpanda (58 topics) + bootstrap/migrate/grants/seeds + 30 Go microservices + api-gateway
+bash deploy/smoke-test.sh        # Steps 1–15 (core + currency + dimension/localization + 8 extended services); prints E2E_SMOKE_PASS, exits non-zero on any fail
+bash deploy/maintain-partitions.sh # Pre-creates +6 months of monthly partitions across all partitioned tables in all 30 DBs
 docker compose down -v           # tear down
 ```
 
-Bring-up order (compose `depends_on`): `db(healthy) → bootstrap(30 DBs + roles + login) → migrate-<db> ×30 → grants(30 DBs) → seeds → 20 Go microservices + api-gateway`.
+Bring-up order (compose `depends_on`): `db(healthy) → bootstrap(30 DBs + roles + login) → migrate-<db> ×30 → grants(30 DBs) → seeds (14 DBs) → 30 Go microservices → api-gateway`.
 
-## Services & ports (20 Go Microservices + `api-gateway`)
+## Services & ports (30 Go Microservices + `api-gateway`)
 
 | Domain | Service | Host Port | Emits / Role |
 |---|---|---|---|
 | Gateway | `api-gateway` | 8000 | `/api/v1/auth/login`, JWT & RBAC scope injection, reverse proxy, `/api/v1/stream/events` SSE bridge |
-| Financial | `gl` / `ap` / `ar` / `coa` / `tax` / `treasury` / `currency` | 8081 / 8082 / 8084 / 8085 / 8086 / 8087 / 8100 | `gl.journal.posted` · `ap.invoice.recorded` · `ar.invoice.issued` · `coa.account.upserted` · `tax.invoice.issued` · `treasury.payment.settled` · `currency.rate.created` / `currency.rate.updated` |
-| Core-platform | `user` / `security` / `masterdata` / `org` / `workflow` | 8088 / 8089 / 8090 / 8091 / 8092 | `user.account.upserted` · `security.role.upserted` · `masterdata.party.upserted` · `org.unit.upserted` · `workflow.approval.requested` |
-| Operational | `procurement` / `inventory` / `manufacturing` / `sales` | 8093 / 8094 / 8095 / 8096 | `procurement.po.approved` · `procurement.goods.received` · `inventory.stock.reserved` · `inventory.goods.issued` · `inventory.reservation.failed` · `manufacturing.workorder.completed` · `sales.order.confirmed` |
-| HR | `hr` / `payroll` | 8097 / 8098 | `hr.employee.updated` · `payroll.run.completed` |
-| Consumers | `audit` (8083) · `reporting` (8099) | 8083 / 8099 | `audit` consumes 20 Redpanda domain event topics · `reporting` CQRS projects `gl.journal.posted` |
+| Financial | `gl` / `ap` / `ar` / `coa` / `tax` / `treasury` / `currency` | 8081 / 8082 / 8084 / 8085 / 8086 / 8087 / 8100 | `gl.journal.posted`, `gl.journal.reversed` · `ap.invoice.recorded` · `ar.invoice.issued`, `ar.invoice.paid` · `coa.account.upserted`, `coa.period.updated` · `tax.invoice.issued` · `treasury.payment.settled` · `currency.rate.created` / `updated` |
+| Core-platform | `user` / `security` / `masterdata` / `org` / `workflow` | 8088 / 8089 / 8090 / 8091 / 8092 | `user.account.upserted` · `security.role.upserted` · `masterdata.party.upserted`, `masterdata.item.upserted` · `org.unit.upserted` · `workflow.approval.requested` / `completed` |
+| Extended Financial | `fixedasset` / `dimension` / `budget` / `financialclose` / `consolidation` | 8101 / 8102 / 8103 / 8104 / 8105 | `fixedasset.asset.acquired` / `depreciation.posted` / `disposed` · `dimension.*` (incl. `allocation_rule.executed`) · `budget.approved` / `commitment.created` · `financialclose.period.closed` / `locked` / `reopened` · `consolidation.run.finalized` |
+| Extended Operational | `project` / `asset` / `maintenance` / `crm` / `localization` | 8106 / 8107 / 8108 / 8109 / 8110 | `project.billing.approved` · `asset.movement.completed` / `verification.recorded` · `maintenance.workorder.parts_requested` / `completed` · `crm.opportunity.won` · `localization.*` |
+| Operational | `procurement` / `inventory` / `manufacturing` / `sales` | 8093 / 8094 / 8095 / 8096 | `procurement.po.approved` / `goods.received` · `inventory.stock.reserved` / `goods.issued` / `reservation.failed` · `manufacturing.workorder.released` / `completed` · `sales.order.confirmed` / `delivery.completed` |
+| HR | `hr` / `payroll` | 8097 / 8098 | `hr.employee.updated` · `payroll.run.calculated` / `approved` / `posted` / `completed` |
+| Consumers | `audit` (8083) · `reporting` (8099) | 8083 / 8099 | `audit` consumes 58 Redpanda domain event topics · `reporting` CQRS projects `gl.journal.posted` (per account via `rpt.coa_cache`) & consumes `coa.account.upserted` |
+
+## Automated Partition Maintenance
+
+Run `deploy/maintain-partitions.sh` (or schedule via `.github/workflows/partition-maintenance.yml` / Kubernetes `CronJob` on the 1st of each month) to pre-create `+MONTHS_AHEAD` (default `6`) monthly partitions for every `pg_partitioned_table` across all 30 databases while preserving RLS policies:
+
+```bash
+PGHOST=localhost POSTGRES_USER=postgres POSTGRES_PASSWORD=postgres MONTHS_AHEAD=6 bash deploy/maintain-partitions.sh
+# Dry run:
+DRY_RUN=true bash deploy/maintain-partitions.sh
+```
 
 ## What the smoke test verifies (104 checks across Steps 1–14)
 
 - Every producer's REST create/action returns the expected status (`201`/`200`).
-- **Event flow**: all producers emit → transactional outbox → relay → Redpanda (20 domain event topics) → **audit** appends to `audit_log`; **reporting** projects `gl.journal.posted` into `gl_balance_snapshot` (CQRS read model).
+- **Event flow**: all producers emit → transactional outbox → relay → Redpanda (40 domain event topics) → **audit** appends to `audit_log`; **reporting** projects `gl.journal.posted` into `gl_balance_snapshot` (CQRS read model).
 - **Cross-domain sagas & fan-out**:
   - `INT-001`: `sales.order.confirmed → inventory (goods.issued) → ar (invoice.issued) → tax (e-Faktur) + gl (auto-journal) → reporting`, plus out-of-stock compensation (`inventory.reservation.failed → sales Cancelled`).
   - `INT-002 / INT-003`: `procurement.goods.received → ap → gl → reporting`, plus `treasury` draft payment scheduling from `ap.invoice.recorded` and `payroll.run.completed`.

@@ -23,6 +23,19 @@ func (q *Queries) CountAllocationRules(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countCostCenterAssignments = `-- name: CountCostCenterAssignments :one
+SELECT COUNT(*) FROM cc.cost_center_assignment
+WHERE deleted_at IS NULL
+  AND ($1::uuid IS NULL OR cost_center_id = $1::uuid)
+`
+
+func (q *Queries) CountCostCenterAssignments(ctx context.Context, costCenterID *uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countCostCenterAssignments, costCenterID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countCostCenters = `-- name: CountCostCenters :one
 SELECT COUNT(*) FROM cc.cost_center
 WHERE deleted_at IS NULL
@@ -31,6 +44,19 @@ WHERE deleted_at IS NULL
 
 func (q *Queries) CountCostCenters(ctx context.Context, status *string) (int64, error) {
 	row := q.db.QueryRow(ctx, countCostCenters, status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countProfitCenterAssignments = `-- name: CountProfitCenterAssignments :one
+SELECT COUNT(*) FROM pc.profit_center_assignment
+WHERE deleted_at IS NULL
+  AND ($1::uuid IS NULL OR profit_center_id = $1::uuid)
+`
+
+func (q *Queries) CountProfitCenterAssignments(ctx context.Context, profitCenterID *uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countProfitCenterAssignments, profitCenterID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -127,6 +153,38 @@ func (q *Queries) CreateCostCenter(ctx context.Context, arg CreateCostCenterPara
 	return i, err
 }
 
+const createCostCenterAssignment = `-- name: CreateCostCenterAssignment :one
+INSERT INTO cc.cost_center_assignment (organization_id, cost_center_id, organization_ref, created_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (cost_center_id, organization_ref) DO UPDATE
+SET deleted_at = NULL, updated_by = EXCLUDED.created_by
+RETURNING id, row_version
+`
+
+type CreateCostCenterAssignmentParams struct {
+	OrganizationID  uuid.UUID `json:"organization_id"`
+	CostCenterID    uuid.UUID `json:"cost_center_id"`
+	OrganizationRef uuid.UUID `json:"organization_ref"`
+	CreatedBy       uuid.UUID `json:"created_by"`
+}
+
+type CreateCostCenterAssignmentRow struct {
+	ID         uuid.UUID `json:"id"`
+	RowVersion int32     `json:"row_version"`
+}
+
+func (q *Queries) CreateCostCenterAssignment(ctx context.Context, arg CreateCostCenterAssignmentParams) (CreateCostCenterAssignmentRow, error) {
+	row := q.db.QueryRow(ctx, createCostCenterAssignment,
+		arg.OrganizationID,
+		arg.CostCenterID,
+		arg.OrganizationRef,
+		arg.CreatedBy,
+	)
+	var i CreateCostCenterAssignmentRow
+	err := row.Scan(&i.ID, &i.RowVersion)
+	return i, err
+}
+
 const createProfitCenter = `-- name: CreateProfitCenter :one
 INSERT INTO pc.profit_center (organization_id, code, name, parent_id, status, effective_from, effective_to, created_by)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -165,6 +223,57 @@ func (q *Queries) CreateProfitCenter(ctx context.Context, arg CreateProfitCenter
 	return i, err
 }
 
+const createProfitCenterAssignment = `-- name: CreateProfitCenterAssignment :one
+INSERT INTO pc.profit_center_assignment (organization_id, profit_center_id, organization_ref, created_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (profit_center_id, organization_ref) DO UPDATE
+SET deleted_at = NULL, updated_by = EXCLUDED.created_by
+RETURNING id, row_version
+`
+
+type CreateProfitCenterAssignmentParams struct {
+	OrganizationID  uuid.UUID `json:"organization_id"`
+	ProfitCenterID  uuid.UUID `json:"profit_center_id"`
+	OrganizationRef uuid.UUID `json:"organization_ref"`
+	CreatedBy       uuid.UUID `json:"created_by"`
+}
+
+type CreateProfitCenterAssignmentRow struct {
+	ID         uuid.UUID `json:"id"`
+	RowVersion int32     `json:"row_version"`
+}
+
+func (q *Queries) CreateProfitCenterAssignment(ctx context.Context, arg CreateProfitCenterAssignmentParams) (CreateProfitCenterAssignmentRow, error) {
+	row := q.db.QueryRow(ctx, createProfitCenterAssignment,
+		arg.OrganizationID,
+		arg.ProfitCenterID,
+		arg.OrganizationRef,
+		arg.CreatedBy,
+	)
+	var i CreateProfitCenterAssignmentRow
+	err := row.Scan(&i.ID, &i.RowVersion)
+	return i, err
+}
+
+const deleteAllocationRule = `-- name: DeleteAllocationRule :execrows
+UPDATE cc.cost_allocation_rule SET deleted_at = now(), updated_by = $3
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+`
+
+type DeleteAllocationRuleParams struct {
+	ID         uuid.UUID  `json:"id"`
+	RowVersion int32      `json:"row_version"`
+	UpdatedBy  *uuid.UUID `json:"updated_by"`
+}
+
+func (q *Queries) DeleteAllocationRule(ctx context.Context, arg DeleteAllocationRuleParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAllocationRule, arg.ID, arg.RowVersion, arg.UpdatedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteCostCenter = `-- name: DeleteCostCenter :execrows
 UPDATE cc.cost_center SET deleted_at = now(), updated_by = $3
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
@@ -184,6 +293,25 @@ func (q *Queries) DeleteCostCenter(ctx context.Context, arg DeleteCostCenterPara
 	return result.RowsAffected(), nil
 }
 
+const deleteCostCenterAssignment = `-- name: DeleteCostCenterAssignment :execrows
+UPDATE cc.cost_center_assignment SET deleted_at = now(), updated_by = $3
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+`
+
+type DeleteCostCenterAssignmentParams struct {
+	ID         uuid.UUID  `json:"id"`
+	RowVersion int32      `json:"row_version"`
+	UpdatedBy  *uuid.UUID `json:"updated_by"`
+}
+
+func (q *Queries) DeleteCostCenterAssignment(ctx context.Context, arg DeleteCostCenterAssignmentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteCostCenterAssignment, arg.ID, arg.RowVersion, arg.UpdatedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteProfitCenter = `-- name: DeleteProfitCenter :execrows
 UPDATE pc.profit_center SET deleted_at = now(), updated_by = $3
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
@@ -197,6 +325,25 @@ type DeleteProfitCenterParams struct {
 
 func (q *Queries) DeleteProfitCenter(ctx context.Context, arg DeleteProfitCenterParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteProfitCenter, arg.ID, arg.RowVersion, arg.UpdatedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteProfitCenterAssignment = `-- name: DeleteProfitCenterAssignment :execrows
+UPDATE pc.profit_center_assignment SET deleted_at = now(), updated_by = $3
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+`
+
+type DeleteProfitCenterAssignmentParams struct {
+	ID         uuid.UUID  `json:"id"`
+	RowVersion int32      `json:"row_version"`
+	UpdatedBy  *uuid.UUID `json:"updated_by"`
+}
+
+func (q *Queries) DeleteProfitCenterAssignment(ctx context.Context, arg DeleteProfitCenterAssignmentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteProfitCenterAssignment, arg.ID, arg.RowVersion, arg.UpdatedBy)
 	if err != nil {
 		return 0, err
 	}
@@ -403,6 +550,51 @@ func (q *Queries) ListAllocationRules(ctx context.Context, arg ListAllocationRul
 	return items, nil
 }
 
+const listCostCenterAssignments = `-- name: ListCostCenterAssignments :many
+SELECT id, organization_id, cost_center_id, organization_ref, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM cc.cost_center_assignment
+WHERE deleted_at IS NULL
+  AND ($3::uuid IS NULL OR cost_center_id = $3::uuid)
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListCostCenterAssignmentsParams struct {
+	Limit        int32      `json:"limit"`
+	Offset       int32      `json:"offset"`
+	CostCenterID *uuid.UUID `json:"cost_center_id"`
+}
+
+func (q *Queries) ListCostCenterAssignments(ctx context.Context, arg ListCostCenterAssignmentsParams) ([]CcCostCenterAssignment, error) {
+	rows, err := q.db.Query(ctx, listCostCenterAssignments, arg.Limit, arg.Offset, arg.CostCenterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CcCostCenterAssignment
+	for rows.Next() {
+		var i CcCostCenterAssignment
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.CostCenterID,
+			&i.OrganizationRef,
+			&i.CreatedAt,
+			&i.CreatedBy,
+			&i.UpdatedAt,
+			&i.UpdatedBy,
+			&i.DeletedAt,
+			&i.RowVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCostCenters = `-- name: ListCostCenters :many
 SELECT id, organization_id, code, name, description, parent_id, owner_ref, status, effective_from, effective_to, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM cc.cost_center
 WHERE deleted_at IS NULL
@@ -437,6 +629,51 @@ func (q *Queries) ListCostCenters(ctx context.Context, arg ListCostCentersParams
 			&i.Status,
 			&i.EffectiveFrom,
 			&i.EffectiveTo,
+			&i.CreatedAt,
+			&i.CreatedBy,
+			&i.UpdatedAt,
+			&i.UpdatedBy,
+			&i.DeletedAt,
+			&i.RowVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProfitCenterAssignments = `-- name: ListProfitCenterAssignments :many
+SELECT id, organization_id, profit_center_id, organization_ref, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM pc.profit_center_assignment
+WHERE deleted_at IS NULL
+  AND ($3::uuid IS NULL OR profit_center_id = $3::uuid)
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListProfitCenterAssignmentsParams struct {
+	Limit          int32      `json:"limit"`
+	Offset         int32      `json:"offset"`
+	ProfitCenterID *uuid.UUID `json:"profit_center_id"`
+}
+
+func (q *Queries) ListProfitCenterAssignments(ctx context.Context, arg ListProfitCenterAssignmentsParams) ([]PcProfitCenterAssignment, error) {
+	rows, err := q.db.Query(ctx, listProfitCenterAssignments, arg.Limit, arg.Offset, arg.ProfitCenterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PcProfitCenterAssignment
+	for rows.Next() {
+		var i PcProfitCenterAssignment
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProfitCenterID,
+			&i.OrganizationRef,
 			&i.CreatedAt,
 			&i.CreatedBy,
 			&i.UpdatedAt,
@@ -516,6 +753,38 @@ type MarkOutboxPublishedParams struct {
 func (q *Queries) MarkOutboxPublished(ctx context.Context, arg MarkOutboxPublishedParams) error {
 	_, err := q.db.Exec(ctx, markOutboxPublished, arg.ID, arg.CreatedAt)
 	return err
+}
+
+const updateAllocationRule = `-- name: UpdateAllocationRule :one
+UPDATE cc.cost_allocation_rule
+SET name = $3, allocation_basis = $4, targets = $5, is_active = $6, updated_by = $7
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+RETURNING row_version
+`
+
+type UpdateAllocationRuleParams struct {
+	ID              uuid.UUID  `json:"id"`
+	RowVersion      int32      `json:"row_version"`
+	Name            string     `json:"name"`
+	AllocationBasis string     `json:"allocation_basis"`
+	Targets         []byte     `json:"targets"`
+	IsActive        bool       `json:"is_active"`
+	UpdatedBy       *uuid.UUID `json:"updated_by"`
+}
+
+func (q *Queries) UpdateAllocationRule(ctx context.Context, arg UpdateAllocationRuleParams) (int32, error) {
+	row := q.db.QueryRow(ctx, updateAllocationRule,
+		arg.ID,
+		arg.RowVersion,
+		arg.Name,
+		arg.AllocationBasis,
+		arg.Targets,
+		arg.IsActive,
+		arg.UpdatedBy,
+	)
+	var row_version int32
+	err := row.Scan(&row_version)
+	return row_version, err
 }
 
 const updateCostCenter = `-- name: UpdateCostCenter :one

@@ -3,11 +3,9 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 
@@ -324,6 +322,23 @@ func (s *Server) createWO(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.BadRequest("plannedQty harus > 0"))
 		return
 	}
+	bom, err := s.repo.GetBOM(r.Context(), scope, bomID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpx.WriteError(w, r, httpx.Unprocessable("BOM_NOT_FOUND", "bill of material tidak ditemukan"))
+			return
+		}
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	if !bom.Header.IsActive {
+		httpx.WriteError(w, r, httpx.Unprocessable("BOM_INACTIVE", "bill of material tidak aktif"))
+		return
+	}
+	if bom.Header.ProductItemID != prodID {
+		httpx.WriteError(w, r, httpx.Unprocessable("BOM_PRODUCT_MISMATCH", "bomId tidak sesuai dengan productItemId work order"))
+		return
+	}
 	var soRef *string
 	if sr := strings.TrimSpace(req.SalesOrderRef); sr != "" {
 		soRef = &sr
@@ -488,6 +503,23 @@ func (s *Server) updateWO(w http.ResponseWriter, r *http.Request) {
 	}
 	if qr := platform.NumericToRat(qtyNum); qr == nil || qr.Sign() <= 0 {
 		httpx.WriteError(w, r, httpx.BadRequest("plannedQty harus > 0"))
+		return
+	}
+	bom, err := s.repo.GetBOM(r.Context(), scope, bomID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpx.WriteError(w, r, httpx.Unprocessable("BOM_NOT_FOUND", "bill of material tidak ditemukan"))
+			return
+		}
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	if !bom.Header.IsActive {
+		httpx.WriteError(w, r, httpx.Unprocessable("BOM_INACTIVE", "bill of material tidak aktif"))
+		return
+	}
+	if bom.Header.ProductItemID != prodID {
+		httpx.WriteError(w, r, httpx.Unprocessable("BOM_PRODUCT_MISMATCH", "bomId tidak sesuai dengan productItemId work order"))
 		return
 	}
 	var soRef *string
@@ -659,7 +691,7 @@ func (s *Server) completeWO(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req completeReq
-	if err := decodeOptionalJSON(r, &req); err != nil {
+	if err := httpx.DecodeOptionalJSON(w, r, &req); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
@@ -721,24 +753,4 @@ func (s *Server) completeWO(w http.ResponseWriter, r *http.Request) {
 		Status:      "Completed",
 		RowVersion:  newVer,
 	})
-}
-
-func decodeOptionalJSON(r *http.Request, dst any) error {
-	if r.Body == nil {
-		return nil
-	}
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		return httpx.BadRequest("gagal membaca body")
-	}
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 {
-		return nil
-	}
-	dec := json.NewDecoder(bytes.NewReader(trimmed))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(dst); err != nil {
-		return httpx.BadRequest("JSON tidak valid: " + err.Error())
-	}
-	return nil
 }

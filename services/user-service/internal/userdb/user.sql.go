@@ -374,18 +374,24 @@ func (q *Queries) MarkOutboxPublished(ctx context.Context, arg MarkOutboxPublish
 
 const removeUserOrgAssignment = `-- name: RemoveUserOrgAssignment :execrows
 UPDATE usr.user_org_assignment
-SET deleted_at = now(), updated_by = $3
-WHERE user_id = $1 AND role_id = $2 AND deleted_at IS NULL
+SET deleted_at = now(), updated_by = $4
+WHERE user_id = $1 AND role_id = $2 AND organization_ref_id = $3 AND deleted_at IS NULL
 `
 
 type RemoveUserOrgAssignmentParams struct {
-	UserID    uuid.UUID  `json:"user_id"`
-	RoleID    uuid.UUID  `json:"role_id"`
-	UpdatedBy *uuid.UUID `json:"updated_by"`
+	UserID            uuid.UUID  `json:"user_id"`
+	RoleID            uuid.UUID  `json:"role_id"`
+	OrganizationRefID uuid.UUID  `json:"organization_ref_id"`
+	UpdatedBy         *uuid.UUID `json:"updated_by"`
 }
 
 func (q *Queries) RemoveUserOrgAssignment(ctx context.Context, arg RemoveUserOrgAssignmentParams) (int64, error) {
-	result, err := q.db.Exec(ctx, removeUserOrgAssignment, arg.UserID, arg.RoleID, arg.UpdatedBy)
+	result, err := q.db.Exec(ctx, removeUserOrgAssignment,
+		arg.UserID,
+		arg.RoleID,
+		arg.OrganizationRefID,
+		arg.UpdatedBy,
+	)
 	if err != nil {
 		return 0, err
 	}

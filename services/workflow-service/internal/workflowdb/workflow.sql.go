@@ -12,6 +12,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countPendingTasksByInstance = `-- name: CountPendingTasksByInstance :one
+SELECT count(*)::bigint
+FROM wf.workflow_task
+WHERE instance_id = $1 AND decision IS NULL AND deleted_at IS NULL
+`
+
+func (q *Queries) CountPendingTasksByInstance(ctx context.Context, instanceID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingTasksByInstance, instanceID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countWorkflowDefinitions = `-- name: CountWorkflowDefinitions :one
 SELECT count(*)::bigint
 FROM wf.workflow_definition

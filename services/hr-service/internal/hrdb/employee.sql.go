@@ -12,6 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countActiveEmploymentsByEmployee = `-- name: CountActiveEmploymentsByEmployee :one
+SELECT count(*)::bigint
+FROM hr.employment
+WHERE employee_id = $1
+  AND deleted_at IS NULL
+  AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
+`
+
+func (q *Queries) CountActiveEmploymentsByEmployee(ctx context.Context, employeeID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveEmploymentsByEmployee, employeeID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countEmployees = `-- name: CountEmployees :one
 SELECT count(*)
 FROM hr.employee
@@ -692,7 +707,7 @@ func (q *Queries) MarkOutboxPublished(ctx context.Context, arg MarkOutboxPublish
 const softDeleteEmployee = `-- name: SoftDeleteEmployee :execrows
 UPDATE hr.employee
 SET deleted_at = now(), updated_by = $3
-WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+WHERE id = $1 AND status <> 'Active' AND row_version = $2 AND deleted_at IS NULL
 `
 
 type SoftDeleteEmployeeParams struct {

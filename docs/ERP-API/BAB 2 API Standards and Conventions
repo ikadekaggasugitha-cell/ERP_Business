@@ -77,8 +77,8 @@ Operasi *mutasi* menghormati **optimistic locking** melalui header `If-Match: <r
 * **Content-Type**: `application/json; charset=utf-8`.
 * Penamaan field JSON: **camelCase** (mis. `journalNo`, `postingDate`).
 * Waktu: **ISO 8601 / RFC 3339** (UTC), mis. `2026-08-05T10:00:00Z` (SAD BAB 11.9).
-* Uang: objek `{ "amount": "1000.0000", "currency": "IDR" }` (string desimal untuk presisi).
-* Objek respons *resource* menyertakan `id`, `rowVersion`, dan metadata audit (`createdAt`, `updatedAt`).
+* Uang & kuantitas (*wire contract* aktif layanan Go & React 19 SPA): **string desimal fixed-point datar** dengan 4 digit desimal (mis. `"amount": "1000.0000"`, `"debitAmount": "250000.0000"`, `"exchangeRate": "15850.00000000"`) disertai field saudara `currencyCode` (ISO 4217 3 huruf, mis. `"IDR"`, `"USD"`). Seluruh kalkulasi backend memakai aritmatika rasional eksak (`*big.Rat`), sedangkan frontend memakai `decimal.ts` — dilarang memakai float IEEE-754.
+* Objek respons *resource* menyertakan `id`, `rowVersion` (plus header `ETag`), dan metadata audit (`createdAt`, `updatedAt`).
 
 ---
 

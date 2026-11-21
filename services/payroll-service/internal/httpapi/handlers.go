@@ -1,11 +1,7 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
-	"io"
 	"math/big"
 	"net/http"
 	"strings"
@@ -56,31 +52,6 @@ func NewRouter(store Store, metrics *httpx.Metrics, checks ...httpx.ReadinessChe
 	mux.HandleFunc("POST /payroll-runs/{id}/post", h.handlePostRun)
 
 	return metrics.Wrap(httpx.Middleware(mux))
-}
-
-func decodeOptionalJSON(w http.ResponseWriter, r *http.Request, dst any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	raw, err := io.ReadAll(r.Body)
-	if err != nil {
-		var maxErr *http.MaxBytesError
-		if errors.As(err, &maxErr) {
-			return &httpx.APIError{Status: http.StatusRequestEntityTooLarge, Code: "PAYLOAD_TOO_LARGE", Message: "request body exceeds 1 MiB limit"}
-		}
-		return httpx.BadRequest("gagal membaca body JSON")
-	}
-	if len(bytes.TrimSpace(raw)) == 0 {
-		return nil
-	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(dst); err != nil {
-		return httpx.BadRequest("body JSON tidak valid")
-	}
-	var extra any
-	if err := dec.Decode(&extra); err != io.EOF {
-		return httpx.BadRequest("body JSON mengandung data tambahan yang tidak valid")
-	}
-	return nil
 }
 
 func parseNonNegRat(field, raw string) (*big.Rat, error) {
@@ -271,13 +242,17 @@ func (h *Handler) handleCalculateRun(w http.ResponseWriter, r *http.Request) {
 			HasNPWP         *bool  `json:"hasNpwp"`
 		} `json:"employees"`
 	}
-	if err := decodeOptionalJSON(w, r, &req); err != nil {
+	if err := httpx.DecodeOptionalJSON(w, r, &req); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
 	summaryGross, err := parseNonNegRat("totalAmount", req.TotalAmount)
 	if err != nil {
 		httpx.WriteError(w, r, err)
+		return
+	}
+	if len(req.Employees) == 0 {
+		httpx.WriteError(w, r, httpx.Unprocessable("EMPTY_EMPLOYEES", "minimal 1 karyawan wajib disertakan dalam perhitungan payroll"))
 		return
 	}
 	empInputs := make([]calc.EmployeeInput, 0, len(req.Employees))
@@ -390,7 +365,7 @@ func (h *Handler) handlePostRun(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		GLJournalRef string `json:"glJournalRef"`
 	}
-	if err := decodeOptionalJSON(w, r, &req); err != nil {
+	if err := httpx.DecodeOptionalJSON(w, r, &req); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}

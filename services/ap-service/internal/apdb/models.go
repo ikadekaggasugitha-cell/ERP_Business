@@ -66,6 +66,21 @@ type ApApPaymentAllocation struct {
 	RowVersion      int32              `json:"row_version"`
 }
 
+type ApDocumentNumberRegistry struct {
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	DocumentType   string             `json:"document_type"`
+	DocumentNumber string             `json:"document_number"`
+	FiscalYear     int32              `json:"fiscal_year"`
+	Status         string             `json:"status"`
+	SourceRef      *string            `json:"source_ref"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	CreatedBy      *uuid.UUID         `json:"created_by"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy      *uuid.UUID         `json:"updated_by"`
+	RowVersion     int32              `json:"row_version"`
+}
+
 type ApMasterdataCache struct {
 	OrganizationID uuid.UUID          `json:"organization_id"`
 	PartyID        uuid.UUID          `json:"party_id"`

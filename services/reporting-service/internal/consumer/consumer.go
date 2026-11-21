@@ -20,6 +20,7 @@ import (
 
 var Topics = []string{
 	eventbus.TopicFor("gl.journal.posted"),
+	eventbus.TopicFor("coa.account.upserted"),
 	eventbus.TopicFor("sales.order.confirmed"),
 	eventbus.TopicFor("inventory.stock.reserved"),
 	eventbus.TopicFor("inventory.goods.issued"),
@@ -28,7 +29,8 @@ var Topics = []string{
 var fallbackPeriod = uuid.MustParse("20260000-0000-0000-0000-000000000001")
 
 type Projector interface {
-	ConsumeGL(ctx context.Context, scope []uuid.UUID, mark reportingdb.MarkEventProcessedParams, summary reportingdb.UpsertGLBalanceSnapshotParams, accountDeltas []reportingdb.AccumulateGLBalanceSnapshotParams) (bool, error)
+	ConsumeGL(ctx context.Context, scope []uuid.UUID, mark reportingdb.MarkEventProcessedParams, accountDeltas []repository.GLAccountDelta) (bool, error)
+	ConsumeCOAAccount(ctx context.Context, scope []uuid.UUID, mark reportingdb.MarkEventProcessedParams, up reportingdb.UpsertCOACacheParams) (bool, error)
 	ConsumeSalesSummary(ctx context.Context, scope []uuid.UUID, mark reportingdb.MarkEventProcessedParams, up reportingdb.UpsertSalesSummaryParams) (bool, error)
 	ConsumeInventoryPosition(ctx context.Context, scope []uuid.UUID, mark reportingdb.MarkEventProcessedParams, up reportingdb.UpsertInventoryPositionParams) (bool, error)
 }
@@ -61,6 +63,8 @@ func (x *Consumer) handle(ctx context.Context, env eventbus.Envelope) error {
 	switch env.EventType {
 	case "gl.journal.posted":
 		return x.handleGL(ctx, org, mark, env)
+	case "coa.account.upserted":
+		return x.handleCOAAccount(ctx, org, mark, env)
 	case "sales.order.confirmed":
 		return x.handleSales(ctx, org, mark, env)
 	case "inventory.stock.reserved", "inventory.goods.issued":
@@ -70,6 +74,37 @@ func (x *Consumer) handle(ctx context.Context, env eventbus.Envelope) error {
 	}
 }
 
+func (x *Consumer) handleCOAAccount(ctx context.Context, org uuid.UUID, mark reportingdb.MarkEventProcessedParams, env eventbus.Envelope) error {
+	accountID, err := uuid.Parse(strings.TrimSpace(env.AggregateID))
+	if err != nil {
+		return eventbus.ErrPoison{Err: fmt.Errorf("invalid coa aggregateId %q: %w", env.AggregateID, err)}
+	}
+	var d struct {
+		Code        string `json:"code"`
+		Name        string `json:"name"`
+		AccountType string `json:"accountType"`
+	}
+	if err := json.Unmarshal(env.Data, &d); err != nil {
+		return eventbus.ErrPoison{Err: fmt.Errorf("malformed coa.account.upserted payload: %w", err)}
+	}
+	code := strings.TrimSpace(d.Code)
+	if code == "" {
+		// Update events without code cannot overwrite the account code mapping safely.
+		return nil
+	}
+	if len(code) > 50 {
+		code = code[:50]
+	}
+	_, err = x.repo.ConsumeCOAAccount(ctx, []uuid.UUID{org}, mark, reportingdb.UpsertCOACacheParams{
+		OrganizationID: org,
+		AccountID:      accountID,
+		AccountCode:    code,
+		AccountName:    strings.TrimSpace(d.Name),
+		AccountType:    strings.TrimSpace(d.AccountType),
+	})
+	return err
+}
+
 func (x *Consumer) handleGL(ctx context.Context, org uuid.UUID, mark reportingdb.MarkEventProcessedParams, env eventbus.Envelope) error {
 	var d struct {
 		JournalNo      string `json:"journalNo"`
@@ -77,6 +112,7 @@ func (x *Consumer) handleGL(ctx context.Context, org uuid.UUID, mark reportingdb
 		TotalDebit     string `json:"totalDebit"`
 		Lines          []struct {
 			AccountID    string `json:"accountId"`
+			AccountCode  string `json:"accountCode"`
 			DebitAmount  string `json:"debitAmount"`
 			CreditAmount string `json:"creditAmount"`
 		} `json:"lines"`
@@ -84,17 +120,12 @@ func (x *Consumer) handleGL(ctx context.Context, org uuid.UUID, mark reportingdb
 	if err := json.Unmarshal(env.Data, &d); err != nil {
 		return eventbus.ErrPoison{Err: fmt.Errorf("malformed gl.journal.posted payload: %w", err)}
 	}
-	acctCode := strings.TrimSpace(d.JournalNo)
-	if acctCode == "" {
-		acctCode = env.AggregateID
-	}
 	periodID := fallbackPeriod
 	if u, err := uuid.Parse(strings.TrimSpace(d.FiscalPeriodID)); err == nil {
 		periodID = u
 	}
 
-	totRat := new(big.Rat)
-	var deltas []reportingdb.AccumulateGLBalanceSnapshotParams
+	var deltas []repository.GLAccountDelta
 	for _, l := range d.Lines {
 		drNum, err := platform.ParseOptionalNumeric(l.DebitAmount)
 		if err != nil {
@@ -106,37 +137,28 @@ func (x *Consumer) handleGL(ctx context.Context, org uuid.UUID, mark reportingdb
 		}
 		drRat := platform.NumericToRat(drNum)
 		crRat := platform.NumericToRat(crNum)
-		totRat.Add(totRat, drRat)
 		net := new(big.Rat).Sub(drRat, crRat)
 		netNum, _ := platform.RatToNumeric(net, 4)
-		if strings.TrimSpace(l.AccountID) != "" {
-			code := "ACCT:" + l.AccountID
-			if len(code) > 50 {
-				code = code[:50]
+
+		var acctID *uuid.UUID
+		if rawID := strings.TrimSpace(l.AccountID); rawID != "" {
+			if parsed, perr := uuid.Parse(rawID); perr == nil {
+				acctID = &parsed
 			}
-			deltas = append(deltas, reportingdb.AccumulateGLBalanceSnapshotParams{
-				OrganizationID: org,
-				FiscalPeriodID: periodID,
-				AccountCode:    code,
-				ClosingBalance: netNum,
-			})
 		}
-	}
-	if strings.TrimSpace(d.TotalDebit) != "" {
-		n, err := platform.ParseNumeric(d.TotalDebit)
-		if err != nil {
-			return eventbus.ErrPoison{Err: err}
+		code := strings.TrimSpace(l.AccountCode)
+		if code == "" && acctID == nil {
+			continue
 		}
-		totRat = platform.NumericToRat(n)
+		deltas = append(deltas, repository.GLAccountDelta{
+			OrganizationID: org,
+			FiscalPeriodID: periodID,
+			AccountID:      acctID,
+			AccountCode:    code,
+			ClosingBalance: netNum,
+		})
 	}
-	balNum, _ := platform.RatToNumeric(totRat, 4)
-	summary := reportingdb.UpsertGLBalanceSnapshotParams{
-		OrganizationID: org,
-		FiscalPeriodID: periodID,
-		AccountCode:    acctCode,
-		ClosingBalance: balNum,
-	}
-	_, err := x.repo.ConsumeGL(ctx, []uuid.UUID{org}, mark, summary, deltas)
+	_, err := x.repo.ConsumeGL(ctx, []uuid.UUID{org}, mark, deltas)
 	return err
 }
 

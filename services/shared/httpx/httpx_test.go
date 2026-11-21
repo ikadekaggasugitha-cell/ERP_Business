@@ -27,6 +27,18 @@ func TestDecodeJSONRejectsTrailingDataAndUnknownFields(t *testing.T) {
 	if err := DecodeJSON(rec, req, &dst); err == nil {
 		t.Fatal("expected unknown field error")
 	}
+
+	req = httptest.NewRequest(http.MethodPost, "/", strings.NewReader("   \n"))
+	rec = httptest.NewRecorder()
+	if err := DecodeOptionalJSON(rec, req, &dst); err != nil {
+		t.Fatalf("expected nil on whitespace-only optional body, got %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"ok"}{"extra":1}`))
+	rec = httptest.NewRecorder()
+	if err := DecodeOptionalJSON(rec, req, &dst); err == nil {
+		t.Fatal("expected trailing JSON error in DecodeOptionalJSON")
+	}
 }
 
 func TestWriteErrorUnwrapsAPIErrorAndMasks5xx(t *testing.T) {
@@ -158,5 +170,34 @@ func TestBeginIdempotentAndSaveIDResponse(t *testing.T) {
 	_, _, _, done3 := BeginIdempotent(rec3, req3, idem, scope, &p3)
 	if !done3 || rec3.Code != http.StatusConflict {
 		t.Fatalf("expected 409 conflict, got done=%v status=%d", done3, rec3.Code)
+	}
+}
+
+func TestRequirePermissionEnforceRBAC(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	if err := RequirePermission(req, "gl.read"); err != nil {
+		t.Fatalf("expected nil when REQUIRE_RBAC unset and no headers, got %v", err)
+	}
+
+	t.Setenv("REQUIRE_RBAC", "true")
+	if err := RequirePermission(req, "gl.read"); err == nil {
+		t.Fatal("expected forbidden error when REQUIRE_RBAC=true and headers absent")
+	}
+}
+
+func TestMetricsStatusWriterSupportsFlusherAndUnwrap(t *testing.T) {
+	rec := httptest.NewRecorder()
+	m := NewMetrics("test-svc")
+	var flushed bool
+	h := m.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		if err := http.NewResponseController(w).Flush(); err != nil {
+			t.Fatalf("Flush via ResponseController failed: %v", err)
+		}
+		flushed = rec.Flushed
+	}))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/stream", nil))
+	if !flushed || rec.Code != http.StatusAccepted {
+		t.Fatalf("unexpected flushed=%v code=%d", flushed, rec.Code)
 	}
 }

@@ -102,6 +102,26 @@ func (r *AccountRepository) UpdateAccountAndEmit(ctx context.Context, scope []uu
 	var newVer int32
 	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
+		// Detect multi-hop parentId cycles (A -> B -> ... -> A)
+		if arg.ParentID != nil {
+			cur := *arg.ParentID
+			for depth := 0; depth < 32; depth++ {
+				if cur == arg.ID {
+					return httpx.BadRequest("parentId membentuk siklus hierarki akun")
+				}
+				parentRow, pe := q.GetAccount(ctx, cur)
+				if pe != nil {
+					if errors.Is(pe, pgx.ErrNoRows) {
+						return httpx.BadRequest("parentId tidak ditemukan")
+					}
+					return pe
+				}
+				if parentRow.ParentID == nil {
+					break
+				}
+				cur = *parentRow.ParentID
+			}
+		}
 		v, e := q.UpdateAccount(ctx, arg)
 		if e != nil {
 			if errors.Is(e, pgx.ErrNoRows) {
@@ -118,8 +138,16 @@ func (r *AccountRepository) UpdateAccountAndEmit(ctx context.Context, scope []uu
 func (r *AccountRepository) DeleteAccount(ctx context.Context, scope []uuid.UUID, arg coadb.DeleteAccountParams) (int64, error) {
 	var n int64
 	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		children, ce := q.CountChildAccounts(ctx, &arg.ID)
+		if ce != nil {
+			return ce
+		}
+		if children > 0 {
+			return httpx.Conflict("HAS_CHILD_ACCOUNTS", "akun tidak dapat dihapus karena masih memiliki sub-akun aktif")
+		}
 		var e error
-		n, e = r.q.WithTx(tx).DeleteAccount(ctx, arg)
+		n, e = q.DeleteAccount(ctx, arg)
 		return e
 	})
 	return n, err
@@ -332,6 +360,33 @@ func (r *AccountRepository) TransitionFiscalPeriodAndEmit(
 	period.Status = newStatus
 	period.RowVersion = nextVer
 	return period, nextVer, err
+}
+
+// ConsumePeriodStatus idempotently synchronizes fin.fiscal_period status from
+// financialclose-service events without re-emitting coa.period.updated.
+func (r *AccountRepository) ConsumePeriodStatus(ctx context.Context, orgID, eventID, periodID, actor uuid.UUID, eventType, newStatus string) (bool, error) {
+	applied := false
+	err := r.db.WithOrgScope(ctx, []uuid.UUID{orgID}, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		n, e := q.MarkEventProcessed(ctx, coadb.MarkEventProcessedParams{
+			EventID:   eventID,
+			EventType: eventType,
+		})
+		if e != nil || n == 0 {
+			return e
+		}
+		_, e = q.SyncFiscalPeriodStatus(ctx, coadb.SyncFiscalPeriodStatusParams{
+			ID:        periodID,
+			UpdatedBy: &actor,
+			NewStatus: newStatus,
+		})
+		if e != nil {
+			return e
+		}
+		applied = true
+		return nil
+	})
+	return applied, err
 }
 
 // DrainAndPublish drains coa.outbox under FOR UPDATE SKIP LOCKED inside a tx.

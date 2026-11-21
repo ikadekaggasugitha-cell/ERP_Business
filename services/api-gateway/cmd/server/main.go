@@ -97,6 +97,14 @@ var rolePermissions = map[string][]string{
 		"security:read", "security:write",
 		"audit:read",
 		"dimension:read", "dimension:write", "localization:read", "localization:write",
+		"fixedasset.read", "fixedasset.create", "fixedasset.update", "fixedasset:read", "fixedasset:write",
+		"budget.read", "budget.create", "budget.update", "budget:read", "budget:write",
+		"financialclose.read", "financialclose.create", "financialclose.update", "financialclose:read", "financialclose:write",
+		"consolidation.read", "consolidation.create", "consolidation.update", "consolidation:read", "consolidation:write",
+		"project.read", "project.create", "project.update", "project:read", "project:write",
+		"asset.read", "asset.create", "asset.update", "asset:read", "asset:write",
+		"maintenance.read", "maintenance.create", "maintenance.update", "maintenance:read", "maintenance:write",
+		"crm.read", "crm.create", "crm.update", "crm:read", "crm:write",
 	},
 	"FINANCE_MANAGER": {
 		"gl.create", "gl.read", "gl.update", "gl.approve",
@@ -124,6 +132,11 @@ var rolePermissions = map[string][]string{
 		"org:read",
 		"audit:read",
 		"dimension:read", "dimension:write", "localization:read",
+		"fixedasset.read", "fixedasset.create", "fixedasset.update", "fixedasset:read", "fixedasset:write",
+		"budget.read", "budget.create", "budget.update", "budget:read", "budget:write",
+		"financialclose.read", "financialclose.create", "financialclose.update", "financialclose:read", "financialclose:write",
+		"consolidation.read", "consolidation.create", "consolidation.update", "consolidation:read", "consolidation:write",
+		"project.read", "project:read", "asset.read", "asset:read", "maintenance.read", "maintenance:read", "crm.read", "crm:read",
 	},
 	"ACCOUNTANT": {
 		"gl.create", "gl.read", "gl.update",
@@ -146,6 +159,10 @@ var rolePermissions = map[string][]string{
 		"masterdata:read",
 		"org:read",
 		"dimension:read", "localization:read",
+		"fixedasset.read", "fixedasset.create", "fixedasset:read", "fixedasset:write",
+		"budget.read", "budget:read",
+		"financialclose.read", "financialclose:read", "financialclose:write",
+		"consolidation.read", "consolidation:read",
 	},
 	"PROCUREMENT_MANAGER": {
 		"procurement.create", "procurement.read", "procurement.update", "procurement.approve",
@@ -157,6 +174,9 @@ var rolePermissions = map[string][]string{
 		"masterdata:read", "masterdata:write",
 		"workflow:read", "workflow:write", "workflow:approve",
 		"org:read",
+		"budget.read", "budget:read",
+		"asset.read", "asset:read", "asset:write",
+		"maintenance.read", "maintenance:read", "maintenance:write",
 	},
 	"SALES_MANAGER": {
 		"sales.create", "sales.read", "sales.update",
@@ -168,6 +188,8 @@ var rolePermissions = map[string][]string{
 		"masterdata:read", "masterdata:write",
 		"workflow:read", "workflow:write",
 		"org:read",
+		"crm.read", "crm.create", "crm.update", "crm:read", "crm:write",
+		"project.read", "project:read", "project:write",
 	},
 	"HR_MANAGER": {
 		"hr:read", "hr:write",
@@ -185,6 +207,14 @@ var rolePermissions = map[string][]string{
 		"sales:read", "manufacturing:read", "hr:read", "payroll:read",
 		"masterdata:read", "org:read", "user:read", "security:read", "audit:read",
 		"dimension:read", "localization:read",
+		"fixedasset.read", "fixedasset:read",
+		"budget.read", "budget:read",
+		"financialclose.read", "financialclose:read",
+		"consolidation.read", "consolidation:read",
+		"project.read", "project:read",
+		"asset.read", "asset:read",
+		"maintenance.read", "maintenance:read",
+		"crm.read", "crm:read",
 	},
 }
 
@@ -296,6 +326,9 @@ func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuth
 			}
 			// Explicit dev-only fallback when DEV_AUTH_ALLOW_ANON=true.
 			orgID := validUUIDOrDefault(r.Header.Get("X-Organization-Id"), defaultOrgID)
+			if orgID == systemOrgID {
+				orgID = defaultOrgID
+			}
 			scope := orgID + "," + systemOrgID
 			r.Header.Set("X-Organization-Id", scope)
 			r.Header.Set("X-Org-Scope", scope)
@@ -312,6 +345,10 @@ func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuth
 		}
 		if _, err := uuid.Parse(requestedOrg); err != nil {
 			writeErr(w, http.StatusBadRequest, "INVALID_ORG_ID", "X-Organization-Id must be a valid UUID", corrID)
+			return
+		}
+		if requestedOrg == systemOrgID {
+			writeErr(w, http.StatusForbidden, "ORG_SCOPE_DENIED", "System organization cannot be selected as active tenant", corrID)
 			return
 		}
 		if !slices.Contains(claims.OrgScope, requestedOrg) && !slices.Contains(claims.Roles, "SYSTEM_ADMIN") {
@@ -354,6 +391,7 @@ func handleLogin(secret []byte, devAuthMode bool) http.HandlerFunc {
 			Username       string `json:"username"`
 			Password       string `json:"password"`
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "INVALID_JSON", "Malformed JSON request", "")
 			return
@@ -376,7 +414,7 @@ func handleLogin(secret []byte, devAuthMode bool) http.HandlerFunc {
 
 		roles := []string{"SYSTEM_ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"}
 		perms := permissionsForRoles(roles)
-		orgScope := []string{defaultOrgID, branchOrgID, systemOrgID}
+		orgScope := []string{defaultOrgID, branchOrgID}
 		if !slices.Contains(orgScope, activeOrg.ID) {
 			orgScope = append([]string{activeOrg.ID}, orgScope...)
 		}
@@ -536,6 +574,9 @@ func handleSSE(hub *sse.Hub, secret []byte, allowAnon bool) http.HandlerFunc {
 				return
 			}
 			orgID = validUUIDOrDefault(r.URL.Query().Get("orgId"), defaultOrgID)
+			if orgID == systemOrgID {
+				orgID = defaultOrgID
+			}
 		} else {
 			orgID = strings.TrimSpace(r.URL.Query().Get("orgId"))
 			if orgID == "" {
@@ -543,6 +584,10 @@ func handleSSE(hub *sse.Hub, secret []byte, allowAnon bool) http.HandlerFunc {
 			}
 			if _, perr := uuid.Parse(orgID); perr != nil {
 				writeErr(w, http.StatusBadRequest, "INVALID_ORG_ID", "orgId must be a valid UUID", "")
+				return
+			}
+			if orgID == systemOrgID {
+				writeErr(w, http.StatusForbidden, "ORG_SCOPE_DENIED", "System organization cannot be selected as active tenant", "")
 				return
 			}
 			if !slices.Contains(claims.OrgScope, orgID) && !slices.Contains(claims.Roles, "SYSTEM_ADMIN") {
@@ -644,7 +689,7 @@ func resolveOrg(orgID, orgCode string) orgSummary {
 			return o
 		}
 	}
-	if _, err := uuid.Parse(orgID); err == nil {
+	if _, err := uuid.Parse(orgID); err == nil && orgID != systemOrgID {
 		code := orgCode
 		if code == "" {
 			code = "CUSTOM"

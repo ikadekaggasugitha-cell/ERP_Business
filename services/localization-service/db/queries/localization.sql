@@ -23,6 +23,7 @@ SELECT COUNT(*) FROM loc.language WHERE deleted_at IS NULL;
 -- name: UpdateLanguage :one
 UPDATE loc.language SET name = $3, is_active = $4, is_fallback = $5, updated_by = $6
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: ClearFallbackExcept :exec
@@ -59,11 +60,13 @@ ORDER BY resource_key, (organization_id = '00000000-0000-0000-0000-000000000000'
 -- name: UpdateTranslation :one
 UPDATE loc.translation SET resource_value = $3, module = $4, updated_by = $5
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: DeleteTranslation :execrows
 UPDATE loc.translation SET deleted_at = now(), updated_by = $3
-WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL;
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
 
 -- name: CreateLocaleFormat :one
 INSERT INTO loc.locale_format (organization_id, locale_code, date_format, number_format, currency_format, created_by)
@@ -82,7 +85,55 @@ SELECT COUNT(*) FROM loc.locale_format WHERE deleted_at IS NULL;
 -- name: UpdateLocaleFormat :one
 UPDATE loc.locale_format SET date_format = $3, number_format = $4, currency_format = $5, updated_by = $6
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
+
+-- name: DeleteLanguage :execrows
+UPDATE loc.language SET deleted_at = now(), updated_by = $3
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND is_fallback = FALSE
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
+
+-- name: DeleteLocaleFormat :execrows
+UPDATE loc.locale_format SET deleted_at = now(), updated_by = $3
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
+
+-- name: UpsertUserLanguagePreference :one
+INSERT INTO loc.user_language_preference (organization_id, user_ref, language_code, created_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, user_ref) DO UPDATE
+SET language_code = EXCLUDED.language_code, deleted_at = NULL, updated_by = EXCLUDED.created_by
+RETURNING id, organization_id, user_ref, language_code, row_version;
+
+-- name: GetUserLanguagePreference :one
+SELECT id, organization_id, user_ref, language_code, row_version
+FROM loc.user_language_preference
+WHERE organization_id = $1 AND user_ref = $2 AND deleted_at IS NULL;
+
+-- name: UpsertOrganizationLanguage :one
+INSERT INTO loc.organization_language (organization_id, organization_ref, default_language_code, created_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, organization_ref) DO UPDATE
+SET default_language_code = EXCLUDED.default_language_code, deleted_at = NULL, updated_by = EXCLUDED.created_by
+RETURNING id, organization_id, organization_ref, default_language_code, row_version;
+
+-- name: GetOrganizationLanguage :one
+SELECT id, organization_id, organization_ref, default_language_code, row_version
+FROM loc.organization_language
+WHERE organization_id = $1 AND organization_ref = $2 AND deleted_at IS NULL;
+
+-- name: ListOrganizationLanguages :many
+SELECT id, organization_id, organization_ref, default_language_code, row_version
+FROM loc.organization_language
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: CountOrganizationLanguages :one
+SELECT COUNT(*)
+FROM loc.organization_language
+WHERE deleted_at IS NULL;
 
 -- name: InsertOutbox :exec
 INSERT INTO loc.outbox (aggregate_type, aggregate_id, event_type, payload, organization_id, correlation_id)

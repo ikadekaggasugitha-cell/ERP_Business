@@ -179,6 +179,7 @@ const deleteCurrency = `-- name: DeleteCurrency :execrows
 UPDATE cur.currency
 SET deleted_at = now(), updated_by = $3
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type DeleteCurrencyParams struct {
@@ -199,6 +200,7 @@ const deleteExchangeRate = `-- name: DeleteExchangeRate :execrows
 UPDATE cur.exchange_rate
 SET deleted_at = now(), updated_by = $3
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type DeleteExchangeRateParams struct {
@@ -293,6 +295,8 @@ func (q *Queries) GetCurrency(ctx context.Context, id uuid.UUID) (CurCurrency, e
 const getCurrencyByCode = `-- name: GetCurrencyByCode :one
 SELECT id, organization_id, code, numeric_code, name, precision, is_active, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM cur.currency
 WHERE code = $1 AND deleted_at IS NULL
+ORDER BY (organization_id = '00000000-0000-0000-0000-000000000000'::uuid) ASC
+LIMIT 1
 `
 
 func (q *Queries) GetCurrencyByCode(ctx context.Context, code string) (CurCurrency, error) {
@@ -382,6 +386,8 @@ func (q *Queries) GetExchangeRateType(ctx context.Context, id uuid.UUID) (CurExc
 const getExchangeRateTypeByCode = `-- name: GetExchangeRateTypeByCode :one
 SELECT id, organization_id, code, name, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM cur.exchange_rate_type
 WHERE code = $1 AND deleted_at IS NULL
+ORDER BY (organization_id = '00000000-0000-0000-0000-000000000000'::uuid) ASC
+LIMIT 1
 `
 
 func (q *Queries) GetExchangeRateTypeByCode(ctx context.Context, code string) (CurExchangeRateType, error) {
@@ -411,7 +417,7 @@ WHERE er.deleted_at IS NULL
   AND er.rate_type_id = $3
   AND er.valid_from <= $4
   AND (er.valid_to IS NULL OR er.valid_to >= $4)
-ORDER BY er.valid_from DESC
+ORDER BY er.valid_from DESC, (er.organization_id = '00000000-0000-0000-0000-000000000000'::uuid) ASC
 LIMIT 1
 `
 
@@ -678,6 +684,7 @@ const updateCurrency = `-- name: UpdateCurrency :one
 UPDATE cur.currency
 SET name = $3, numeric_code = $4, precision = $5, is_active = $6, updated_by = $7
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 
@@ -710,6 +717,7 @@ const updateExchangeRate = `-- name: UpdateExchangeRate :one
 UPDATE cur.exchange_rate
 SET rate = $3, valid_to = $4, updated_by = $5
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 

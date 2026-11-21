@@ -1,0 +1,14 @@
+config {
+  type: "assertion",
+  tags: ["assert", "project", "cortex_v7"],
+  description: "Asserts project physical progress stays within [0, 100]"
+}
+
+SELECT
+  org_id,
+  project_id,
+  project_code,
+  physical_progress_pct
+FROM ${ref("fact_project_profitability")}
+WHERE physical_progress_pct < NUMERIC '0'
+   OR physical_progress_pct > NUMERIC '100'

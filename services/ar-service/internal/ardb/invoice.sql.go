@@ -121,8 +121,8 @@ func (q *Queries) CreateInvoiceLine(ctx context.Context, arg CreateInvoiceLinePa
 
 const deleteDraftInvoice = `-- name: DeleteDraftInvoice :execrows
 UPDATE ar.ar_invoice
-SET deleted_at = now(), updated_by = $4
-WHERE id = $1 AND invoice_date = $2 AND status = 'Draft' AND row_version = $3 AND deleted_at IS NULL
+SET status = 'Cancelled', deleted_at = now(), updated_by = $4
+WHERE id = $1 AND invoice_date = $2 AND status = 'Issued' AND row_version = $3 AND deleted_at IS NULL
 `
 
 type DeleteDraftInvoiceParams struct {

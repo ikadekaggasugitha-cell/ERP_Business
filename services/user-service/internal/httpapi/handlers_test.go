@@ -137,6 +137,14 @@ func TestUserEndpointsRBACCRUDDisableAndRoles(t *testing.T) {
 		t.Fatalf("expected 201 on assign role, got %d (%s)", rr.Code, rr.Body.String())
 	}
 
+	rr = callHTTP(t, h, http.MethodPost, "/users/10000000-0000-0000-0000-000000000011/roles", map[string]any{
+		"roleId":            "20000000-0000-0000-0000-000000000001",
+		"organizationRefId": "99999999-9999-9999-9999-999999999999",
+	}, hdrs)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 assigning role to out-of-scope org, got %d (%s)", rr.Code, rr.Body.String())
+	}
+
 	rr = callHTTP(t, h, http.MethodDelete, "/users/10000000-0000-0000-0000-000000000011/roles/20000000-0000-0000-0000-000000000001", nil, hdrs)
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("expected 204 on remove role, got %d", rr.Code)

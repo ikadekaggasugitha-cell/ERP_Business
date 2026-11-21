@@ -263,6 +263,9 @@ func (r *PayrollRunRepository) CalculateAndEmit(
 		if run.RowVersion != version {
 			return httpx.Conflict("VERSION_CONFLICT", "rowVersion tidak cocok")
 		}
+		if len(employees) == 0 {
+			return httpx.Unprocessable("EMPTY_EMPLOYEES", "minimal 1 karyawan wajib disertakan dalam perhitungan payroll")
+		}
 		if err := qt.DeletePayrollResultsByRun(ctx, id); err != nil {
 			return httpx.MapDBError(err, "")
 		}
@@ -358,11 +361,6 @@ func (r *PayrollRunRepository) CalculateAndEmit(
 			}
 		}
 
-		if len(employees) == 0 && summaryGross != nil {
-			grossSum.Set(summaryGross)
-			netSum.Set(summaryGross)
-		}
-
 		newVer, err := qt.CalculatePayrollRun(ctx, payrolldb.CalculatePayrollRunParams{
 			ID:         run.ID,
 			RowVersion: version,
@@ -401,7 +399,7 @@ func (r *PayrollRunRepository) CalculateAndEmit(
 		if err := qt.InsertOutbox(ctx, payrolldb.InsertOutboxParams{
 			AggregateType:  "PayrollRun",
 			AggregateID:    run.ID,
-			EventType:      "payroll.run.completed",
+			EventType:      "payroll.run.calculated",
 			Payload:        payload,
 			OrganizationID: run.OrganizationID,
 			CorrelationID:  run.CorrelationID,
@@ -462,6 +460,33 @@ func (r *PayrollRunRepository) ApproveAndEmit(ctx context.Context, scope []uuid.
 	return out, err
 }
 
+func sumPayrollResultTotals(results []PayrollResultDTO) (grossStr, taxStr, netStr string, err error) {
+	grossSum := new(big.Rat)
+	taxSum := new(big.Rat)
+	netSum := new(big.Rat)
+	for _, res := range results {
+		gNum, e := platform.ParseOptionalNumeric(res.GrossAmount)
+		if e != nil {
+			return "", "", "", fmt.Errorf("invalid grossAmount %q: %w", res.GrossAmount, e)
+		}
+		tNum, e := platform.ParseOptionalNumeric(res.TaxAmount)
+		if e != nil {
+			return "", "", "", fmt.Errorf("invalid taxAmount %q: %w", res.TaxAmount, e)
+		}
+		nNum, e := platform.ParseOptionalNumeric(res.NetAmount)
+		if e != nil {
+			return "", "", "", fmt.Errorf("invalid netAmount %q: %w", res.NetAmount, e)
+		}
+		grossSum.Add(grossSum, platform.NumericToRat(gNum))
+		taxSum.Add(taxSum, platform.NumericToRat(tNum))
+		netSum.Add(netSum, platform.NumericToRat(nNum))
+	}
+	gOut, _ := platform.RatToNumeric(grossSum, 4)
+	tOut, _ := platform.RatToNumeric(taxSum, 4)
+	nOut, _ := platform.RatToNumeric(netSum, 4)
+	return platform.FormatNumeric(gOut, 4), platform.FormatNumeric(tOut, 4), platform.FormatNumeric(nOut, 4), nil
+}
+
 func (r *PayrollRunRepository) PostAndEmit(ctx context.Context, scope []uuid.UUID, id uuid.UUID, version int32, glJournalRef string, updatedBy, corrID uuid.UUID) (PayrollRunDetail, error) {
 	var out PayrollRunDetail
 	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
@@ -473,8 +498,8 @@ func (r *PayrollRunRepository) PostAndEmit(ctx context.Context, scope []uuid.UUI
 			}
 			return httpx.MapDBError(err, "")
 		}
-		if run.Status != "Calculated" && run.Status != "Approved" {
-			return httpx.Conflict("INVALID_STATE", "hanya payroll run berstatus Calculated atau Approved yang dapat diposting")
+		if run.Status != "Approved" {
+			return httpx.Conflict("INVALID_STATE", "hanya payroll run berstatus Approved yang dapat diposting")
 		}
 		if run.RowVersion != version {
 			return httpx.Conflict("VERSION_CONFLICT", "rowVersion tidak cocok")
@@ -498,19 +523,51 @@ func (r *PayrollRunRepository) PostAndEmit(ctx context.Context, scope []uuid.UUI
 		run.GlJournalRef = &glJournalRef
 		run.RowVersion = newVer
 
-		payload, _ := json.Marshal(map[string]any{"runNo": run.RunNo, "status": "Posted", "glJournalRef": glJournalRef})
+		out, err = r.loadDetail(ctx, qt, run)
+		if err != nil {
+			return err
+		}
+		totGrossStr, totTaxStr, totNetStr, err := sumPayrollResultTotals(out.Results)
+		if err != nil {
+			return err
+		}
+
+		postedPayload, err := json.Marshal(map[string]any{
+			"runNo":         run.RunNo,
+			"period":        fmt.Sprintf("%d-%d", run.PeriodYear, run.PeriodMonth),
+			"periodCode":    fmt.Sprintf("%04d-%02d", run.PeriodYear, run.PeriodMonth),
+			"status":        "Posted",
+			"glJournalRef":  glJournalRef,
+			"totalAmount":   totGrossStr,
+			"totalGross":    totGrossStr,
+			"totalTax":      totTaxStr,
+			"totalNet":      totNetStr,
+			"employeeCount": len(out.Results),
+		})
+		if err != nil {
+			return err
+		}
 		if err := qt.InsertOutbox(ctx, payrolldb.InsertOutboxParams{
 			AggregateType:  "PayrollRun",
 			AggregateID:    run.ID,
 			EventType:      "payroll.run.posted",
-			Payload:        payload,
+			Payload:        postedPayload,
 			OrganizationID: run.OrganizationID,
 			CorrelationID:  corrID,
 		}); err != nil {
 			return httpx.MapDBError(err, "")
 		}
-		out, err = r.loadDetail(ctx, qt, run)
-		return err
+		if err := qt.InsertOutbox(ctx, payrolldb.InsertOutboxParams{
+			AggregateType:  "PayrollRun",
+			AggregateID:    run.ID,
+			EventType:      "payroll.run.completed",
+			Payload:        postedPayload,
+			OrganizationID: run.OrganizationID,
+			CorrelationID:  corrID,
+		}); err != nil {
+			return httpx.MapDBError(err, "")
+		}
+		return nil
 	})
 	return out, err
 }

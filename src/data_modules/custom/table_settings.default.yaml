@@ -78,3 +78,28 @@ dataProducts:
           timeGrain: DAY
         clusterDetails:
           columns: [org_id, material_id]
+      - tableName: fact_fixed_asset_depreciation
+        materializationType: incremental
+        uniqueKey: [depreciation_entry_id]
+        tags: [fact, cortex_v7, fixed_assets, tri_currency]
+        partitionDetails:
+          column: run_date
+          partitionType: TIME
+          timeGrain: MONTH
+        clusterDetails:
+          columns: [org_id, asset_category_code]
+      - tableName: fact_budget_vs_actual
+        materializationType: table
+        tags: [fact, cortex_v7, budget, variance]
+        clusterDetails:
+          columns: [org_id, fiscal_year_ref, account_code]
+      - tableName: fact_project_profitability
+        materializationType: table
+        tags: [fact, cortex_v7, project, profitability]
+        clusterDetails:
+          columns: [org_id, project_status]
+      - tableName: fact_crm_pipeline
+        materializationType: table
+        tags: [fact, cortex_v7, crm, pipeline]
+        clusterDetails:
+          columns: [org_id, opportunity_status, stage]

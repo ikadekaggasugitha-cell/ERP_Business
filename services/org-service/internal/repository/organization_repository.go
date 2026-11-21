@@ -199,6 +199,7 @@ func (r *OrganizationRepository) DrainAndPublish(ctx context.Context, limit int3
 		}
 		if err := pub.Publish(ctx, env); err != nil {
 			log.Printf("org relay publish %s: %v", row.ID, err)
+			pubErr = err
 			break
 		}
 		if err := q.MarkOutboxPublished(ctx, orgdb.MarkOutboxPublishedParams{
@@ -210,8 +211,10 @@ func (r *OrganizationRepository) DrainAndPublish(ctx context.Context, limit int3
 		}
 		published++
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return published, err
+	if published > 0 {
+		if err := tx.Commit(ctx); err != nil {
+			return 0, err
+		}
 	}
 	return published, pubErr
 }

@@ -39,6 +39,19 @@ type LocLocaleFormat struct {
 	RowVersion     int32              `json:"row_version"`
 }
 
+type LocOrganizationLanguage struct {
+	ID                  uuid.UUID          `json:"id"`
+	OrganizationID      uuid.UUID          `json:"organization_id"`
+	OrganizationRef     uuid.UUID          `json:"organization_ref"`
+	DefaultLanguageCode string             `json:"default_language_code"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	CreatedBy           uuid.UUID          `json:"created_by"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy           *uuid.UUID         `json:"updated_by"`
+	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
+	RowVersion          int32              `json:"row_version"`
+}
+
 type LocOutbox struct {
 	ID             uuid.UUID          `json:"id"`
 	AggregateType  string             `json:"aggregate_type"`
@@ -51,6 +64,12 @@ type LocOutbox struct {
 	PublishedAt    pgtype.Timestamptz `json:"published_at"`
 }
 
+type LocProcessedEvent struct {
+	EventID     uuid.UUID          `json:"event_id"`
+	EventType   string             `json:"event_type"`
+	ProcessedAt pgtype.Timestamptz `json:"processed_at"`
+}
+
 type LocTranslation struct {
 	ID             uuid.UUID          `json:"id"`
 	OrganizationID uuid.UUID          `json:"organization_id"`
@@ -58,6 +77,19 @@ type LocTranslation struct {
 	ResourceKey    string             `json:"resource_key"`
 	ResourceValue  string             `json:"resource_value"`
 	Module         *string            `json:"module"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	CreatedBy      uuid.UUID          `json:"created_by"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy      *uuid.UUID         `json:"updated_by"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	RowVersion     int32              `json:"row_version"`
+}
+
+type LocUserLanguagePreference struct {
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	UserRef        uuid.UUID          `json:"user_ref"`
+	LanguageCode   string             `json:"language_code"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	CreatedBy      uuid.UUID          `json:"created_by"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`

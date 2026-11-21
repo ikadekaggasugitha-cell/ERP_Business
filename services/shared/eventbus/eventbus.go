@@ -75,7 +75,22 @@ func NewPublisher(brokers []string) *Publisher {
 	}}
 }
 
-// Publish sends one enveloped event. key preserves per-aggregate ordering.
+// PartitionKey constructs a deterministic tenant+aggregate Kafka partition key
+// (ERP-API BAB 7.3) preserving strict ordering per organization and aggregate.
+func PartitionKey(orgID, aggregateID string) string {
+	org := strings.TrimSpace(orgID)
+	agg := strings.TrimSpace(aggregateID)
+	switch {
+	case org != "" && agg != "":
+		return org + ":" + agg
+	case org != "":
+		return org
+	default:
+		return agg
+	}
+}
+
+// Publish sends one enveloped event. Partition key preserves per-org/aggregate ordering.
 func (p *Publisher) Publish(ctx context.Context, env Envelope) error {
 	value, err := json.Marshal(env)
 	if err != nil {
@@ -83,7 +98,7 @@ func (p *Publisher) Publish(ctx context.Context, env Envelope) error {
 	}
 	return p.w.WriteMessages(ctx, kafka.Message{
 		Topic: TopicFor(env.EventType),
-		Key:   []byte(env.AggregateID),
+		Key:   []byte(PartitionKey(env.OrganizationID, env.AggregateID)),
 		Value: value,
 		Headers: []kafka.Header{
 			{Key: "organization_id", Value: []byte(env.OrganizationID)},

@@ -83,6 +83,24 @@ func (q *Queries) CountSalesSummaries(ctx context.Context) (int64, error) {
 	return total, err
 }
 
+const getCOACacheCode = `-- name: GetCOACacheCode :one
+SELECT account_code
+FROM rpt.coa_cache
+WHERE organization_id = $1 AND account_id = $2
+`
+
+type GetCOACacheCodeParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	AccountID      uuid.UUID `json:"account_id"`
+}
+
+func (q *Queries) GetCOACacheCode(ctx context.Context, arg GetCOACacheCodeParams) (string, error) {
+	row := q.db.QueryRow(ctx, getCOACacheCode, arg.OrganizationID, arg.AccountID)
+	var account_code string
+	err := row.Scan(&account_code)
+	return account_code, err
+}
+
 const getGLBalanceSnapshot = `-- name: GetGLBalanceSnapshot :one
 SELECT id, organization_id, fiscal_period_id, account_code, closing_balance, refreshed_at FROM rpt.gl_balance_snapshot
 WHERE id = $1
@@ -300,6 +318,39 @@ func (q *Queries) MarkEventProcessed(ctx context.Context, arg MarkEventProcessed
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertCOACache = `-- name: UpsertCOACache :exec
+INSERT INTO rpt.coa_cache (
+    organization_id, account_id, account_code, account_name, account_type
+) VALUES (
+    $1, $2, $3, $4, $5
+)
+ON CONFLICT (organization_id, account_id)
+DO UPDATE SET
+    account_code = EXCLUDED.account_code,
+    account_name = EXCLUDED.account_name,
+    account_type = EXCLUDED.account_type,
+    refreshed_at = now()
+`
+
+type UpsertCOACacheParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	AccountID      uuid.UUID `json:"account_id"`
+	AccountCode    string    `json:"account_code"`
+	AccountName    string    `json:"account_name"`
+	AccountType    string    `json:"account_type"`
+}
+
+func (q *Queries) UpsertCOACache(ctx context.Context, arg UpsertCOACacheParams) error {
+	_, err := q.db.Exec(ctx, upsertCOACache,
+		arg.OrganizationID,
+		arg.AccountID,
+		arg.AccountCode,
+		arg.AccountName,
+		arg.AccountType,
+	)
+	return err
 }
 
 const upsertGLBalanceSnapshot = `-- name: UpsertGLBalanceSnapshot :one

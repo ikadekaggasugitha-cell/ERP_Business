@@ -87,5 +87,33 @@ func TestInventoryConsumerHandlersAndPoison(t *testing.T) {
 	if err != nil || !store.grCalled || len(store.grLines) != 1 {
 		t.Fatalf("expected valid GR receipt call, err=%v called=%v lines=%d", err, store.grCalled, len(store.grLines))
 	}
+
+	// Valid manufacturing.workorder.completed receives finished goods into inventory
+	store.grCalled = false
+	store.grLines = nil
+	err = c.Handle(context.Background(), eventbus.Envelope{
+		EventID:        uuid.NewString(),
+		EventType:      "manufacturing.workorder.completed",
+		AggregateID:    uuid.NewString(),
+		OrganizationID: uuid.NewString(),
+		Data:           json.RawMessage(`{"woNo":"WO-100","productItemId":"` + itemID + `","producedQty":"10.0000"}`),
+	})
+	if err != nil || !store.grCalled || len(store.grLines) != 1 {
+		t.Fatalf("expected finished goods receipt on WO completion, err=%v called=%v lines=%d", err, store.grCalled, len(store.grLines))
+	}
+
+	// Valid maintenance.workorder.parts_requested deducts spare parts stock
+	store.soCalled = false
+	store.soLines = nil
+	err = c.Handle(context.Background(), eventbus.Envelope{
+		EventID:        uuid.NewString(),
+		EventType:      "maintenance.workorder.parts_requested",
+		AggregateID:    uuid.NewString(),
+		OrganizationID: uuid.NewString(),
+		Data:           json.RawMessage(`{"woNo":"MWO-9","itemId":"` + itemID + `","quantity":"2","unitCost":"50000"}`),
+	})
+	if err != nil || !store.soCalled || len(store.soLines) != 1 {
+		t.Fatalf("expected spare parts issue on maintenance request, err=%v called=%v lines=%d", err, store.soCalled, len(store.soLines))
+	}
 }
 

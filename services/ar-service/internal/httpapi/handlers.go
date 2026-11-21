@@ -23,7 +23,7 @@ type Store interface {
 	GetWithLines(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (ardb.ArArInvoice, []ardb.ListInvoiceLinesRow, error)
 	GetByID(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (ardb.ArArInvoice, error)
 	ListWithCount(ctx context.Context, scope []uuid.UUID, status string, limit, offset int32) ([]ardb.ListInvoicesRow, int64, error)
-	MarkPaid(ctx context.Context, scope []uuid.UUID, arg ardb.MarkInvoicePaidParams) (int64, error)
+	MarkPaid(ctx context.Context, scope []uuid.UUID, arg ardb.MarkInvoicePaidParams, ev ardb.InsertOutboxParams) (int64, error)
 	DeleteDraft(ctx context.Context, scope []uuid.UUID, arg ardb.DeleteDraftInvoiceParams) (int64, error)
 }
 
@@ -123,6 +123,10 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.BadRequest("dueDate harus YYYY-MM-DD"))
 		return
 	}
+	if dueDate.Time.Before(invDate.Time) {
+		httpx.WriteError(w, r, httpx.BadRequest("dueDate tidak boleh sebelum invoiceDate"))
+		return
+	}
 	customerID, err := httpx.ParseUUIDParam("customerId", req.CustomerID)
 	if err != nil {
 		httpx.WriteError(w, r, err)
@@ -142,12 +146,20 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.BadRequest("taxAmount tidak valid"))
 		return
 	}
+	if taxNum.Valid && platform.NumericToRat(taxNum).Sign() < 0 {
+		httpx.WriteError(w, r, httpx.BadRequest("taxAmount tidak boleh negatif"))
+		return
+	}
 	var soRef *string
 	if ref := strings.TrimSpace(req.SalesOrderRef); ref != "" {
 		soRef = &ref
 	}
 
-	currency := deflt(req.CurrencyCode, "IDR")
+	currency := strings.ToUpper(deflt(req.CurrencyCode, "IDR"))
+	if len(currency) != 3 {
+		httpx.WriteError(w, r, httpx.BadRequest("currencyCode harus 3 huruf ISO"))
+		return
+	}
 	entry := ardb.CreateInvoiceParams{
 		OrganizationID:    scope[0],
 		InvoiceNo:         strings.TrimSpace(req.InvoiceNo),
@@ -310,12 +322,32 @@ func (s *Server) markPaid(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
+	if inv.Status != "Issued" {
+		httpx.WriteError(w, r, httpx.Conflict("INVALID_STATE", "hanya invoice berstatus Issued yang dapat ditandai lunas"))
+		return
+	}
+	payPayload, _ := json.Marshal(map[string]any{
+		"invoiceNo":    inv.InvoiceNo,
+		"customerId":   inv.CustomerID.String(),
+		"currencyCode": inv.CurrencyCode,
+		"paidAmount":   platform.FormatNumeric(inv.OutstandingAmount, 4),
+		"totalAmount":  platform.FormatNumeric(inv.TotalAmount, 4),
+		"status":       "Paid",
+	})
+	ev := ardb.InsertOutboxParams{
+		AggregateType:  "ARInvoice",
+		AggregateID:    inv.ID,
+		EventType:      "ar.invoice.paid",
+		Payload:        payPayload,
+		OrganizationID: inv.OrganizationID,
+		CorrelationID:  httpx.CorrelationUUID(r),
+	}
 	n, err := s.repo.MarkPaid(r.Context(), scope, ardb.MarkInvoicePaidParams{
 		ID:          inv.ID,
 		InvoiceDate: inv.InvoiceDate,
 		RowVersion:  rowVer,
 		UpdatedBy:   &user,
-	})
+	}, ev)
 	if err != nil {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
@@ -327,7 +359,11 @@ func (s *Server) markPaid(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteIDResponse(w, http.StatusOK, rowVer+1, invoiceDTO{
 		ID:                inv.ID.String(),
 		InvoiceNo:         inv.InvoiceNo,
+		CustomerID:        inv.CustomerID.String(),
 		InvoiceDate:       platform.FormatDate(inv.InvoiceDate),
+		DueDate:           platform.FormatDate(inv.DueDate),
+		CurrencyCode:      inv.CurrencyCode,
+		TotalAmount:       platform.FormatNumeric(inv.TotalAmount, 4),
 		Status:            "Paid",
 		OutstandingAmount: "0.0000",
 		RowVersion:        rowVer + 1,
@@ -375,7 +411,7 @@ func (s *Server) deleteDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if n == 0 {
-		httpx.WriteError(w, r, httpx.Conflict("STALE_ROW_VERSION", "rowVersion basi atau status bukan Draft"))
+		httpx.WriteError(w, r, httpx.Conflict("STALE_ROW_VERSION", "rowVersion basi atau status bukan Issued"))
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

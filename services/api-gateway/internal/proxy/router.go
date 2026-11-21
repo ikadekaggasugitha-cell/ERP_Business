@@ -48,8 +48,16 @@ func NewRouter() (*Router, error) {
 		{"PAYROLL_SERVICE_URL", "http://payroll-service:8080", []string{"/payroll-runs"}},
 		{"REPORTING_SERVICE_URL", "http://reporting-service:8080", []string{"/gl-balance-snapshots", "/sales-summaries", "/inventory-positions"}},
 		{"CURRENCY_SERVICE_URL", "http://currency-service:8080", []string{"/currencies", "/exchange-rates", "/exchange-rate-types"}},
-		{"DIMENSION_SERVICE_URL", "http://dimension-service:8080", []string{"/cost-centers", "/profit-centers", "/allocation-rules"}},
-		{"LOCALIZATION_SERVICE_URL", "http://localization-service:8080", []string{"/languages", "/translations", "/translation-bundles", "/locale-formats"}},
+		{"DIMENSION_SERVICE_URL", "http://dimension-service:8080", []string{"/cost-centers", "/profit-centers", "/allocation-rules", "/cost-center-assignments", "/profit-center-assignments"}},
+		{"LOCALIZATION_SERVICE_URL", "http://localization-service:8080", []string{"/languages", "/translations", "/translation-bundles", "/locale-formats", "/user-preferences", "/organization-languages"}},
+		{"FIXEDASSET_SERVICE_URL", "http://fixedasset-service:8080", []string{"/asset-categories", "/fixed-assets"}},
+		{"BUDGET_SERVICE_URL", "http://budget-service:8080", []string{"/budgets", "/budget-policies", "/budget-commitments"}},
+		{"FINANCIALCLOSE_SERVICE_URL", "http://financialclose-service:8080", []string{"/closing-templates", "/closing-runs", "/closing-tasks", "/period-statuses", "/period-reopenings"}},
+		{"CONSOLIDATION_SERVICE_URL", "http://consolidation-service:8080", []string{"/consolidation-groups", "/elimination-rules", "/consolidation-runs"}},
+		{"PROJECT_SERVICE_URL", "http://project-service:8080", []string{"/projects", "/wbs-elements", "/project-budgets", "/project-billings", "/change-orders"}},
+		{"ASSET_SERVICE_URL", "http://asset-service:8080", []string{"/assets", "/asset-movements", "/asset-verifications"}},
+		{"MAINTENANCE_SERVICE_URL", "http://maintenance-service:8080", []string{"/maintenance-schedules", "/maintenance-work-orders", "/maintenance-checklist"}},
+		{"CRM_SERVICE_URL", "http://crm-service:8080", []string{"/leads", "/opportunities", "/customer-segments", "/interactions", "/support-cases", "/activity-tasks"}},
 	}
 
 	rules := make([]RouteRule, 0, len(configs))

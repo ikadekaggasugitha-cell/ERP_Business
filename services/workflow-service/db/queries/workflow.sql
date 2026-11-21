@@ -95,6 +95,11 @@ SET decision = $3,
 WHERE id = $1 AND row_version = $2 AND decision IS NULL AND deleted_at IS NULL
 RETURNING row_version;
 
+-- name: CountPendingTasksByInstance :one
+SELECT count(*)::bigint
+FROM wf.workflow_task
+WHERE instance_id = $1 AND decision IS NULL AND deleted_at IS NULL;
+
 -- name: DecideWorkflowInstance :one
 UPDATE wf.workflow_instance
 SET status = $3, updated_by = $4

@@ -1,0 +1,29 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["fact", "cortex_v7", "project", "profitability"],
+  clusterBy: ["org_id", "project_status"],
+  description: "Project profitability fact aggregating approved budgets, actual costs, progress percentage, and invoiced billings"
+}
+
+SELECT
+  p.organization_id AS org_id,
+  p.project_id,
+  p.project_code,
+  p.project_name,
+  p.project_type,
+  p.currency_code,
+  p.project_status,
+  p.start_date,
+  p.end_date,
+  CAST(COALESCE(p.approved_budget_amount, 0) AS NUMERIC) AS approved_budget_amount,
+  CAST(COALESCE(p.actual_cost_amount, 0) AS NUMERIC) AS actual_cost_amount,
+  CAST(COALESCE(p.invoiced_billing_amount, 0) AS NUMERIC) AS invoiced_billing_amount,
+  CAST(COALESCE(p.invoiced_billing_amount, 0) AS NUMERIC) - CAST(COALESCE(p.actual_cost_amount, 0) AS NUMERIC) AS gross_margin_amount,
+  CAST(COALESCE(p.physical_progress_pct, 0) AS NUMERIC) AS physical_progress_pct,
+  SAFE_DIVIDE(
+    CAST(COALESCE(p.actual_cost_amount, 0) AS BIGNUMERIC),
+    NULLIF(CAST(COALESCE(p.approved_budget_amount, 0) AS BIGNUMERIC), 0)
+  ) * 100 AS cost_burn_pct,
+  p.source_last_updated_at
+FROM ${ref("erp_staging", "stg_projects_cdc")} p

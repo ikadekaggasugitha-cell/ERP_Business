@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Bring up full stack (30 DBs, Redpanda, 20 services + gateway)
+      - name: Bring up full stack (30 DBs, Redpanda, 22 services + gateway)
         run: docker compose up -d --build
 
       - name: Run smoke test (104 checks)

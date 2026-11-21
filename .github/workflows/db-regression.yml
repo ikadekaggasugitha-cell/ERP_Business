@@ -2,9 +2,9 @@ name: db-regression
 
 on:
   push:
-    paths: ["db/migrations/**", "db/tests/**", ".github/workflows/db-regression.yml"]
+    paths: ["db/migrations/**", "db/tests/**", "db/seeds/**", "deploy/seeds.sh", ".github/workflows/db-regression.yml"]
   pull_request:
-    paths: ["db/migrations/**", "db/tests/**", ".github/workflows/db-regression.yml"]
+    paths: ["db/migrations/**", "db/tests/**", "db/seeds/**", "deploy/seeds.sh", ".github/workflows/db-regression.yml"]
 
 jobs:
   sql-regression:
@@ -82,11 +82,67 @@ jobs:
           psql "$PGURL/postgres" -c "CREATE DATABASE ${{ matrix.db }}"
           migrate -path db/migrations/${{ matrix.db }} -database "$PGURL/${{ matrix.db }}?sslmode=disable" up
 
-      - name: Apply seeds if present (upgrades smoke checks B/C to live rows)
+      - name: Seed reference data + tenant fixtures (live smoke checks B/C/D)
         run: |
           if [ -f "db/seeds/${{ matrix.db }}/seed.sql" ]; then
             psql "$PGURL/${{ matrix.db }}?sslmode=disable" -f "db/seeds/${{ matrix.db }}/seed.sql"
           fi
+          psql "$PGURL/${{ matrix.db }}?sslmode=disable" -v db=${{ matrix.db }} -f db/tests/rls_smoke_tenants.sql
 
       - name: RLS smoke (${{ matrix.db }})
         run: psql "$PGURL/${{ matrix.db }}?sslmode=disable" -f db/tests/rls_smoke.sql
+
+  service-migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      PGPASSWORD: postgres
+      PGURL: postgres://postgres:postgres@localhost:5432
+    strategy:
+      fail-fast: false
+      matrix:
+        db:
+          - ap_db
+          - ar_db
+          - audit_db
+          - coa_db
+          - currency_db
+          - dimension_db
+          - gl_db
+          - hr_db
+          - inventory_db
+          - localization_db
+          - manufacturing_db
+          - masterdata_db
+          - org_db
+          - payroll_db
+          - procurement_db
+          - reporting_db
+          - sales_db
+          - security_db
+          - tax_db
+          - treasury_db
+          - user_db
+          - workflow_db
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install golang-migrate
+        run: |
+          curl -fsSL https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz
+          sudo mv migrate /usr/local/bin/
+
+      - name: Migrate up & down (${{ matrix.db }})
+        run: |
+          psql "$PGURL/postgres" -c "CREATE DATABASE ${{ matrix.db }}"
+          migrate -path db/migrations/${{ matrix.db }} -database "$PGURL/${{ matrix.db }}?sslmode=disable" up
+          migrate -path db/migrations/${{ matrix.db }} -database "$PGURL/${{ matrix.db }}?sslmode=disable" down -all

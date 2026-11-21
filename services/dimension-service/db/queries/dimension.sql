@@ -76,6 +76,62 @@ LIMIT $1 OFFSET $2;
 -- name: CountAllocationRules :one
 SELECT COUNT(*) FROM cc.cost_allocation_rule WHERE deleted_at IS NULL;
 
+-- name: UpdateAllocationRule :one
+UPDATE cc.cost_allocation_rule
+SET name = $3, allocation_basis = $4, targets = $5, is_active = $6, updated_by = $7
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+RETURNING row_version;
+
+-- name: DeleteAllocationRule :execrows
+UPDATE cc.cost_allocation_rule SET deleted_at = now(), updated_by = $3
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL;
+
+-- name: CreateCostCenterAssignment :one
+INSERT INTO cc.cost_center_assignment (organization_id, cost_center_id, organization_ref, created_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (cost_center_id, organization_ref) DO UPDATE
+SET deleted_at = NULL, updated_by = EXCLUDED.created_by
+RETURNING id, row_version;
+
+-- name: ListCostCenterAssignments :many
+SELECT * FROM cc.cost_center_assignment
+WHERE deleted_at IS NULL
+  AND (sqlc.narg('cost_center_id')::uuid IS NULL OR cost_center_id = sqlc.narg('cost_center_id')::uuid)
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: CountCostCenterAssignments :one
+SELECT COUNT(*) FROM cc.cost_center_assignment
+WHERE deleted_at IS NULL
+  AND (sqlc.narg('cost_center_id')::uuid IS NULL OR cost_center_id = sqlc.narg('cost_center_id')::uuid);
+
+-- name: DeleteCostCenterAssignment :execrows
+UPDATE cc.cost_center_assignment SET deleted_at = now(), updated_by = $3
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL;
+
+-- name: CreateProfitCenterAssignment :one
+INSERT INTO pc.profit_center_assignment (organization_id, profit_center_id, organization_ref, created_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (profit_center_id, organization_ref) DO UPDATE
+SET deleted_at = NULL, updated_by = EXCLUDED.created_by
+RETURNING id, row_version;
+
+-- name: ListProfitCenterAssignments :many
+SELECT * FROM pc.profit_center_assignment
+WHERE deleted_at IS NULL
+  AND (sqlc.narg('profit_center_id')::uuid IS NULL OR profit_center_id = sqlc.narg('profit_center_id')::uuid)
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: CountProfitCenterAssignments :one
+SELECT COUNT(*) FROM pc.profit_center_assignment
+WHERE deleted_at IS NULL
+  AND (sqlc.narg('profit_center_id')::uuid IS NULL OR profit_center_id = sqlc.narg('profit_center_id')::uuid);
+
+-- name: DeleteProfitCenterAssignment :execrows
+UPDATE pc.profit_center_assignment SET deleted_at = now(), updated_by = $3
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL;
+
 -- name: InsertOutbox :exec
 INSERT INTO cc.outbox (aggregate_type, aggregate_id, event_type, payload, organization_id, correlation_id)
 VALUES ($1, $2, $3, $4, $5, $6);

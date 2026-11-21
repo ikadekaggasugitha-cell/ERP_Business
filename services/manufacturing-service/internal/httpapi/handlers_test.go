@@ -203,7 +203,14 @@ func TestManufacturingBOMWorkOrderReleaseCompleteAndRBAC(t *testing.T) {
 	var bom bomDTO
 	_ = json.Unmarshal(rec.Body.Bytes(), &bom)
 
-	// 3. Create Work Order -> PUT -> Release (emits released) -> Complete (emits completed)
+	// 3a. Create Work Order with mismatched BOM product -> 422
+	badWoBody := map[string]any{"woNo": "WO-BAD", "productItemId": uuid.NewString(), "bomId": bom.ID, "plannedQty": "10"}
+	rec = doMfgReq(t, handler, http.MethodPost, "/work-orders", orgID, userID, rwPerms, map[string]string{"Idempotency-Key": "k-wobad"}, badWoBody)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("create WO with mismatched BOM expected 422, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	// 3b. Create Work Order -> PUT -> Release (emits released) -> Complete (emits completed)
 	woBody := map[string]any{"woNo": "WO-001", "productItemId": prodID, "bomId": bom.ID, "plannedQty": "10"}
 	rec = doMfgReq(t, handler, http.MethodPost, "/work-orders", orgID, userID, rwPerms, map[string]string{"Idempotency-Key": "k-wo1"}, woBody)
 	if rec.Code != http.StatusCreated {

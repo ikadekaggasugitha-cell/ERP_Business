@@ -11,7 +11,12 @@ const stagingTables = [
   "stg_exchange_rates_cdc",
   "stg_chart_of_accounts_cdc",
   "stg_items_cdc",
-  "stg_holding_coa_mapping"
+  "stg_holding_coa_mapping",
+  "stg_fixed_assets_cdc",
+  "stg_budgets_cdc",
+  "stg_projects_cdc",
+  "stg_crm_opportunities_cdc",
+  "stg_maintenance_wo_cdc"
 ];
 
 stagingTables.forEach((tableName) => {

@@ -216,7 +216,7 @@ func (r *LocalizationRepository) UpdateTranslation(ctx context.Context, scope []
 }
 
 func (r *LocalizationRepository) DeleteTranslation(ctx context.Context, scope []uuid.UUID, arg localizationdb.DeleteTranslationParams, corr uuid.UUID) error {
-	return r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		n, e := q.DeleteTranslation(ctx, arg)
 		if e != nil {
@@ -227,6 +227,10 @@ func (r *LocalizationRepository) DeleteTranslation(ctx context.Context, scope []
 		}
 		return emit(ctx, q, "Translation", "localization.bundle.updated", arg.ID, scope[0], corr, map[string]any{"deleted": true})
 	})
+	if err != nil {
+		return httpx.MapDBError(err, "")
+	}
+	return nil
 }
 
 // GetBundle returns key→value for languageCode, overlaid on the fallback
@@ -328,6 +332,138 @@ func (r *LocalizationRepository) UpdateLocaleFormat(ctx context.Context, scope [
 		return 0, httpx.MapDBError(err, "")
 	}
 	return ver, nil
+}
+
+func (r *LocalizationRepository) DeleteLanguage(ctx context.Context, scope []uuid.UUID, arg localizationdb.DeleteLanguageParams, corr uuid.UUID) error {
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		cur, e := q.GetLanguage(ctx, arg.ID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("language not found")
+		}
+		if e != nil {
+			return e
+		}
+		if cur.OrganizationID == systemOrgID {
+			return httpx.Forbidden("system language cannot be deleted")
+		}
+		if cur.IsFallback {
+			return httpx.Conflict("FALLBACK_LANGUAGE_LOCKED", "fallback language cannot be deleted")
+		}
+		n, e := q.DeleteLanguage(ctx, arg)
+		if e != nil {
+			return e
+		}
+		if n == 0 {
+			return stale("language")
+		}
+		return emit(ctx, q, "Language", "localization.language.updated", arg.ID, scope[0], corr, map[string]any{"deleted": true})
+	})
+	return httpx.MapDBError(err, "")
+}
+
+func (r *LocalizationRepository) DeleteLocaleFormat(ctx context.Context, scope []uuid.UUID, arg localizationdb.DeleteLocaleFormatParams, corr uuid.UUID) error {
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		cur, e := q.GetLocaleFormat(ctx, arg.ID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("locale format not found")
+		}
+		if e != nil {
+			return e
+		}
+		if cur.OrganizationID == systemOrgID {
+			return httpx.Forbidden("system locale format cannot be deleted")
+		}
+		n, e := q.DeleteLocaleFormat(ctx, arg)
+		if e != nil {
+			return e
+		}
+		if n == 0 {
+			return stale("locale format")
+		}
+		return emit(ctx, q, "LocaleFormat", "localization.locale_format.updated", arg.ID, scope[0], corr, map[string]any{"deleted": true})
+	})
+	return httpx.MapDBError(err, "")
+}
+
+// ---------------- User Language Preference & Organization Language ----------------
+
+func (r *LocalizationRepository) UpsertUserLanguagePreference(ctx context.Context, scope []uuid.UUID, arg localizationdb.UpsertUserLanguagePreferenceParams) (localizationdb.UpsertUserLanguagePreferenceRow, error) {
+	var out localizationdb.UpsertUserLanguagePreferenceRow
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		if _, e := q.GetLanguageByCode(ctx, arg.LanguageCode); errors.Is(e, pgx.ErrNoRows) {
+			return httpx.Unprocessable("UNKNOWN_LANGUAGE", "language code is not configured")
+		} else if e != nil {
+			return e
+		}
+		var e error
+		out, e = q.UpsertUserLanguagePreference(ctx, arg)
+		return e
+	})
+	return out, httpx.MapDBError(err, "")
+}
+
+func (r *LocalizationRepository) GetUserLanguagePreference(ctx context.Context, scope []uuid.UUID, orgID, userRef uuid.UUID) (localizationdb.GetUserLanguagePreferenceRow, error) {
+	var out localizationdb.GetUserLanguagePreferenceRow
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		var e error
+		out, e = r.q.WithTx(tx).GetUserLanguagePreference(ctx, localizationdb.GetUserLanguagePreferenceParams{
+			OrganizationID: orgID, UserRef: userRef,
+		})
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("user language preference not found")
+		}
+		return e
+	})
+	return out, err
+}
+
+func (r *LocalizationRepository) UpsertOrganizationLanguage(ctx context.Context, scope []uuid.UUID, arg localizationdb.UpsertOrganizationLanguageParams) (localizationdb.UpsertOrganizationLanguageRow, error) {
+	var out localizationdb.UpsertOrganizationLanguageRow
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		if _, e := q.GetLanguageByCode(ctx, arg.DefaultLanguageCode); errors.Is(e, pgx.ErrNoRows) {
+			return httpx.Unprocessable("UNKNOWN_LANGUAGE", "default language code is not configured")
+		} else if e != nil {
+			return e
+		}
+		var e error
+		out, e = q.UpsertOrganizationLanguage(ctx, arg)
+		return e
+	})
+	return out, httpx.MapDBError(err, "")
+}
+
+func (r *LocalizationRepository) GetOrganizationLanguage(ctx context.Context, scope []uuid.UUID, orgID, orgRef uuid.UUID) (localizationdb.GetOrganizationLanguageRow, error) {
+	var out localizationdb.GetOrganizationLanguageRow
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		var e error
+		out, e = r.q.WithTx(tx).GetOrganizationLanguage(ctx, localizationdb.GetOrganizationLanguageParams{
+			OrganizationID: orgID, OrganizationRef: orgRef,
+		})
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("organization language not found")
+		}
+		return e
+	})
+	return out, err
+}
+
+func (r *LocalizationRepository) ListOrganizationLanguages(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]localizationdb.ListOrganizationLanguagesRow, int64, error) {
+	var rows []localizationdb.ListOrganizationLanguagesRow
+	var total int64
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		var e error
+		if total, e = q.CountOrganizationLanguages(ctx); e != nil {
+			return e
+		}
+		rows, e = q.ListOrganizationLanguages(ctx, localizationdb.ListOrganizationLanguagesParams{Limit: limit, Offset: offset})
+		return e
+	})
+	return rows, total, err
 }
 
 // DrainAndPublish drains loc.outbox under FOR UPDATE SKIP LOCKED inside a tx.

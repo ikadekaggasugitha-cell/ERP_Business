@@ -310,6 +310,19 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
+	if inv.Status != "Draft" {
+		httpx.WriteError(w, r, httpx.Conflict("INVALID_STATE", "hanya vendor invoice berstatus Draft yang dapat diubah"))
+		return
+	}
+	if dueDate.Time.Before(inv.InvoiceDate.Time) {
+		httpx.WriteError(w, r, httpx.BadRequest("dueDate tidak boleh lebih awal dari invoiceDate"))
+		return
+	}
+	currency := strings.ToUpper(strings.TrimSpace(deflt(req.CurrencyCode, inv.CurrencyCode)))
+	if len(currency) != 3 {
+		httpx.WriteError(w, r, httpx.BadRequest("currencyCode harus 3 huruf ISO"))
+		return
+	}
 	total, lines, err := validateTotalAndLines(inv.OrganizationID, user, req.TotalAmount, req.Lines)
 	if err != nil {
 		httpx.WriteError(w, r, err)
@@ -326,7 +339,7 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 		RowVersion:      rowVer,
 		VendorID:        vendorID,
 		DueDate:         dueDate,
-		CurrencyCode:    deflt(req.CurrencyCode, inv.CurrencyCode),
+		CurrencyCode:    currency,
 		TotalAmount:     total,
 		GoodsReceiptRef: grRef,
 		UpdatedBy:       &user,
@@ -341,7 +354,7 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 		VendorID:     vendorID.String(),
 		InvoiceDate:  platform.FormatDate(inv.InvoiceDate),
 		DueDate:      platform.FormatDate(dueDate),
-		CurrencyCode: deflt(req.CurrencyCode, inv.CurrencyCode),
+		CurrencyCode: currency,
 		TotalAmount:  platform.FormatNumeric(total, 4),
 		Status:       inv.Status,
 		RowVersion:   newVer,
