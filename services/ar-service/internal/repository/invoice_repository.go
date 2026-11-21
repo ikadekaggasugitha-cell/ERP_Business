@@ -5,10 +5,12 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/sinergiinvestasiproperti/erp/services/ar-service/internal/ardb"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/eventbus"
@@ -70,6 +72,86 @@ func (r *InvoiceRepository) CreateInvoiceWithLinesAndEmit(
 		return q.InsertOutbox(ctx, ev)
 	})
 	return created, err
+}
+
+// SettlementAllocation carries one AR receipt allocation from treasury.payment.settled.
+type SettlementAllocation struct {
+	InvoiceRef      string
+	AllocatedAmount pgtype.Numeric
+}
+
+// ConsumePaymentSettled idempotently allocates a settled treasury receipt to AR invoices
+// and emits ar.invoice.paid when an invoice becomes Paid.
+func (r *InvoiceRepository) ConsumePaymentSettled(
+	ctx context.Context, scope []uuid.UUID,
+	mark ardb.MarkEventProcessedParams,
+	orgID, receiptID, actor, corrID uuid.UUID,
+	allocs []SettlementAllocation,
+) (applied bool, err error) {
+	err = r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		n, e := q.MarkEventProcessed(ctx, mark)
+		if e != nil || n == 0 {
+			return e
+		}
+		for _, a := range allocs {
+			inv, e := q.GetInvoiceByRef(ctx, ardb.GetInvoiceByRefParams{
+				OrganizationID: orgID,
+				InvoiceRef:     a.InvoiceRef,
+			})
+			if e != nil {
+				if errors.Is(e, pgx.ErrNoRows) {
+					continue
+				}
+				return e
+			}
+			if e = q.CreateReceiptAllocation(ctx, ardb.CreateReceiptAllocationParams{
+				OrganizationID:  orgID,
+				ArInvoiceID:     inv.ID,
+				InvoiceDate:     inv.InvoiceDate,
+				ReceiptID:       receiptID,
+				AllocatedAmount: a.AllocatedAmount,
+				CreatedBy:       actor,
+			}); e != nil {
+				return e
+			}
+			updated, e := q.ApplyReceiptToInvoice(ctx, ardb.ApplyReceiptToInvoiceParams{
+				ID:          inv.ID,
+				InvoiceDate: inv.InvoiceDate,
+				UpdatedBy:   &actor,
+				PaidAmount:  a.AllocatedAmount,
+			})
+			if e != nil {
+				if errors.Is(e, pgx.ErrNoRows) {
+					continue
+				}
+				return e
+			}
+			if updated.Status == "Paid" {
+				payPayload, _ := json.Marshal(map[string]any{
+					"invoiceNo":    updated.InvoiceNo,
+					"customerId":   updated.CustomerID.String(),
+					"currencyCode": updated.CurrencyCode,
+					"paidAmount":   platform.FormatNumeric(a.AllocatedAmount, 4),
+					"totalAmount":  platform.FormatNumeric(updated.TotalAmount, 4),
+					"status":       "Paid",
+				})
+				if e = q.InsertOutbox(ctx, ardb.InsertOutboxParams{
+					AggregateType:  "ARInvoice",
+					AggregateID:    updated.ID,
+					EventType:      "ar.invoice.paid",
+					Payload:        payPayload,
+					OrganizationID: orgID,
+					CorrelationID:  corrID,
+				}); e != nil {
+					return e
+				}
+			}
+		}
+		applied = true
+		return nil
+	})
+	return applied, err
 }
 
 // ConsumeAndCreateInvoice creates an AR invoice idempotently from inventory.goods.issued.

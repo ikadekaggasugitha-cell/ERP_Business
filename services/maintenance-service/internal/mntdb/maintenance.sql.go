@@ -12,6 +12,31 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const advancePreventiveScheduleDueDate = `-- name: AdvancePreventiveScheduleDueDate :exec
+UPDATE mnt.maintenance_schedule
+SET next_due_date = CASE
+    WHEN interval_unit = 'Day' THEN (COALESCE(next_due_date, CURRENT_DATE) + (interval_value * interval '1 day'))::date
+    WHEN interval_unit = 'Month' THEN (COALESCE(next_due_date, CURRENT_DATE) + (interval_value * interval '1 month'))::date
+    ELSE next_due_date
+END,
+    updated_by = $2
+WHERE asset_ref = $1
+  AND schedule_type = 'TimeBased'
+  AND is_active = true
+  AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
+`
+
+type AdvancePreventiveScheduleDueDateParams struct {
+	AssetRef  uuid.UUID  `json:"asset_ref"`
+	UpdatedBy *uuid.UUID `json:"updated_by"`
+}
+
+func (q *Queries) AdvancePreventiveScheduleDueDate(ctx context.Context, arg AdvancePreventiveScheduleDueDateParams) error {
+	_, err := q.db.Exec(ctx, advancePreventiveScheduleDueDate, arg.AssetRef, arg.UpdatedBy)
+	return err
+}
+
 const assignWorkOrder = `-- name: AssignWorkOrder :one
 UPDATE mnt.work_order
 SET status = 'Assigned', assignee_ref = $2, vendor_ref = $3, updated_by = $4
@@ -650,6 +675,7 @@ const softDeleteMaintenanceSchedule = `-- name: SoftDeleteMaintenanceSchedule :e
 UPDATE mnt.maintenance_schedule
 SET deleted_at = now(), updated_by = $2
 WHERE id = $1 AND row_version = $3 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type SoftDeleteMaintenanceScheduleParams struct {
@@ -690,6 +716,7 @@ const updateMaintenanceSchedule = `-- name: UpdateMaintenanceSchedule :one
 UPDATE mnt.maintenance_schedule
 SET schedule_type = $2, interval_value = $3, interval_unit = $4, next_due_date = $5, is_active = $6, updated_by = $7
 WHERE id = $1 AND row_version = $8 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 

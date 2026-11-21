@@ -17,16 +17,31 @@ SELECT COUNT(*)
 FROM audit.audit_log
 WHERE ($1::text = '' OR entity_type = $1::text)
   AND ($2::text = '' OR action = $2::text)
+  AND ($3::timestamptz IS NULL OR occurred_at >= $3::timestamptz)
+  AND ($4::timestamptz IS NULL OR occurred_at <= $4::timestamptz)
+  AND ($5::uuid IS NULL OR entity_id = $5::uuid)
+  AND ($6::uuid IS NULL OR correlation_id = $6::uuid)
 `
 
 type CountAuditLogsFilteredParams struct {
-	EntityType string `json:"entity_type"`
-	Action     string `json:"action"`
+	EntityType    string             `json:"entity_type"`
+	Action        string             `json:"action"`
+	FromTs        pgtype.Timestamptz `json:"from_ts"`
+	ToTs          pgtype.Timestamptz `json:"to_ts"`
+	EntityID      *uuid.UUID         `json:"entity_id"`
+	CorrelationID *uuid.UUID         `json:"correlation_id"`
 }
 
 // Count matching audit entries inside the caller's RLS scope for pagination metadata.
 func (q *Queries) CountAuditLogsFiltered(ctx context.Context, arg CountAuditLogsFilteredParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countAuditLogsFiltered, arg.EntityType, arg.Action)
+	row := q.db.QueryRow(ctx, countAuditLogsFiltered,
+		arg.EntityType,
+		arg.Action,
+		arg.FromTs,
+		arg.ToTs,
+		arg.EntityID,
+		arg.CorrelationID,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -201,15 +216,23 @@ SELECT id, occurred_at, organization_id, actor_id, action, entity_type, entity_i
 FROM audit.audit_log
 WHERE ($3::text = '' OR entity_type = $3::text)
   AND ($4::text = '' OR action = $4::text)
+  AND ($5::timestamptz IS NULL OR occurred_at >= $5::timestamptz)
+  AND ($6::timestamptz IS NULL OR occurred_at <= $6::timestamptz)
+  AND ($7::uuid IS NULL OR entity_id = $7::uuid)
+  AND ($8::uuid IS NULL OR correlation_id = $8::uuid)
 ORDER BY occurred_at DESC
 LIMIT $1 OFFSET $2
 `
 
 type ListAuditLogsFilteredParams struct {
-	Limit      int32  `json:"limit"`
-	Offset     int32  `json:"offset"`
-	EntityType string `json:"entity_type"`
-	Action     string `json:"action"`
+	Limit         int32              `json:"limit"`
+	Offset        int32              `json:"offset"`
+	EntityType    string             `json:"entity_type"`
+	Action        string             `json:"action"`
+	FromTs        pgtype.Timestamptz `json:"from_ts"`
+	ToTs          pgtype.Timestamptz `json:"to_ts"`
+	EntityID      *uuid.UUID         `json:"entity_id"`
+	CorrelationID *uuid.UUID         `json:"correlation_id"`
 }
 
 type ListAuditLogsFilteredRow struct {
@@ -223,13 +246,17 @@ type ListAuditLogsFilteredRow struct {
 	CorrelationID  uuid.UUID          `json:"correlation_id"`
 }
 
-// Filtered list of audit entries with optional entity_type / action predicates.
+// Filtered list of audit entries with optional entity_type / action / time-range / entity_id / correlation_id predicates.
 func (q *Queries) ListAuditLogsFiltered(ctx context.Context, arg ListAuditLogsFilteredParams) ([]ListAuditLogsFilteredRow, error) {
 	rows, err := q.db.Query(ctx, listAuditLogsFiltered,
 		arg.Limit,
 		arg.Offset,
 		arg.EntityType,
 		arg.Action,
+		arg.FromTs,
+		arg.ToTs,
+		arg.EntityID,
+		arg.CorrelationID,
 	)
 	if err != nil {
 		return nil, err

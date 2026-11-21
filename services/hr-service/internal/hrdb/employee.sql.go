@@ -405,13 +405,9 @@ SELECT id, organization_id, employee_no, full_name, national_id, date_of_birth, 
        encrypted_full_name, encrypted_national_id, encrypted_dob, encrypted_email, national_id_hash,
        hire_date, status, user_ref_id, row_version
 FROM hr.employee
-WHERE organization_id = $1 AND national_id_hash = $2 AND deleted_at IS NULL
+WHERE national_id_hash = $1 AND deleted_at IS NULL
+LIMIT 1
 `
-
-type GetEmployeeByNationalIDHashParams struct {
-	OrganizationID uuid.UUID `json:"organization_id"`
-	NationalIDHash *string   `json:"national_id_hash"`
-}
 
 type GetEmployeeByNationalIDHashRow struct {
 	ID                  uuid.UUID   `json:"id"`
@@ -432,8 +428,8 @@ type GetEmployeeByNationalIDHashRow struct {
 	RowVersion          int32       `json:"row_version"`
 }
 
-func (q *Queries) GetEmployeeByNationalIDHash(ctx context.Context, arg GetEmployeeByNationalIDHashParams) (GetEmployeeByNationalIDHashRow, error) {
-	row := q.db.QueryRow(ctx, getEmployeeByNationalIDHash, arg.OrganizationID, arg.NationalIDHash)
+func (q *Queries) GetEmployeeByNationalIDHash(ctx context.Context, nationalIDHash *string) (GetEmployeeByNationalIDHashRow, error) {
+	row := q.db.QueryRow(ctx, getEmployeeByNationalIDHash, nationalIDHash)
 	var i GetEmployeeByNationalIDHashRow
 	err := row.Scan(
 		&i.ID,
@@ -528,8 +524,9 @@ func (q *Queries) ListCompensationsByEmployee(ctx context.Context, employeeID uu
 }
 
 const listEmployees = `-- name: ListEmployees :many
-SELECT id, organization_id, employee_no, full_name, encrypted_full_name, encrypted_national_id,
-       encrypted_dob, encrypted_email, hire_date, status, user_ref_id, row_version
+SELECT id, organization_id, employee_no, full_name, date_of_birth, email,
+       encrypted_full_name, encrypted_national_id, encrypted_dob, encrypted_email,
+       hire_date, status, user_ref_id, row_version
 FROM hr.employee
 WHERE deleted_at IS NULL
   AND ($3::text IS NULL OR status = $3)
@@ -548,6 +545,8 @@ type ListEmployeesRow struct {
 	OrganizationID      uuid.UUID   `json:"organization_id"`
 	EmployeeNo          string      `json:"employee_no"`
 	FullName            string      `json:"full_name"`
+	DateOfBirth         pgtype.Date `json:"date_of_birth"`
+	Email               *string     `json:"email"`
 	EncryptedFullName   *string     `json:"encrypted_full_name"`
 	EncryptedNationalID *string     `json:"encrypted_national_id"`
 	EncryptedDob        *string     `json:"encrypted_dob"`
@@ -572,6 +571,8 @@ func (q *Queries) ListEmployees(ctx context.Context, arg ListEmployeesParams) ([
 			&i.OrganizationID,
 			&i.EmployeeNo,
 			&i.FullName,
+			&i.DateOfBirth,
+			&i.Email,
 			&i.EncryptedFullName,
 			&i.EncryptedNationalID,
 			&i.EncryptedDob,

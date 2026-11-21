@@ -42,10 +42,11 @@ func (q *Queries) CountExchangeRateTypes(ctx context.Context) (int64, error) {
 const countExchangeRates = `-- name: CountExchangeRates :one
 SELECT COUNT(*)
 FROM cur.exchange_rate er
+JOIN cur.exchange_rate_type rt ON rt.id = er.rate_type_id
 WHERE er.deleted_at IS NULL
   AND ($1::text = '' OR er.from_currency = $1::text)
   AND ($2::text = '' OR er.to_currency = $2::text)
-  AND ($3::text = '' OR er.rate_type_id::text = $3::text)
+  AND ($3::text = '' OR er.rate_type_id::text = $3::text OR UPPER(rt.code) = UPPER($3::text))
   AND ($4::date IS NULL OR (er.valid_from <= $4::date AND (er.valid_to IS NULL OR er.valid_to >= $4::date)))
 `
 
@@ -597,7 +598,7 @@ JOIN cur.exchange_rate_type rt ON rt.id = er.rate_type_id
 WHERE er.deleted_at IS NULL
   AND ($3::text = '' OR er.from_currency = $3::text)
   AND ($4::text = '' OR er.to_currency = $4::text)
-  AND ($5::text = '' OR er.rate_type_id::text = $5::text)
+  AND ($5::text = '' OR er.rate_type_id::text = $5::text OR UPPER(rt.code) = UPPER($5::text))
   AND ($6::date IS NULL OR (er.valid_from <= $6::date AND (er.valid_to IS NULL OR er.valid_to >= $6::date)))
 ORDER BY er.valid_from DESC, er.from_currency, er.to_currency
 LIMIT $1 OFFSET $2

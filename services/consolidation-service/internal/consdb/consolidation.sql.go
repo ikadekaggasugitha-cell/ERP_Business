@@ -264,6 +264,7 @@ func (q *Queries) CreateEliminationRule(ctx context.Context, arg CreateEliminati
 const deleteConsolidationGroup = `-- name: DeleteConsolidationGroup :execrows
 UPDATE cons.consolidation_group SET deleted_at = now(), updated_by = $3
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type DeleteConsolidationGroupParams struct {
@@ -718,6 +719,7 @@ const updateConsolidationGroup = `-- name: UpdateConsolidationGroup :one
 UPDATE cons.consolidation_group
 SET name = $3, parent_group_id = $4, presentation_currency_code = $5, updated_by = $6
 WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 

@@ -523,5 +523,108 @@ func TestGatewayProductionConfigAndMutationScopeAndHMAC(t *testing.T) {
 	}
 }
 
+func TestTieredAdminHierarchyPersonasAndOrgIsolation(t *testing.T) {
+	t.Setenv("GL_SERVICE_URL", "http://gl-service.internal:8080")
+	router, err := proxy.NewRouter()
+	if err != nil {
+		t.Fatalf("NewRouter: %v", err)
+	}
+	var seenTier, seenPerms string
+	rp, _ := router.Match("/api/v1/journal-entries")
+	rp.Transport = roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		seenTier = r.Header.Get("X-Admin-Tier")
+		seenPerms = r.Header.Get("X-Permissions")
+		rec := httptest.NewRecorder()
+		rec.WriteHeader(http.StatusOK)
+		return rec.Result(), nil
+	})
+	secret := []byte("strong-production-secret-at-least-32-bytes")
+	mux := newGatewayMux(router, sse.NewHub(), secret, true, false)
+
+	login := func(username string) (string, int, []orgSummary) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"`+username+`","password":"dev"}`))
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("login %s failed: %d %s", username, rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Token         string       `json:"token"`
+			User          userSummary  `json:"user"`
+			Organizations []orgSummary `json:"organizations"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal %s: %v", username, err)
+		}
+		return resp.Token, resp.User.AdminTier, resp.Organizations
+	}
+
+	// 1. Head Office Admin (admin.ho): tier 1, sees all 4 orgs (Holding + 2 Subsidiaries + Branch).
+	hoTok, hoTier, hoOrgs := login("admin.ho")
+	if hoTier != 1 || len(hoOrgs) != 4 {
+		t.Fatalf("admin.ho expected tier=1 orgs=4, got tier=%d orgs=%d", hoTier, len(hoOrgs))
+	}
+
+	// 2. Subsidiary Admin (admin.properti): tier 2, sees ONLY SUB-PRO + BRC-JKT (2 orgs).
+	subTok, subTier, subOrgs := login("admin.properti")
+	if subTier != 2 || len(subOrgs) != 2 {
+		t.Fatalf("admin.properti expected tier=2 orgs=2, got tier=%d orgs=%d", subTier, len(subOrgs))
+	}
+
+	// Subsidiary Admin can access own subsidiary (SUB-PRO) and its branch (BRC-JKT), and does NOT get consolidation perms.
+	for _, allowedOrg := range []string{branchOrgID, brcJktOrgID} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/journal-entries", nil)
+		req.Header.Set("Authorization", "Bearer "+subTok)
+		req.Header.Set("X-Organization-Id", allowedOrg)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("admin.properti accessing %s got %d, want 200", allowedOrg, rec.Code)
+		}
+		if seenTier != "2" {
+			t.Fatalf("expected X-Admin-Tier=2, got %q", seenTier)
+		}
+		if strings.Contains(seenPerms, "consolidation") {
+			t.Fatalf("SUBSIDIARY_ADMIN must not receive consolidation permissions: %q", seenPerms)
+		}
+	}
+
+	// Subsidiary Admin is BLOCKED (403) from Head Office (HLD-01) and sibling subsidiary (SUB-LOG).
+	for _, forbiddenOrg := range []string{defaultOrgID, subLogOrgID} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/journal-entries", nil)
+		req.Header.Set("Authorization", "Bearer "+subTok)
+		req.Header.Set("X-Organization-Id", forbiddenOrg)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("admin.properti accessing forbidden org %s got %d, want 403", forbiddenOrg, rec.Code)
+		}
+	}
+
+	// 3. Branch Admin (admin.cabang): tier 3, sees ONLY BRC-JKT (1 org), blocked from parent SUB-PRO.
+	brcTok, brcTier, brcOrgs := login("admin.cabang")
+	if brcTier != 3 || len(brcOrgs) != 1 || brcOrgs[0].ID != brcJktOrgID {
+		t.Fatalf("admin.cabang expected tier=3 orgs=[BRC-JKT], got tier=%d orgs=%+v", brcTier, brcOrgs)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/journal-entries", nil)
+	req.Header.Set("Authorization", "Bearer "+brcTok)
+	req.Header.Set("X-Organization-Id", branchOrgID)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("admin.cabang accessing parent SUB-PRO got %d, want 403", rec.Code)
+	}
+
+	// Head Office Admin can access any subsidiary in its tree.
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/journal-entries", nil)
+	req.Header.Set("Authorization", "Bearer "+hoTok)
+	req.Header.Set("X-Organization-Id", subLogOrgID)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || seenTier != "1" {
+		t.Fatalf("admin.ho accessing SUB-LOG got code=%d tier=%q, want 200 tier=1", rec.Code, seenTier)
+	}
+}
+
 
 

@@ -361,6 +361,16 @@ func (s *Server) listTxn(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func requireTaxApprove(r *http.Request) error {
+	if err := httpx.RequirePermission(r, "tax.approve"); err != nil {
+		if httpx.RequirePermission(r, "tax:approve") == nil {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 func (s *Server) reportEfaktur(w http.ResponseWriter, r *http.Request) {
 	scope, err := httpx.RequireScope(r)
 	if err != nil {
@@ -372,7 +382,7 @@ func (s *Server) reportEfaktur(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	if err := httpx.RequirePermission(r, "tax:write"); err != nil {
+	if err := requireTaxApprove(r); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
@@ -396,9 +406,21 @@ func (s *Server) reportEfaktur(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
+	if t.CreatedBy != uuid.Nil && t.CreatedBy == user && !httpx.HasRole(r.Context(), "SYSTEM_ADMIN") {
+		httpx.WriteError(w, r, httpx.Forbidden("maker-checker separation of duties: creator cannot report own tax invoice"))
+		return
+	}
+	if strings.EqualFold(deref(t.EfakturStatus), "Reported") {
+		httpx.WriteError(w, r, httpx.Conflict("ALREADY_REPORTED", "faktur pajak sudah pernah dilaporkan"))
+		return
+	}
 	efakturNo := strings.TrimSpace(req.EfakturNo)
 	if efakturNo == "" {
 		efakturNo = deref(t.EfakturNo)
+	}
+	if efakturNo == "" {
+		httpx.WriteError(w, r, httpx.BadRequest("efakturNo wajib diisi untuk pelaporan e-Faktur"))
+		return
 	}
 	payload, _ := json.Marshal(map[string]any{
 		"sourceDocumentRef": t.SourceDocumentRef,

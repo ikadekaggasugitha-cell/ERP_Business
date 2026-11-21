@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,16 +12,24 @@ import (
 
 	"github.com/sinergiinvestasiproperti/erp/services/project-service/internal/prjdb"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
 )
 
 type fakeProjectStore struct {
-	approvedRef string
+	approvedRef  string
+	createCalls  int
+	projectRow   *prjdb.PrjProject
+	billingRows  []prjdb.PrjProjectBilling
 }
 
 func (f *fakeProjectStore) CreateProject(context.Context, []uuid.UUID, prjdb.CreateProjectParams) (prjdb.CreateProjectRow, error) {
+	f.createCalls++
 	return prjdb.CreateProjectRow{ID: uuid.New(), RowVersion: 1}, nil
 }
 func (f *fakeProjectStore) GetProject(context.Context, []uuid.UUID, uuid.UUID) (prjdb.PrjProject, error) {
+	if f.projectRow != nil {
+		return *f.projectRow, nil
+	}
 	return prjdb.PrjProject{ID: uuid.New(), RowVersion: 1}, nil
 }
 func (f *fakeProjectStore) ListProjects(context.Context, []uuid.UUID, *string, int32, int32) ([]prjdb.PrjProject, int64, error) {
@@ -72,7 +81,7 @@ func (f *fakeProjectStore) CreateBilling(context.Context, []uuid.UUID, prjdb.Cre
 	return prjdb.CreateProjectBillingRow{ID: uuid.New(), RowVersion: 1}, nil
 }
 func (f *fakeProjectStore) ListBillings(context.Context, []uuid.UUID, *uuid.UUID, int32, int32) ([]prjdb.PrjProjectBilling, int64, error) {
-	return nil, 0, nil
+	return f.billingRows, int64(len(f.billingRows)), nil
 }
 func (f *fakeProjectStore) ApproveBillingAndEmit(_ context.Context, _ []uuid.UUID, _, _, _, _ uuid.UUID, _ int32, _ *uuid.UUID, _ *string) (int32, string, error) {
 	f.approvedRef = "PB-PRJ01-12345678"
@@ -132,5 +141,63 @@ func TestProjectBillingApproveEmitsInvoiceRef(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || store.approvedRef == "" {
 		t.Fatalf("expected 200 and invoice ref, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestProjectDTOWireFormatAndIdempotency(t *testing.T) {
+	sd, _ := platform.ParseDate("2026-01-01")
+	amt, _ := platform.ParseNumeric("1250000.50")
+	store := &fakeProjectStore{
+		projectRow: &prjdb.PrjProject{
+			ID: uuid.New(), OrganizationID: platform.SystemOrgID, Code: "PRJ-TPL", Name: "Template",
+			ProjectType: "Construction", CurrencyCode: "IDR", StartDate: sd, Status: "Draft", RowVersion: 1,
+		},
+		billingRows: []prjdb.PrjProjectBilling{{
+			ID: uuid.New(), ProjectID: uuid.New(), BillingType: "Milestone", Amount: amt, Status: "Draft", RowVersion: 1,
+		}},
+	}
+	h := newTestMux(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/projects/"+store.projectRow.ID.String(), nil)
+	authHeaders(req, "project:read")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var proj map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &proj); err != nil {
+		t.Fatal(err)
+	}
+	if proj["startDate"] != "2026-01-01" || proj["isSystem"] != true {
+		t.Fatalf("unexpected project DTO: %v", proj)
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/project-billings", nil)
+	authHeaders(req2, "project:read")
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK || !strings.Contains(rec2.Body.String(), `"amount":"1250000.5000"`) {
+		t.Fatalf("expected formatted decimal string in billing list, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+
+	org := uuid.NewString()
+	user := uuid.NewString()
+	body := `{"code":"PRJ-2","name":"Tower B","projectType":"Construction","currencyCode":"IDR"}`
+	for i := 0; i < 2; i++ {
+		r := httptest.NewRequest(http.MethodPost, "/projects", strings.NewReader(body))
+		r.Header.Set("X-Organization-Id", org)
+		r.Header.Set("X-User-Id", user)
+		r.Header.Set("X-Permissions", "project:write")
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Idempotency-Key", "idem-prj-1")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("call %d expected 201, got %d: %s", i, w.Code, w.Body.String())
+		}
+	}
+	if store.createCalls != 1 {
+		t.Fatalf("expected 1 create call under idempotency replay, got %d", store.createCalls)
 	}
 }

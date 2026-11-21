@@ -98,5 +98,52 @@ func TestARInvoiceValidationAndEventEnrichment(t *testing.T) {
 	if payload["customerId"] != custID.String() || payload["taxAmount"] != "22000.0000" {
 		t.Fatalf("enriched ar.invoice.issued missing fields: %+v", payload)
 	}
+
+	// DELETE on Issued invoice must return 422 INVOICE_NOT_DRAFT.
+	req = httptest.NewRequest(http.MethodDelete, "/customer-invoices/"+store.inv.ID.String(), nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-User-Id", userID.String())
+	req.Header.Set("X-Permissions", "ar:write")
+	req.Header.Set("If-Match", `"1"`)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "INVOICE_NOT_DRAFT") {
+		t.Fatalf("expected 422 INVOICE_NOT_DRAFT on delete Issued, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// POST /pay requires ar.approve and enforces SoD.
+	store.inv.CreatedBy = userID
+	req = httptest.NewRequest(http.MethodPost, "/customer-invoices/"+store.inv.ID.String()+"/pay", nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-User-Id", userID.String())
+	req.Header.Set("X-Permissions", "ar:write")
+	req.Header.Set("If-Match", `"1"`)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 without ar.approve, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/customer-invoices/"+store.inv.ID.String()+"/pay", nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-User-Id", userID.String())
+	req.Header.Set("X-Permissions", "ar:write,ar.approve")
+	req.Header.Set("If-Match", `"1"`)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for maker-checker SoD self-pay, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/customer-invoices/"+store.inv.ID.String()+"/pay", nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-User-Id", uuid.NewString())
+	req.Header.Set("X-Permissions", "ar:write,ar.approve")
+	req.Header.Set("If-Match", `"1"`)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on approved pay by different user, got %d: %s", rec.Code, rec.Body.String())
+	}
 }
 

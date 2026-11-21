@@ -49,6 +49,7 @@ func NewRouter(store Store, metrics *httpx.Metrics, checks ...httpx.ReadinessChe
 	mux.HandleFunc("GET /metrics", metrics.Handler())
 
 	mux.HandleFunc("POST /employees", h.handleCreateEmployee)
+	mux.HandleFunc("POST /employees/search", h.handleSearchEmployee)
 	mux.HandleFunc("GET /employees", h.handleListEmployees)
 	mux.HandleFunc("GET /employees/{id}", h.handleGetEmployee)
 	mux.HandleFunc("PUT /employees/{id}", h.handleUpdateEmployee)
@@ -374,6 +375,10 @@ func (h *Handler) handleCreatePosition(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, r, err)
 			return
 		}
+		if orgRefID == platform.SystemOrgID || !hrOrgInScope(scope, orgRefID) {
+			httpx.WriteError(w, r, httpx.Forbidden("organizationRefId di luar scope organisasi"))
+			return
+		}
 	}
 	var parentID *uuid.UUID
 	if strings.TrimSpace(req.ParentPositionID) != "" {
@@ -469,10 +474,12 @@ func (h *Handler) handleCreateEmployment(w http.ResponseWriter, r *http.Request)
 		EffectiveFrom  string `json:"effectiveFrom"`
 		EffectiveTo    string `json:"effectiveTo"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, h.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
+
 	posID, err := httpx.ParseUUIDParam("positionId", req.PositionID)
 	if err != nil {
 		httpx.WriteError(w, r, err)
@@ -504,7 +511,7 @@ func (h *Handler) handleCreateEmployment(w http.ResponseWriter, r *http.Request)
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, row.RowVersion, map[string]any{
+	httpx.SaveIDResponse(w, h.idem, scope, idemKey, reqHash, http.StatusCreated, row.RowVersion, map[string]any{
 		"id":             row.ID.String(),
 		"employeeId":     row.EmployeeID.String(),
 		"positionId":     row.PositionID.String(),
@@ -578,10 +585,12 @@ func (h *Handler) handleCreateCompensation(w http.ResponseWriter, r *http.Reques
 		Amount        string `json:"amount"`
 		EffectiveFrom string `json:"effectiveFrom"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, h.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
+
 	if strings.TrimSpace(req.ComponentCode) == "" {
 		httpx.WriteError(w, r, httpx.BadRequest("componentCode wajib diisi"))
 		return
@@ -613,7 +622,7 @@ func (h *Handler) handleCreateCompensation(w http.ResponseWriter, r *http.Reques
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, row.RowVersion, map[string]any{
+	httpx.SaveIDResponse(w, h.idem, scope, idemKey, reqHash, http.StatusCreated, row.RowVersion, map[string]any{
 		"id":            row.ID.String(),
 		"employeeId":    row.EmployeeID.String(),
 		"componentCode": row.ComponentCode,
@@ -621,6 +630,47 @@ func (h *Handler) handleCreateCompensation(w http.ResponseWriter, r *http.Reques
 		"effectiveFrom": platform.FormatDate(row.EffectiveFrom),
 		"rowVersion":    row.RowVersion,
 	})
+}
+
+func (h *Handler) handleSearchEmployee(w http.ResponseWriter, r *http.Request) {
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := httpx.RequirePermission(r, "hr:read"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var req struct {
+		NationalID string `json:"nationalId"`
+	}
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if strings.TrimSpace(req.NationalID) == "" {
+		httpx.WriteError(w, r, httpx.BadRequest("nationalId wajib diisi"))
+		return
+	}
+	emp, err := h.store.FindByNationalID(r.Context(), scope, strings.TrimSpace(req.NationalID))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteIDResponse(w, http.StatusOK, emp.RowVersion, emp)
+}
+
+func hrOrgInScope(scope []uuid.UUID, target uuid.UUID) bool {
+	if target == platform.SystemOrgID {
+		return false
+	}
+	for _, id := range scope {
+		if id == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *Handler) handleListCompensations(w http.ResponseWriter, r *http.Request) {

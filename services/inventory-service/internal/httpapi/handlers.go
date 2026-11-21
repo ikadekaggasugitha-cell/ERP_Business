@@ -138,10 +138,12 @@ func (s *Server) createWarehouse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req warehouseReq
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
+
 	if strings.TrimSpace(req.Code) == "" || strings.TrimSpace(req.Name) == "" {
 		httpx.WriteError(w, r, httpx.BadRequest("code dan name wajib diisi"))
 		return
@@ -150,6 +152,10 @@ func (s *Server) createWarehouse(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.OrganizationRefID) != "" {
 		if orgRef, err = httpx.ParseUUIDParam("organizationRefId", req.OrganizationRefID); err != nil {
 			httpx.WriteError(w, r, err)
+			return
+		}
+		if orgRef == platform.SystemOrgID || !invOrgInScope(scope, orgRef) {
+			httpx.WriteError(w, r, httpx.Forbidden("organizationRefId di luar scope organisasi"))
 			return
 		}
 	}
@@ -164,13 +170,25 @@ func (s *Server) createWarehouse(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, "kode warehouse sudah dipakai"))
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, created.RowVersion, warehouseDTO{
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, created.RowVersion, warehouseDTO{
 		ID:                created.ID.String(),
 		Code:              created.Code,
 		Name:              created.Name,
 		OrganizationRefID: created.OrganizationRefID.String(),
 		RowVersion:        created.RowVersion,
 	})
+}
+
+func invOrgInScope(scope []uuid.UUID, target uuid.UUID) bool {
+	if target == platform.SystemOrgID {
+		return false
+	}
+	for _, id := range scope {
+		if id == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) listWarehouses(w http.ResponseWriter, r *http.Request) {
@@ -308,6 +326,10 @@ func (s *Server) createStockMovement(w http.ResponseWriter, r *http.Request) {
 	unitCost, err := platform.ParseOptionalNumeric(req.UnitCost)
 	if err != nil {
 		httpx.WriteError(w, r, httpx.BadRequest("unitCost tidak valid"))
+		return
+	}
+	if ucRat := platform.NumericToRat(unitCost); ucRat != nil && ucRat.Sign() < 0 {
+		httpx.WriteError(w, r, httpx.BadRequest("unitCost tidak boleh negatif"))
 		return
 	}
 	moveDate := pgtype.Date{Time: time.Now().UTC(), Valid: true}
@@ -519,6 +541,10 @@ func (s *Server) issueReservation(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.BadRequest("amount tidak valid"))
 		return
 	}
+	if amtRat := platform.NumericToRat(amountNum); amtRat != nil && amtRat.Sign() < 0 {
+		httpx.WriteError(w, r, httpx.BadRequest("amount tidak boleh negatif"))
+		return
+	}
 	res, err := s.repo.GetByID(r.Context(), scope, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -528,10 +554,12 @@ func (s *Server) issueReservation(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
+	qtyStr := platform.FormatNumeric(res.ReservedQty, 4)
 	payload, _ := json.Marshal(map[string]any{
 		"itemId":      res.ItemID.String(),
 		"warehouseId": res.WarehouseID.String(),
-		"issuedQty":   platform.FormatNumeric(res.ReservedQty, 4),
+		"issuedQty":   qtyStr,
+		"qty":         qtyStr,
 		"amount":      platform.FormatNumeric(amountNum, 4),
 		"reference":   res.SalesOrderRef,
 	})

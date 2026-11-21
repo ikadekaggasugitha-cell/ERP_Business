@@ -14,11 +14,15 @@ import (
 	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
 )
 
-var Topics = []string{eventbus.TopicFor("procurement.po.approved")}
+var Topics = []string{
+	eventbus.TopicFor("procurement.po.approved"),
+	eventbus.TopicFor("ap.invoice.recorded"),
+}
 var sysActor = uuid.MustParse("00000000-0000-0000-0000-0000000000b2")
 
 type Store interface {
 	ConsumePOApproved(ctx context.Context, scope []uuid.UUID, mark budgetdb.MarkEventProcessedParams, orgID, actor, corr uuid.UUID, docRef string, amount pgtype.Numeric) (bool, error)
+	ConsumeAPInvoiceRecorded(ctx context.Context, scope []uuid.UUID, mark budgetdb.MarkEventProcessedParams, orgID, actor uuid.UUID, sourceRef string) (bool, error)
 }
 
 type Consumer struct {
@@ -29,14 +33,27 @@ type Consumer struct {
 func New(repo Store, brokers []string) *Consumer {
 	return &Consumer{repo: repo, c: eventbus.NewConsumer(brokers, "budget-service", Topics)}
 }
-func NewHandler(repo Store) *Consumer              { return &Consumer{repo: repo} }
-func (x *Consumer) Run(ctx context.Context) error  { return x.c.Run(ctx, x.Handle) }
-func (x *Consumer) Close() error                   { if x.c != nil { return x.c.Close() }; return nil }
+func NewHandler(repo Store) *Consumer             { return &Consumer{repo: repo} }
+func (x *Consumer) Run(ctx context.Context) error { return x.c.Run(ctx, x.Handle) }
+func (x *Consumer) Close() error {
+	if x.c != nil {
+		return x.c.Close()
+	}
+	return nil
+}
 
 func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
-	if env.EventType != "procurement.po.approved" {
+	switch env.EventType {
+	case "procurement.po.approved":
+		return x.handlePOApproved(ctx, env)
+	case "ap.invoice.recorded":
+		return x.handleAPInvoiceRecorded(ctx, env)
+	default:
 		return nil
 	}
+}
+
+func (x *Consumer) handlePOApproved(ctx context.Context, env eventbus.Envelope) error {
 	org, err := uuid.Parse(strings.TrimSpace(env.OrganizationID))
 	if err != nil {
 		return eventbus.ErrPoison{Err: fmt.Errorf("invalid organizationId: %w", err)}
@@ -70,5 +87,35 @@ func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 		ref = env.AggregateID
 	}
 	_, err = x.repo.ConsumePOApproved(ctx, []uuid.UUID{org}, budgetdb.MarkEventProcessedParams{EventID: evID, EventType: env.EventType}, org, sysActor, corr, ref, amt)
+	return err
+}
+
+func (x *Consumer) handleAPInvoiceRecorded(ctx context.Context, env eventbus.Envelope) error {
+	org, err := uuid.Parse(strings.TrimSpace(env.OrganizationID))
+	if err != nil {
+		return eventbus.ErrPoison{Err: fmt.Errorf("invalid organizationId: %w", err)}
+	}
+	evID, err := uuid.Parse(strings.TrimSpace(env.EventID))
+	if err != nil {
+		return eventbus.ErrPoison{Err: fmt.Errorf("invalid eventId: %w", err)}
+	}
+	var p struct {
+		PoNo              string `json:"poNo"`
+		SourceDocumentRef string `json:"sourceDocumentRef"`
+		Reference         string `json:"reference"`
+	}
+	if len(env.Data) > 0 {
+		if err := json.Unmarshal(env.Data, &p); err != nil {
+			return eventbus.ErrPoison{Err: fmt.Errorf("invalid ap invoice payload: %w", err)}
+		}
+	}
+	ref := strings.TrimSpace(p.PoNo)
+	if ref == "" {
+		ref = strings.TrimSpace(p.SourceDocumentRef)
+	}
+	if ref == "" {
+		ref = strings.TrimSpace(p.Reference)
+	}
+	_, err = x.repo.ConsumeAPInvoiceRecorded(ctx, []uuid.UUID{org}, budgetdb.MarkEventProcessedParams{EventID: evID, EventType: env.EventType}, org, sysActor, ref)
 	return err
 }

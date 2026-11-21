@@ -330,10 +330,12 @@ func TestProcurementPOLifecycleGRPRAndValidation(t *testing.T) {
 
 	orgID := uuid.NewString()
 	userID := uuid.NewString()
+	approverID := uuid.NewString()
 	vendorID := uuid.NewString()
 	itemID := uuid.NewString()
 	readPerm := "procurement:read"
 	rwPerms := "procurement:read,procurement:write"
+	approvePerms := "procurement:read,procurement:approve"
 
 	// 1. RBAC rejection when missing procurement:write
 	rec := doPOReq(t, handler, http.MethodPost, "/purchase-orders", orgID, userID, readPerm, nil, map[string]any{})
@@ -379,12 +381,21 @@ func TestProcurementPOLifecycleGRPRAndValidation(t *testing.T) {
 		t.Fatalf("update PO expected 200, got %d (%s)", rec.Code, rec.Body.String())
 	}
 
-	// Stale Approve with If-Match: 1 fails 409; valid Approve with If-Match: 2 succeeds (rowVersion=3)
-	recStale := doPOReq(t, handler, http.MethodPost, "/purchase-orders/"+created.ID+"/approve", orgID, userID, rwPerms, map[string]string{"If-Match": "1"}, nil)
+	// Approve without procurement:approve fails 403; self-approve by creator fails 403 SoD;
+	// stale Approve with If-Match: 1 fails 409; valid Approve by distinct approver with If-Match: 2 succeeds (rowVersion=3)
+	recNoPerm := doPOReq(t, handler, http.MethodPost, "/purchase-orders/"+created.ID+"/approve", orgID, approverID, rwPerms, map[string]string{"If-Match": "2"}, nil)
+	if recNoPerm.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 without procurement:approve, got %d", recNoPerm.Code)
+	}
+	recSelf := doPOReq(t, handler, http.MethodPost, "/purchase-orders/"+created.ID+"/approve", orgID, userID, approvePerms, map[string]string{"If-Match": "2"}, nil)
+	if recSelf.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 SOD_VIOLATION on self-approve, got %d (%s)", recSelf.Code, recSelf.Body.String())
+	}
+	recStale := doPOReq(t, handler, http.MethodPost, "/purchase-orders/"+created.ID+"/approve", orgID, approverID, approvePerms, map[string]string{"If-Match": "1"}, nil)
 	if recStale.Code != http.StatusConflict {
 		t.Fatalf("expected 409 stale If-Match, got %d", recStale.Code)
 	}
-	rec = doPOReq(t, handler, http.MethodPost, "/purchase-orders/"+created.ID+"/approve", orgID, userID, rwPerms, map[string]string{"If-Match": "2"}, nil)
+	rec = doPOReq(t, handler, http.MethodPost, "/purchase-orders/"+created.ID+"/approve", orgID, approverID, approvePerms, map[string]string{"If-Match": "2"}, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("approve PO expected 200, got %d (%s)", rec.Code, rec.Body.String())
 	}
@@ -436,9 +447,9 @@ func TestProcurementPOLifecycleGRPRAndValidation(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("submit PR expected 200, got %d", rec.Code)
 	}
-	rec = doPOReq(t, handler, http.MethodPost, "/purchase-requisitions/"+pr.ID+"/approve", orgID, userID, rwPerms, map[string]string{"If-Match": "2"}, nil)
+	rec = doPOReq(t, handler, http.MethodPost, "/purchase-requisitions/"+pr.ID+"/approve", orgID, approverID, approvePerms, map[string]string{"If-Match": "2"}, nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("approve PR expected 200, got %d", rec.Code)
+		t.Fatalf("approve PR expected 200, got %d (%s)", rec.Code, rec.Body.String())
 	}
 }
 

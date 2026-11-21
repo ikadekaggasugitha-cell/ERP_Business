@@ -291,3 +291,27 @@ func TestGatewayHMACAndSystemOrgMutationGuard(t *testing.T) {
 		t.Fatalf("expected 403 when systemOrg is active org on POST, got %d", rec.Code)
 	}
 }
+
+func TestTieredAdminDelegationMatrix(t *testing.T) {
+	if !CanDelegateTier(AdminTierSystem, AdminTierHolding) {
+		t.Fatal("SYSTEM_ADMIN must be able to delegate HOLDING_ADMIN")
+	}
+	if !CanDelegateTier(AdminTierHolding, AdminTierSubsidiary) {
+		t.Fatal("HOLDING_ADMIN must be able to delegate SUBSIDIARY_ADMIN")
+	}
+	if CanDelegateTier(AdminTierHolding, AdminTierSystem) || CanDelegateTier(AdminTierHolding, AdminTierHolding) {
+		t.Fatal("HOLDING_ADMIN must NOT be able to delegate SYSTEM_ADMIN or peer HOLDING_ADMIN")
+	}
+	if !CanDelegateTier(AdminTierSubsidiary, AdminTierBranch) || !CanDelegateTier(AdminTierSubsidiary, AdminTierNone) {
+		t.Fatal("SUBSIDIARY_ADMIN must be able to delegate BRANCH_ADMIN and functional roles")
+	}
+	if CanDelegateTier(AdminTierSubsidiary, AdminTierHolding) || CanDelegateTier(AdminTierSubsidiary, AdminTierSubsidiary) {
+		t.Fatal("SUBSIDIARY_ADMIN must NOT be able to delegate HOLDING_ADMIN or peer SUBSIDIARY_ADMIN")
+	}
+	if !CanDelegateTier(AdminTierBranch, AdminTierNone) || CanDelegateTier(AdminTierBranch, AdminTierBranch) {
+		t.Fatal("BRANCH_ADMIN must only delegate functional roles")
+	}
+	if CanDelegateTier(AdminTierNone, AdminTierNone) {
+		t.Fatal("non-admin must not delegate roles")
+	}
+}

@@ -64,7 +64,16 @@ type updateReq struct {
 
 type assignRoleReq struct {
 	RoleID            uuid.UUID `json:"roleId"`
+	RoleCode          string    `json:"roleCode,omitempty"`
 	OrganizationRefID string    `json:"organizationRefId"`
+}
+
+func roleTierForCode(code string) int {
+	c := strings.ToUpper(strings.TrimSpace(code))
+	if c == "" {
+		return httpx.AdminTierNone
+	}
+	return httpx.AdminTierForRoles([]string{c})
 }
 
 func (s *Server) create(w http.ResponseWriter, r *http.Request) {
@@ -490,6 +499,15 @@ func (s *Server) assignRole(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.Forbidden("organizationRefId berada di luar scope akses"))
 		return
 	}
+	// Tiered Admin Anti-Escalation Guard: an admin can only assign roles strictly below their own tier.
+	if len(httpx.Roles(r.Context())) > 0 {
+		callerTier := httpx.CallerAdminTier(r.Context())
+		targetTier := roleTierForCode(req.RoleCode)
+		if !httpx.CanDelegateTier(callerTier, targetTier) {
+			httpx.WriteError(w, r, httpx.Forbidden("admin tier tidak cukup untuk menetapkan role ini (privilege escalation ditolak)"))
+			return
+		}
+	}
 	payload, _ := json.Marshal(map[string]any{"userId": userID, "roleId": req.RoleID, "organizationRefId": orgRef})
 	row, err := s.repo.AssignRoleAndEmit(r.Context(), scope, userdb.CreateUserOrgAssignmentParams{
 		OrganizationID:    scope[0],
@@ -571,6 +589,15 @@ func (s *Server) removeRole(w http.ResponseWriter, r *http.Request) {
 	if !orgInScope(scope, orgRef) {
 		httpx.WriteError(w, r, httpx.Forbidden("organizationRefId berada di luar scope akses"))
 		return
+	}
+	// Tiered Admin Anti-Escalation Guard: an admin can only revoke roles strictly below their own tier.
+	if len(httpx.Roles(r.Context())) > 0 {
+		callerTier := httpx.CallerAdminTier(r.Context())
+		targetTier := roleTierForCode(r.URL.Query().Get("roleCode"))
+		if !httpx.CanDelegateTier(callerTier, targetTier) {
+			httpx.WriteError(w, r, httpx.Forbidden("admin tier tidak cukup untuk mencabut role ini"))
+			return
+		}
 	}
 	payload, _ := json.Marshal(map[string]any{"userId": userID, "roleId": roleID, "organizationRefId": orgRef, "removed": true})
 	n, err := s.repo.RemoveRoleAndEmit(r.Context(), scope, userdb.RemoveUserOrgAssignmentParams{

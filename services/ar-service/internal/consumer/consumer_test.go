@@ -10,15 +10,25 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/sinergiinvestasiproperti/erp/services/ar-service/internal/ardb"
+	"github.com/sinergiinvestasiproperti/erp/services/ar-service/internal/repository"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/eventbus"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
 )
 
 type stubStore struct {
-	ev ardb.InsertOutboxParams
+	createCalls int
+	ev          ardb.InsertOutboxParams
+	settled     []repository.SettlementAllocation
 }
 
 func (s *stubStore) ConsumeAndCreateInvoice(_ context.Context, _ []uuid.UUID, _ ardb.MarkEventProcessedParams, _ ardb.CreateInvoiceParams, _ []ardb.CreateInvoiceLineParams, ev ardb.InsertOutboxParams) (bool, error) {
+	s.createCalls++
 	s.ev = ev
+	return true, nil
+}
+
+func (s *stubStore) ConsumePaymentSettled(_ context.Context, _ []uuid.UUID, _ ardb.MarkEventProcessedParams, _, _, _, _ uuid.UUID, allocs []repository.SettlementAllocation) (bool, error) {
+	s.settled = allocs
 	return true, nil
 }
 
@@ -70,6 +80,37 @@ func TestHandleGoodsIssuedARConsumer(t *testing.T) {
 	_ = json.Unmarshal(s.ev.Payload, &payload)
 	if payload["invoiceNo"] != "PB-PRJ01-001" || payload["currencyCode"] != "USD" {
 		t.Fatalf("unexpected project billing AR payload: %+v", payload)
+	}
+
+	// maintenance.workorder.parts_requested goods issue must be ignored by AR
+	prevCalls := s.createCalls
+	err = c.Handle(context.Background(), eventbus.Envelope{
+		EventID:        uuid.NewString(),
+		EventType:      "inventory.goods.issued",
+		AggregateID:    uuid.NewString(),
+		OrganizationID: uuid.NewString(),
+		Data:           []byte(`{"reference":"MNT-1","sourceEventType":"maintenance.workorder.parts_requested","amount":"0.0000"}`),
+	})
+	if err != nil {
+		t.Fatalf("maintenance parts issue should not error: %v", err)
+	}
+	if s.createCalls != prevCalls {
+		t.Fatalf("expected maintenance spare-part issue to be ignored, but created AR invoice")
+	}
+
+	// treasury.payment.settled applies AR receipt allocations
+	err = c.Handle(context.Background(), eventbus.Envelope{
+		EventID:        uuid.NewString(),
+		EventType:      "treasury.payment.settled",
+		AggregateID:    uuid.NewString(),
+		OrganizationID: uuid.NewString(),
+		Data:           []byte(`{"paymentNo":"RCP-1","paymentType":"Incoming","allocations":[{"invoiceId":"SI-SO-55","invoiceType":"AR","allocatedAmount":"300000.0000"}]}`),
+	})
+	if err != nil {
+		t.Fatalf("unexpected AR settlement error: %v", err)
+	}
+	if len(s.settled) != 1 || s.settled[0].InvoiceRef != "SI-SO-55" || platform.FormatNumeric(s.settled[0].AllocatedAmount, 4) != "300000.0000" {
+		t.Fatalf("unexpected AR settlement allocations: %+v", s.settled)
 	}
 }
 

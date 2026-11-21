@@ -87,7 +87,77 @@ const (
 	userKey
 	rolesKey
 	permsKey
+	adminTierKey
 )
+
+// Hierarchical Admin Tiers (lower number = higher privilege).
+const (
+	AdminTierSystem     = 0  // Platform super-root (SYSTEM_ADMIN)
+	AdminTierHolding    = 1  // Head Office / Holding primary admin (HOLDING_ADMIN)
+	AdminTierSubsidiary = 2  // Subsidiary / Operating Company admin (SUBSIDIARY_ADMIN)
+	AdminTierBranch     = 3  // Branch / Business Unit admin (BRANCH_ADMIN)
+	AdminTierNone       = 99 // Non-admin functional roles
+)
+
+// AdminTierForRoles computes the strongest (lowest-numbered) admin tier from a role list.
+func AdminTierForRoles(roles []string) int {
+	best := AdminTierNone
+	for _, r := range roles {
+		switch strings.ToUpper(strings.TrimSpace(r)) {
+		case "SYSTEM_ADMIN":
+			return AdminTierSystem
+		case "HOLDING_ADMIN":
+			if AdminTierHolding < best {
+				best = AdminTierHolding
+			}
+		case "SUBSIDIARY_ADMIN":
+			if AdminTierSubsidiary < best {
+				best = AdminTierSubsidiary
+			}
+		case "BRANCH_ADMIN":
+			if AdminTierBranch < best {
+				best = AdminTierBranch
+			}
+		}
+	}
+	return best
+}
+
+// CallerAdminTier returns the caller's effective admin tier (0..3, or 99 for non-admin).
+func CallerAdminTier(ctx context.Context) int {
+	if v, ok := ctx.Value(adminTierKey).(int); ok {
+		return v
+	}
+	return AdminTierForRoles(Roles(ctx))
+}
+
+// CanDelegateTier reports whether an admin at callerTier is allowed to assign or manage
+// a role at targetTier without vertical or lateral privilege escalation.
+func CanDelegateTier(callerTier, targetTier int) bool {
+	if callerTier == AdminTierSystem {
+		return true
+	}
+	if callerTier == AdminTierNone || callerTier > AdminTierBranch {
+		return false
+	}
+	return targetTier > callerTier
+}
+
+// RequireMaxAdminTier enforces that the caller has at least the given admin tier
+// (e.g. AdminTierHolding for Head Office-only operations).
+func RequireMaxAdminTier(r *http.Request, maxTier int) error {
+	ctx := r.Context()
+	if len(Roles(ctx)) == 0 && len(Permissions(ctx)) == 0 {
+		if EnforceRBAC() {
+			return Forbidden("head-office admin privilege required")
+		}
+		return nil
+	}
+	if CallerAdminTier(ctx) > maxTier {
+		return Forbidden("insufficient admin hierarchy tier for this operation")
+	}
+	return nil
+}
 
 // ---- context accessors -----------------------------------------------------
 
@@ -139,7 +209,7 @@ func HasRole(ctx context.Context, role string) bool {
 }
 
 func HasPermission(ctx context.Context, perm string) bool {
-	if HasRole(ctx, "SYSTEM_ADMIN") {
+	if HasRole(ctx, "SYSTEM_ADMIN") || HasRole(ctx, "HOLDING_ADMIN") {
 		return true
 	}
 	return slices.Contains(Permissions(ctx), perm)
@@ -165,7 +235,7 @@ func GatewaySigningSecret() []byte {
 }
 
 // ComputeGatewaySignature computes HMAC-SHA256 over the canonical gateway identity headers.
-func ComputeGatewaySignature(secret []byte, ts, userID, orgID, orgScope, roles, perms string) string {
+func ComputeGatewaySignature(secret []byte, ts, userID, orgID, orgScope, roles, perms string, extra ...string) string {
 	mac := hmac.New(sha256.New, secret)
 	_, _ = mac.Write([]byte(ts))
 	_, _ = mac.Write([]byte("\n"))
@@ -178,6 +248,10 @@ func ComputeGatewaySignature(secret []byte, ts, userID, orgID, orgScope, roles, 
 	_, _ = mac.Write([]byte(roles))
 	_, _ = mac.Write([]byte("\n"))
 	_, _ = mac.Write([]byte(perms))
+	if len(extra) > 0 && extra[0] != "" {
+		_, _ = mac.Write([]byte("\n"))
+		_, _ = mac.Write([]byte(extra[0]))
+	}
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
@@ -198,6 +272,7 @@ func SignGatewayRequest(r *http.Request, secret []byte) {
 		strings.TrimSpace(r.Header.Get("X-Org-Scope")),
 		strings.TrimSpace(r.Header.Get("X-Roles")),
 		strings.TrimSpace(r.Header.Get("X-Permissions")),
+		strings.TrimSpace(r.Header.Get("X-Admin-Tier")),
 	)
 	r.Header.Set("X-Gateway-Timestamp", ts)
 	r.Header.Set("X-Gateway-Signature", sig)
@@ -227,6 +302,7 @@ func verifyGatewayHeaders(r *http.Request) bool {
 			strings.TrimSpace(r.Header.Get("X-Org-Scope")),
 			strings.TrimSpace(r.Header.Get("X-Roles")),
 			strings.TrimSpace(r.Header.Get("X-Permissions")),
+			strings.TrimSpace(r.Header.Get("X-Admin-Tier")),
 		)
 		return hmac.Equal([]byte(sig), []byte(expected))
 	}
@@ -244,7 +320,7 @@ func verifyGatewayHeaders(r *http.Request) bool {
 
 // ---- middleware ------------------------------------------------------------
 
-// Middleware injects correlation id, org scope, acting user, roles, and
+// Middleware injects correlation id, org scope, acting user, roles, admin tier, and
 // permissions into the request context, echoes X-Correlation-Id, and recovers panics.
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -261,12 +337,23 @@ func Middleware(next http.Handler) http.Handler {
 			if u, err := uuid.Parse(strings.TrimSpace(r.Header.Get("X-User-Id"))); err == nil {
 				ctx = context.WithValue(ctx, userKey, u)
 			}
-			if roles := parseCSV(r.Header.Get("X-Roles")); len(roles) > 0 {
+			roles := parseCSV(r.Header.Get("X-Roles"))
+			if len(roles) > 0 {
 				ctx = context.WithValue(ctx, rolesKey, roles)
 			}
 			if perms := parseCSV(r.Header.Get("X-Permissions")); len(perms) > 0 {
 				ctx = context.WithValue(ctx, permsKey, perms)
 			}
+			tier := AdminTierForRoles(roles)
+			if rawTier := strings.TrimSpace(r.Header.Get("X-Admin-Tier")); rawTier != "" {
+				if parsed, err := strconv.Atoi(rawTier); err == nil && parsed >= AdminTierSystem && parsed <= AdminTierNone {
+					// Never let X-Admin-Tier elevate above what Roles allow when Roles are present.
+					if len(roles) == 0 || parsed >= tier {
+						tier = parsed
+					}
+				}
+			}
+			ctx = context.WithValue(ctx, adminTierKey, tier)
 		}
 		rWithCtx := r.WithContext(ctx)
 		defer func() {

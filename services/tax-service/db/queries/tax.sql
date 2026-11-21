@@ -63,7 +63,11 @@ UPDATE tax.tax_transaction
 SET efaktur_no = COALESCE(NULLIF(sqlc.arg(efaktur_no)::text, ''), efaktur_no),
     efaktur_status = 'Reported',
     updated_by = $3
-WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+WHERE id = $1
+  AND row_version = $2
+  AND deleted_at IS NULL
+  AND COALESCE(efaktur_status, 'Draft') <> 'Reported'
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: InsertOutbox :exec
@@ -96,11 +100,17 @@ RETURNING id, code, rate;
 -- name: GetTaxCodeByCode :one
 SELECT id, code, rate, tax_type
 FROM tax.tax_code
-WHERE organization_id = $1 AND code = $2 AND deleted_at IS NULL;
+WHERE organization_id IN ($1, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND code = $2
+  AND deleted_at IS NULL
+ORDER BY (organization_id = $1) DESC
+LIMIT 1;
 
 -- name: GetDefaultVATTaxCode :one
 SELECT id, code, rate, tax_type
 FROM tax.tax_code
-WHERE organization_id = $1 AND tax_type = 'VAT' AND deleted_at IS NULL
-ORDER BY created_at ASC
+WHERE organization_id IN ($1, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND tax_type = 'VAT'
+  AND deleted_at IS NULL
+ORDER BY (organization_id = $1) DESC, created_at ASC
 LIMIT 1;

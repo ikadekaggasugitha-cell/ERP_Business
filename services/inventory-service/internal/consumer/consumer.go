@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -43,10 +44,12 @@ type soLinePayload struct {
 }
 
 type soPayload struct {
-	SoNo        string          `json:"soNo"`
-	TotalAmount string          `json:"totalAmount"`
-	WarehouseID string          `json:"warehouseId,omitempty"`
-	Lines       []soLinePayload `json:"lines"`
+	SoNo         string          `json:"soNo"`
+	CustomerID   string          `json:"customerId,omitempty"`
+	CurrencyCode string          `json:"currencyCode,omitempty"`
+	TotalAmount  string          `json:"totalAmount"`
+	WarehouseID  string          `json:"warehouseId,omitempty"`
+	Lines        []soLinePayload `json:"lines"`
 }
 
 type grLinePayload struct {
@@ -159,11 +162,19 @@ func (x *Consumer) handleSalesOrderConfirmed(ctx context.Context, env eventbus.E
 		})
 	}
 
-	okPayload, _ := json.Marshal(map[string]any{
+	okMap := map[string]any{
 		"reference":       ref,
 		"amount":          amount,
+		"totalAmount":     amount,
 		"sourceEventType": env.EventType,
-	})
+	}
+	if cid := strings.TrimSpace(p.CustomerID); cid != "" {
+		okMap["customerId"] = cid
+	}
+	if cc := strings.TrimSpace(p.CurrencyCode); cc != "" {
+		okMap["currencyCode"] = cc
+	}
+	okPayload, _ := json.Marshal(okMap)
 	failPayload, _ := json.Marshal(map[string]any{
 		"reference":       ref,
 		"amount":          amount,
@@ -274,6 +285,13 @@ func (x *Consumer) handleWorkOrderCompleted(ctx context.Context, env eventbus.En
 		ProducedQty   string `json:"producedQty"`
 		PlannedQty    string `json:"plannedQty"`
 		WarehouseID   string `json:"warehouseId"`
+		UnitCost      string `json:"unitCost"`
+		TotalCost     string `json:"totalCost"`
+		BomLines      []struct {
+			ComponentItemID string `json:"componentItemId"`
+			ItemID          string `json:"itemId"`
+			Quantity        string `json:"quantity"`
+		} `json:"bomLines"`
 	}
 	if len(env.Data) > 0 {
 		if err := json.Unmarshal(env.Data, &p); err != nil {
@@ -292,7 +310,8 @@ func (x *Consumer) handleWorkOrderCompleted(ctx context.Context, env eventbus.En
 	if err != nil {
 		return &eventbus.ErrPoison{Err: fmt.Errorf("invalid producedQty %q: %w", rawQty, err)}
 	}
-	if qr := platform.NumericToRat(qtyNum); qr == nil || qr.Sign() <= 0 {
+	qtyRat := platform.NumericToRat(qtyNum)
+	if qtyRat == nil || qtyRat.Sign() <= 0 {
 		return &eventbus.ErrPoison{Err: fmt.Errorf("producedQty must be > 0, got %q", rawQty)}
 	}
 	var whPtr *uuid.UUID
@@ -301,12 +320,51 @@ func (x *Consumer) handleWorkOrderCompleted(ctx context.Context, env eventbus.En
 			whPtr = &wh
 		}
 	}
-	zeroCost, _ := platform.ParseNumeric("0")
-	lines := []repository.StockLineRequest{{
+	unitCostNum, _ := platform.ParseNumeric("0")
+	if strings.TrimSpace(p.UnitCost) != "" {
+		if uc, err := platform.ParseNumeric(strings.TrimSpace(p.UnitCost)); err == nil {
+			if r := platform.NumericToRat(uc); r != nil && r.Sign() >= 0 {
+				unitCostNum = uc
+			}
+		}
+	} else if strings.TrimSpace(p.TotalCost) != "" {
+		if tc, err := platform.ParseNumeric(strings.TrimSpace(p.TotalCost)); err == nil {
+			if r := platform.NumericToRat(tc); r != nil && r.Sign() > 0 {
+				perUnit := new(big.Rat).Quo(r, qtyRat)
+				if uc, err := platform.RatToNumeric(perUnit, 4); err == nil {
+					unitCostNum = uc
+				}
+			}
+		}
+	}
+	lines := make([]repository.StockLineRequest, 0, 1+len(p.BomLines))
+	lines = append(lines, repository.StockLineRequest{
 		ItemID:    itemID,
 		Qty:       qtyNum,
-		UnitPrice: zeroCost,
-	}}
+		UnitPrice: unitCostNum,
+	})
+	for _, bl := range p.BomLines {
+		cidStr := strings.TrimSpace(bl.ComponentItemID)
+		if cidStr == "" {
+			cidStr = strings.TrimSpace(bl.ItemID)
+		}
+		cid, err := uuid.Parse(cidStr)
+		if err != nil {
+			continue
+		}
+		bq, err := platform.ParseNumeric(strings.TrimSpace(bl.Quantity))
+		if err != nil {
+			continue
+		}
+		if bqr := platform.NumericToRat(bq); bqr != nil && bqr.Sign() > 0 {
+			if negBQ, err := platform.RatToNumeric(new(big.Rat).Neg(bqr), 4); err == nil {
+				lines = append(lines, repository.StockLineRequest{
+					ItemID: cid,
+					Qty:    negBQ,
+				})
+			}
+		}
+	}
 	ref := strings.TrimSpace(p.WoNo)
 	if ref == "" {
 		ref = env.AggregateID
@@ -358,10 +416,17 @@ func (x *Consumer) handleMaintenancePartsRequested(ctx context.Context, env even
 	if err != nil {
 		return &eventbus.ErrPoison{Err: fmt.Errorf("invalid quantity %q: %w", p.Quantity, err)}
 	}
-	if qr := platform.NumericToRat(qtyNum); qr == nil || qr.Sign() <= 0 {
+	qtyRat := platform.NumericToRat(qtyNum)
+	if qtyRat == nil || qtyRat.Sign() <= 0 {
 		return &eventbus.ErrPoison{Err: fmt.Errorf("quantity must be > 0, got %q", p.Quantity)}
 	}
 	costNum, _ := platform.ParseOptionalNumeric(p.UnitCost)
+	totalCostStr := "0.0000"
+	if cr := platform.NumericToRat(costNum); cr != nil && cr.Sign() > 0 {
+		if totNum, err := platform.RatToNumeric(new(big.Rat).Mul(qtyRat, cr), 4); err == nil {
+			totalCostStr = platform.FormatNumeric(totNum, 4)
+		}
+	}
 	var whPtr *uuid.UUID
 	if strings.TrimSpace(p.WarehouseID) != "" {
 		if wh, err := uuid.Parse(strings.TrimSpace(p.WarehouseID)); err == nil {
@@ -372,8 +437,22 @@ func (x *Consumer) handleMaintenancePartsRequested(ctx context.Context, env even
 	if ref == "MNT-" {
 		ref = "MNT-" + env.AggregateID
 	}
-	okPayload, _ := json.Marshal(map[string]any{"reference": ref, "sourceEventType": env.EventType})
-	failPayload, _ := json.Marshal(map[string]any{"reference": ref, "sourceEventType": env.EventType, "reason": "insufficient spare parts stock"})
+	qtyStr := platform.FormatNumeric(qtyNum, 4)
+	okPayload, _ := json.Marshal(map[string]any{
+		"reference":       ref,
+		"sourceEventType": env.EventType,
+		"itemId":          itemID.String(),
+		"qty":             qtyStr,
+		"issuedQty":       qtyStr,
+		"amount":          totalCostStr,
+		"cogsAmount":      totalCostStr,
+	})
+	failPayload, _ := json.Marshal(map[string]any{
+		"reference":       ref,
+		"sourceEventType": env.EventType,
+		"itemId":          itemID.String(),
+		"reason":          "insufficient spare parts stock",
+	})
 	evOK := inventorydb.InsertOutboxParams{
 		AggregateType: "StockReservation", AggregateID: aggID, EventType: "inventory.goods.issued",
 		Payload: okPayload, OrganizationID: org, CorrelationID: corr,

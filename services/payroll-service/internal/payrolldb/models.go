@@ -9,6 +9,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type PayEmployeeCache struct {
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	EmployeeID     uuid.UUID          `json:"employee_id"`
+	EmployeeNo     string             `json:"employee_no"`
+	Status         string             `json:"status"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type PayOutbox struct {
 	ID             uuid.UUID          `json:"id"`
 	AggregateType  string             `json:"aggregate_type"`
@@ -22,24 +30,25 @@ type PayOutbox struct {
 }
 
 type PayPayrollResult struct {
-	ID              uuid.UUID          `json:"id"`
-	OrganizationID  uuid.UUID          `json:"organization_id"`
-	PayrollRunID    uuid.UUID          `json:"payroll_run_id"`
-	EmployeeID      uuid.UUID          `json:"employee_id"`
-	GrossAmount     pgtype.Numeric     `json:"gross_amount"`
-	DeductionAmount pgtype.Numeric     `json:"deduction_amount"`
-	TaxAmount       pgtype.Numeric     `json:"tax_amount"`
-	NetAmount       pgtype.Numeric     `json:"net_amount"`
-	EncryptedGross  *string            `json:"encrypted_gross"`
-	EncryptedNet    *string            `json:"encrypted_net"`
-	EncryptedTax    *string            `json:"encrypted_tax"`
-	PiiKeyVersion   *string            `json:"pii_key_version"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	CreatedBy       uuid.UUID          `json:"created_by"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	UpdatedBy       *uuid.UUID         `json:"updated_by"`
-	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
-	RowVersion      int32              `json:"row_version"`
+	ID                 uuid.UUID          `json:"id"`
+	OrganizationID     uuid.UUID          `json:"organization_id"`
+	PayrollRunID       uuid.UUID          `json:"payroll_run_id"`
+	EmployeeID         uuid.UUID          `json:"employee_id"`
+	GrossAmount        pgtype.Numeric     `json:"gross_amount"`
+	DeductionAmount    pgtype.Numeric     `json:"deduction_amount"`
+	TaxAmount          pgtype.Numeric     `json:"tax_amount"`
+	NetAmount          pgtype.Numeric     `json:"net_amount"`
+	EncryptedGross     *string            `json:"encrypted_gross"`
+	EncryptedDeduction *string            `json:"encrypted_deduction"`
+	EncryptedNet       *string            `json:"encrypted_net"`
+	EncryptedTax       *string            `json:"encrypted_tax"`
+	PiiKeyVersion      *string            `json:"pii_key_version"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	CreatedBy          uuid.UUID          `json:"created_by"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy          *uuid.UUID         `json:"updated_by"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	RowVersion         int32              `json:"row_version"`
 }
 
 type PayPayrollResultLine struct {
@@ -48,6 +57,7 @@ type PayPayrollResultLine struct {
 	PayrollResultID uuid.UUID          `json:"payroll_result_id"`
 	ComponentCode   string             `json:"component_code"`
 	Amount          pgtype.Numeric     `json:"amount"`
+	EncryptedAmount *string            `json:"encrypted_amount"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	CreatedBy       uuid.UUID          `json:"created_by"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
@@ -80,16 +90,18 @@ type PayProcessedEvent struct {
 }
 
 type PayStatutoryContribution struct {
-	ID               uuid.UUID          `json:"id"`
-	OrganizationID   uuid.UUID          `json:"organization_id"`
-	PayrollResultID  uuid.UUID          `json:"payroll_result_id"`
-	ContributionType string             `json:"contribution_type"`
-	EmployeeAmount   pgtype.Numeric     `json:"employee_amount"`
-	EmployerAmount   pgtype.Numeric     `json:"employer_amount"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	CreatedBy        uuid.UUID          `json:"created_by"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	UpdatedBy        *uuid.UUID         `json:"updated_by"`
-	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
-	RowVersion       int32              `json:"row_version"`
+	ID                      uuid.UUID          `json:"id"`
+	OrganizationID          uuid.UUID          `json:"organization_id"`
+	PayrollResultID         uuid.UUID          `json:"payroll_result_id"`
+	ContributionType        string             `json:"contribution_type"`
+	EmployeeAmount          pgtype.Numeric     `json:"employee_amount"`
+	EmployerAmount          pgtype.Numeric     `json:"employer_amount"`
+	EncryptedEmployeeAmount *string            `json:"encrypted_employee_amount"`
+	EncryptedEmployerAmount *string            `json:"encrypted_employer_amount"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	CreatedBy               uuid.UUID          `json:"created_by"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy               *uuid.UUID         `json:"updated_by"`
+	DeletedAt               pgtype.Timestamptz `json:"deleted_at"`
+	RowVersion              int32              `json:"row_version"`
 }

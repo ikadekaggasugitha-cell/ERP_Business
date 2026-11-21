@@ -50,6 +50,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /organizations/{id}/activate", s.activate)
 	mux.HandleFunc("DELETE /organizations/{id}", s.deleteOrg)
 	mux.HandleFunc("GET /organizations/{id}/hierarchy", s.hierarchy)
+	mux.HandleFunc("GET /organizations/{id}/descendants", s.descendants)
 
 	mux.HandleFunc("GET /org-units", s.list)
 	mux.HandleFunc("GET /org-units/{id}", s.get)
@@ -73,6 +74,10 @@ type orgReq struct {
 
 func (s *Server) createType(w http.ResponseWriter, r *http.Request) {
 	if err := httpx.RequirePermission(r, "org:write"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := httpx.RequireMaxAdminTier(r, httpx.AdminTierHolding); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
@@ -218,6 +223,25 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		parentID = &p
+	}
+	// Tiered Admin Guard: Subsidiary/Branch admins cannot create root Holding organizations
+	// and can only create child organizations under a parent within their own org scope.
+	if len(httpx.Roles(r.Context())) > 0 && httpx.CallerAdminTier(r.Context()) >= httpx.AdminTierSubsidiary {
+		if parentID == nil {
+			httpx.WriteError(w, r, httpx.Forbidden("hanya Head Office / Holding Admin yang dapat membuat organisasi induk (root)"))
+			return
+		}
+		inScope := false
+		for _, sOrg := range scope {
+			if sOrg == *parentID {
+				inScope = true
+				break
+			}
+		}
+		if !inScope {
+			httpx.WriteError(w, r, httpx.Forbidden("parentId berada di luar cakupan organisasi admin"))
+			return
+		}
 	}
 
 	payload, _ := json.Marshal(map[string]any{"code": code, "name": name, "parentId": parentID})
@@ -631,6 +655,43 @@ func (s *Server) deleteOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) descendants(w http.ResponseWriter, r *http.Request) {
+	if err := httpx.RequirePermission(r, "org:read"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	org, desc, err := s.repo.GetWithHierarchy(r.Context(), scope, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpx.WriteError(w, r, httpx.NotFound("organization tidak ditemukan"))
+			return
+		}
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	ids := make([]uuid.UUID, 0, len(desc)+1)
+	ids = append(ids, org.ID)
+	for _, d := range desc {
+		if d.ID != org.ID {
+			ids = append(ids, d.ID)
+		}
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"organizationId": org.ID,
+		"descendantIds":  ids,
+	})
 }
 
 func formatOptionalDate(d pgtype.Date) *string {

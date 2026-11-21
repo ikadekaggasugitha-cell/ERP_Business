@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,16 +12,23 @@ import (
 
 	"github.com/sinergiinvestasiproperti/erp/services/asset-service/internal/astdb"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
 )
 
 type fakeAssetStore struct {
-	completed bool
+	completed   bool
+	createCalls int
+	assetRow    *astdb.AstAsset
 }
 
 func (f *fakeAssetStore) CreateAsset(context.Context, []uuid.UUID, astdb.CreateAssetParams) (astdb.CreateAssetRow, error) {
+	f.createCalls++
 	return astdb.CreateAssetRow{ID: uuid.New(), RowVersion: 1}, nil
 }
 func (f *fakeAssetStore) GetAsset(context.Context, []uuid.UUID, uuid.UUID) (astdb.AstAsset, error) {
+	if f.assetRow != nil {
+		return *f.assetRow, nil
+	}
 	return astdb.AstAsset{ID: uuid.New(), RowVersion: 1}, nil
 }
 func (f *fakeAssetStore) ListAssets(context.Context, []uuid.UUID, *string, int32, int32) ([]astdb.AstAsset, int64, error) {
@@ -91,5 +99,55 @@ func TestAssetStatusValidationAndMovementCompletion(t *testing.T) {
 	h.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusOK || !store.completed {
 		t.Fatalf("expected 200 and completed=true, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+}
+
+func TestAssetDTOWireFormatAndIdempotency(t *testing.T) {
+	acq, _ := platform.ParseDate("2026-03-15")
+	store := &fakeAssetStore{
+		assetRow: &astdb.AstAsset{
+			ID: uuid.New(), OrganizationID: platform.SystemOrgID, AssetCode: "AST-TPL",
+			Name: "Template Chiller", Category: "HVAC", Specification: []byte(`{"btu":12000}`),
+			AcquisitionDate: acq, Status: "Active", RowVersion: 1,
+		},
+	}
+	h := newTestMux(store)
+
+	req := httptest.NewRequest(http.MethodGet, "/assets/"+store.assetRow.ID.String(), nil)
+	authHeaders(req, "asset:read")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["acquisitionDate"] != "2026-03-15" || got["isSystem"] != true {
+		t.Fatalf("unexpected asset DTO: %v", got)
+	}
+	if _, ok := got["specification"].(map[string]any); !ok {
+		t.Fatalf("expected specification JSON object, got %T", got["specification"])
+	}
+
+	org := uuid.NewString()
+	user := uuid.NewString()
+	body := `{"assetCode":"AST-02","name":"Generator","category":"Power","status":"Active"}`
+	for i := 0; i < 2; i++ {
+		r := httptest.NewRequest(http.MethodPost, "/assets", strings.NewReader(body))
+		r.Header.Set("X-Organization-Id", org)
+		r.Header.Set("X-User-Id", user)
+		r.Header.Set("X-Permissions", "asset:write")
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Idempotency-Key", "idem-ast-1")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("call %d expected 201, got %d: %s", i, w.Code, w.Body.String())
+		}
+	}
+	if store.createCalls != 1 {
+		t.Fatalf("expected 1 create call under idempotency replay, got %d", store.createCalls)
 	}
 }

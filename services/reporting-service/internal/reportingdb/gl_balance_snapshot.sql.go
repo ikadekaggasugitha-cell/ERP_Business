@@ -83,10 +83,28 @@ func (q *Queries) CountSalesSummaries(ctx context.Context) (int64, error) {
 	return total, err
 }
 
+const deletePlaceholderGLBalanceSnapshots = `-- name: DeletePlaceholderGLBalanceSnapshots :exec
+DELETE FROM rpt.gl_balance_snapshot
+WHERE organization_id = $1 AND account_code = $2::varchar(50)
+`
+
+type DeletePlaceholderGLBalanceSnapshotsParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	OldAccountCode string    `json:"old_account_code"`
+}
+
+func (q *Queries) DeletePlaceholderGLBalanceSnapshots(ctx context.Context, arg DeletePlaceholderGLBalanceSnapshotsParams) error {
+	_, err := q.db.Exec(ctx, deletePlaceholderGLBalanceSnapshots, arg.OrganizationID, arg.OldAccountCode)
+	return err
+}
+
 const getCOACacheCode = `-- name: GetCOACacheCode :one
 SELECT account_code
 FROM rpt.coa_cache
-WHERE organization_id = $1 AND account_id = $2
+WHERE organization_id IN ($1, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND account_id = $2
+ORDER BY (organization_id = $1) DESC
+LIMIT 1
 `
 
 type GetCOACacheCodeParams struct {
@@ -318,6 +336,28 @@ func (q *Queries) MarkEventProcessed(ctx context.Context, arg MarkEventProcessed
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const mergePlaceholderGLBalanceSnapshots = `-- name: MergePlaceholderGLBalanceSnapshots :exec
+INSERT INTO rpt.gl_balance_snapshot (organization_id, fiscal_period_id, account_code, closing_balance, refreshed_at)
+SELECT s.organization_id, s.fiscal_period_id, $2::varchar(50), s.closing_balance, now()
+FROM rpt.gl_balance_snapshot s
+WHERE s.organization_id = $1 AND s.account_code = $3::varchar(50)
+ON CONFLICT (organization_id, fiscal_period_id, account_code)
+DO UPDATE SET
+    closing_balance = rpt.gl_balance_snapshot.closing_balance + EXCLUDED.closing_balance,
+    refreshed_at = now()
+`
+
+type MergePlaceholderGLBalanceSnapshotsParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	NewAccountCode string    `json:"new_account_code"`
+	OldAccountCode string    `json:"old_account_code"`
+}
+
+func (q *Queries) MergePlaceholderGLBalanceSnapshots(ctx context.Context, arg MergePlaceholderGLBalanceSnapshotsParams) error {
+	_, err := q.db.Exec(ctx, mergePlaceholderGLBalanceSnapshots, arg.OrganizationID, arg.NewAccountCode, arg.OldAccountCode)
+	return err
 }
 
 const upsertCOACache = `-- name: UpsertCOACache :exec

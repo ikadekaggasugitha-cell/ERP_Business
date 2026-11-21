@@ -12,6 +12,55 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const applyReceiptToInvoice = `-- name: ApplyReceiptToInvoice :one
+UPDATE ar.ar_invoice
+SET outstanding_amount = GREATEST(outstanding_amount - $4::numeric(20,4), 0),
+    status = CASE
+        WHEN outstanding_amount - $4::numeric(20,4) <= 0 THEN 'Paid'
+        ELSE 'PartiallyPaid'
+    END,
+    updated_by = $3
+WHERE id = $1 AND invoice_date = $2 AND status IN ('Issued', 'PartiallyPaid', 'Overdue') AND deleted_at IS NULL
+RETURNING id, invoice_no, customer_id, currency_code, total_amount, outstanding_amount, status
+`
+
+type ApplyReceiptToInvoiceParams struct {
+	ID          uuid.UUID      `json:"id"`
+	InvoiceDate pgtype.Date    `json:"invoice_date"`
+	UpdatedBy   *uuid.UUID     `json:"updated_by"`
+	PaidAmount  pgtype.Numeric `json:"paid_amount"`
+}
+
+type ApplyReceiptToInvoiceRow struct {
+	ID                uuid.UUID      `json:"id"`
+	InvoiceNo         string         `json:"invoice_no"`
+	CustomerID        uuid.UUID      `json:"customer_id"`
+	CurrencyCode      string         `json:"currency_code"`
+	TotalAmount       pgtype.Numeric `json:"total_amount"`
+	OutstandingAmount pgtype.Numeric `json:"outstanding_amount"`
+	Status            string         `json:"status"`
+}
+
+func (q *Queries) ApplyReceiptToInvoice(ctx context.Context, arg ApplyReceiptToInvoiceParams) (ApplyReceiptToInvoiceRow, error) {
+	row := q.db.QueryRow(ctx, applyReceiptToInvoice,
+		arg.ID,
+		arg.InvoiceDate,
+		arg.UpdatedBy,
+		arg.PaidAmount,
+	)
+	var i ApplyReceiptToInvoiceRow
+	err := row.Scan(
+		&i.ID,
+		&i.InvoiceNo,
+		&i.CustomerID,
+		&i.CurrencyCode,
+		&i.TotalAmount,
+		&i.OutstandingAmount,
+		&i.Status,
+	)
+	return i, err
+}
+
 const countInvoices = `-- name: CountInvoices :one
 SELECT COUNT(*)
 FROM ar.ar_invoice
@@ -119,10 +168,40 @@ func (q *Queries) CreateInvoiceLine(ctx context.Context, arg CreateInvoiceLinePa
 	return err
 }
 
+const createReceiptAllocation = `-- name: CreateReceiptAllocation :exec
+INSERT INTO ar.ar_receipt_allocation (
+    organization_id, ar_invoice_id, invoice_date, receipt_id, allocated_amount, created_by
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+)
+ON CONFLICT (ar_invoice_id, receipt_id) DO NOTHING
+`
+
+type CreateReceiptAllocationParams struct {
+	OrganizationID  uuid.UUID      `json:"organization_id"`
+	ArInvoiceID     uuid.UUID      `json:"ar_invoice_id"`
+	InvoiceDate     pgtype.Date    `json:"invoice_date"`
+	ReceiptID       uuid.UUID      `json:"receipt_id"`
+	AllocatedAmount pgtype.Numeric `json:"allocated_amount"`
+	CreatedBy       uuid.UUID      `json:"created_by"`
+}
+
+func (q *Queries) CreateReceiptAllocation(ctx context.Context, arg CreateReceiptAllocationParams) error {
+	_, err := q.db.Exec(ctx, createReceiptAllocation,
+		arg.OrganizationID,
+		arg.ArInvoiceID,
+		arg.InvoiceDate,
+		arg.ReceiptID,
+		arg.AllocatedAmount,
+		arg.CreatedBy,
+	)
+	return err
+}
+
 const deleteDraftInvoice = `-- name: DeleteDraftInvoice :execrows
 UPDATE ar.ar_invoice
 SET status = 'Cancelled', deleted_at = now(), updated_by = $4
-WHERE id = $1 AND invoice_date = $2 AND status = 'Issued' AND row_version = $3 AND deleted_at IS NULL
+WHERE id = $1 AND invoice_date = $2 AND status = 'Draft' AND row_version = $3 AND deleted_at IS NULL
 `
 
 type DeleteDraftInvoiceParams struct {
@@ -238,6 +317,45 @@ LIMIT 1
 
 func (q *Queries) GetInvoiceByID(ctx context.Context, id uuid.UUID) (ArArInvoice, error) {
 	row := q.db.QueryRow(ctx, getInvoiceByID, id)
+	var i ArArInvoice
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.InvoiceNo,
+		&i.CustomerID,
+		&i.InvoiceDate,
+		&i.DueDate,
+		&i.CurrencyCode,
+		&i.TotalAmount,
+		&i.OutstandingAmount,
+		&i.Status,
+		&i.SalesOrderRef,
+		&i.GlJournalRef,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+		&i.DeletedAt,
+		&i.RowVersion,
+	)
+	return i, err
+}
+
+const getInvoiceByRef = `-- name: GetInvoiceByRef :one
+SELECT id, organization_id, invoice_no, customer_id, invoice_date, due_date, currency_code, total_amount, outstanding_amount, status, sales_order_ref, gl_journal_ref, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM ar.ar_invoice
+WHERE organization_id = $1 AND deleted_at IS NULL
+  AND (id::text = $2::text OR invoice_no = $2::text)
+ORDER BY invoice_date DESC
+LIMIT 1
+`
+
+type GetInvoiceByRefParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	InvoiceRef     string    `json:"invoice_ref"`
+}
+
+func (q *Queries) GetInvoiceByRef(ctx context.Context, arg GetInvoiceByRefParams) (ArArInvoice, error) {
+	row := q.db.QueryRow(ctx, getInvoiceByRef, arg.OrganizationID, arg.InvoiceRef)
 	var i ArArInvoice
 	err := row.Scan(
 		&i.ID,

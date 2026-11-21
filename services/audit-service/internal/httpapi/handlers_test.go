@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/sinergiinvestasiproperti/erp/services/audit-service/internal/auditdb"
+	"github.com/sinergiinvestasiproperti/erp/services/audit-service/internal/repository"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
 )
 
@@ -21,13 +22,11 @@ type stubStore struct {
 	total  int64
 	detail auditdb.AuditAuditLog
 	err    error
-	entity string
-	action string
+	filter repository.ListFilter
 }
 
-func (s *stubStore) ListFiltered(_ context.Context, _ []uuid.UUID, entityType, action string, _, _ int32) ([]auditdb.ListAuditLogsFilteredRow, int64, error) {
-	s.entity = entityType
-	s.action = action
+func (s *stubStore) ListFiltered(_ context.Context, _ []uuid.UUID, filter repository.ListFilter) ([]auditdb.ListAuditLogsFilteredRow, int64, error) {
+	s.filter = filter
 	return s.rows, s.total, s.err
 }
 
@@ -80,8 +79,9 @@ func TestAuditEndpointsPaginationRBACAndGetByID(t *testing.T) {
 		t.Fatalf("expected 403 for missing audit:read, got %d", rec.Code)
 	}
 
-	// 2. Authorized list passes filters and returns full pagination metadata.
-	req = httptest.NewRequest(http.MethodGet, "/audit-events?page=2&size=10&entityType=JournalEntry&action=gl.journal.posted", nil)
+	// 2. Authorized list passes filters (including from/to/entityId/correlationId) and returns full pagination metadata.
+	entID := uuid.New()
+	req = httptest.NewRequest(http.MethodGet, "/audit-events?page=2&size=10&entityType=JournalEntry&action=gl.journal.posted&from=2026-11-01&to=2026-11-30&entityId="+entID.String()+"&correlationId="+corrID.String(), nil)
 	req.Header.Set("X-Organization-Id", orgID.String())
 	req.Header.Set("X-Permissions", "audit:read")
 	rec = httptest.NewRecorder()
@@ -89,8 +89,29 @@ func TestAuditEndpointsPaginationRBACAndGetByID(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if store.entity != "JournalEntry" || store.action != "gl.journal.posted" {
-		t.Fatalf("filters not forwarded: entity=%q action=%q", store.entity, store.action)
+	if store.filter.EntityType != "JournalEntry" || store.filter.Action != "gl.journal.posted" {
+		t.Fatalf("filters not forwarded: %+v", store.filter)
+	}
+	if !store.filter.From.Valid || !store.filter.To.Valid {
+		t.Fatalf("expected from/to timestamps forwarded, got %+v", store.filter)
+	}
+	if store.filter.EntityID == nil || *store.filter.EntityID != entID {
+		t.Fatalf("expected entityId=%s, got %v", entID, store.filter.EntityID)
+	}
+	if store.filter.CorrelationID == nil || *store.filter.CorrelationID != corrID {
+		t.Fatalf("expected correlationId=%s, got %v", corrID, store.filter.CorrelationID)
+	}
+
+	// 2b. Malformed filter params return 400.
+	for _, badQuery := range []string{"from=not-a-date", "to=bad", "entityId=not-uuid", "correlationId=not-uuid"} {
+		badReq := httptest.NewRequest(http.MethodGet, "/audit-events?"+badQuery, nil)
+		badReq.Header.Set("X-Organization-Id", orgID.String())
+		badReq.Header.Set("X-Permissions", "audit:read")
+		badRec := httptest.NewRecorder()
+		h.ServeHTTP(badRec, badReq)
+		if badRec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for %s, got %d", badQuery, badRec.Code)
+		}
 	}
 	var resp struct {
 		Data []auditEventDTO `json:"data"`

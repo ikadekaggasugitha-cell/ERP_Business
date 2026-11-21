@@ -1,10 +1,13 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -30,9 +33,150 @@ type AssetStore interface {
 	ListVerifications(ctx context.Context, scope []uuid.UUID, assetID *uuid.UUID, limit, offset int32) ([]astdb.AstAssetVerification, int64, error)
 }
 
-type Server struct{ store AssetStore }
+type Server struct {
+	store AssetStore
+	idem  *httpx.IdemStore
+}
 
-func NewServer(store AssetStore) *Server { return &Server{store: store} }
+func NewServer(store AssetStore) *Server {
+	return &Server{store: store, idem: httpx.NewIdemStore()}
+}
+
+func beginIdemOptional(w http.ResponseWriter, r *http.Request, idem *httpx.IdemStore, scope []uuid.UUID, dst any) (string, string, func(), bool) {
+	if r.Body == nil {
+		r.Body = io.NopCloser(strings.NewReader("{}"))
+	} else {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("failed to read request body"))
+			return "", "", func() {}, true
+		}
+		if len(bytes.TrimSpace(raw)) == 0 {
+			raw = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+	}
+	return httpx.BeginIdempotent(w, r, idem, scope, dst)
+}
+
+func fmtOptTS(ts pgtype.Timestamptz) *string {
+	if !ts.Valid {
+		return nil
+	}
+	s := ts.Time.UTC().Format(time.RFC3339)
+	return &s
+}
+
+func fmtOptDate(d pgtype.Date) *string {
+	if !d.Valid {
+		return nil
+	}
+	s := platform.FormatDate(d)
+	return &s
+}
+
+func rawJSONOrEmptyObj(b []byte) json.RawMessage {
+	if len(bytes.TrimSpace(b)) == 0 {
+		return json.RawMessage("{}")
+	}
+	return json.RawMessage(b)
+}
+
+type assetDTO struct {
+	ID              uuid.UUID       `json:"id"`
+	OrganizationID  uuid.UUID       `json:"organizationId"`
+	AssetCode       string          `json:"assetCode"`
+	Name            string          `json:"name"`
+	Category        string          `json:"category"`
+	Specification   json.RawMessage `json:"specification"`
+	AcquisitionDate *string         `json:"acquisitionDate,omitempty"`
+	OrganizationRef uuid.UUID       `json:"organizationRef"`
+	FixedAssetRef   *uuid.UUID      `json:"fixedAssetRef,omitempty"`
+	Barcode         *string         `json:"barcode,omitempty"`
+	Status          string          `json:"status"`
+	IsSystem        bool            `json:"isSystem"`
+	CreatedAt       *string         `json:"createdAt,omitempty"`
+	UpdatedAt       *string         `json:"updatedAt,omitempty"`
+	RowVersion      int32           `json:"rowVersion"`
+}
+
+func toAssetDTO(r astdb.AstAsset) assetDTO {
+	return assetDTO{
+		ID: r.ID, OrganizationID: r.OrganizationID, AssetCode: r.AssetCode, Name: r.Name,
+		Category: r.Category, Specification: rawJSONOrEmptyObj(r.Specification),
+		AcquisitionDate: fmtOptDate(r.AcquisitionDate), OrganizationRef: r.OrganizationRef,
+		FixedAssetRef: r.FixedAssetRef, Barcode: r.Barcode, Status: r.Status,
+		IsSystem: r.OrganizationID == platform.SystemOrgID,
+		CreatedAt: fmtOptTS(r.CreatedAt), UpdatedAt: fmtOptTS(r.UpdatedAt), RowVersion: r.RowVersion,
+	}
+}
+
+type locationHistoryDTO struct {
+	ID              uuid.UUID  `json:"id"`
+	OrganizationID  uuid.UUID  `json:"organizationId"`
+	AssetID         uuid.UUID  `json:"assetId"`
+	OrganizationRef uuid.UUID  `json:"organizationRef"`
+	WarehouseRef    *uuid.UUID `json:"warehouseRef,omitempty"`
+	LocationNote    *string    `json:"locationNote,omitempty"`
+	EffectiveFrom   string     `json:"effectiveFrom"`
+	CreatedAt       *string    `json:"createdAt,omitempty"`
+	UpdatedAt       *string    `json:"updatedAt,omitempty"`
+	RowVersion      int32      `json:"rowVersion"`
+}
+
+func toLocationHistoryDTO(r astdb.AstAssetLocationHistory) locationHistoryDTO {
+	return locationHistoryDTO{
+		ID: r.ID, OrganizationID: r.OrganizationID, AssetID: r.AssetID,
+		OrganizationRef: r.OrganizationRef, WarehouseRef: r.WarehouseRef, LocationNote: r.LocationNote,
+		EffectiveFrom: platform.FormatDate(r.EffectiveFrom),
+		CreatedAt: fmtOptTS(r.CreatedAt), UpdatedAt: fmtOptTS(r.UpdatedAt), RowVersion: r.RowVersion,
+	}
+}
+
+type movementDTO struct {
+	ID                  uuid.UUID  `json:"id"`
+	OrganizationID      uuid.UUID  `json:"organizationId"`
+	AssetID             uuid.UUID  `json:"assetId"`
+	FromOrganizationRef *uuid.UUID `json:"fromOrganizationRef,omitempty"`
+	ToOrganizationRef   uuid.UUID  `json:"toOrganizationRef"`
+	Status              string     `json:"status"`
+	ApprovedBy          *uuid.UUID `json:"approvedBy,omitempty"`
+	MovedAt             *string    `json:"movedAt,omitempty"`
+	CreatedAt           *string    `json:"createdAt,omitempty"`
+	UpdatedAt           *string    `json:"updatedAt,omitempty"`
+	RowVersion          int32      `json:"rowVersion"`
+}
+
+func toMovementDTO(r astdb.AstAssetMovement) movementDTO {
+	return movementDTO{
+		ID: r.ID, OrganizationID: r.OrganizationID, AssetID: r.AssetID,
+		FromOrganizationRef: r.FromOrganizationRef, ToOrganizationRef: r.ToOrganizationRef,
+		Status: r.Status, ApprovedBy: r.ApprovedBy, MovedAt: fmtOptTS(r.MovedAt),
+		CreatedAt: fmtOptTS(r.CreatedAt), UpdatedAt: fmtOptTS(r.UpdatedAt), RowVersion: r.RowVersion,
+	}
+}
+
+type verificationDTO struct {
+	ID               uuid.UUID `json:"id"`
+	OrganizationID   uuid.UUID `json:"organizationId"`
+	AssetID          uuid.UUID `json:"assetId"`
+	VerificationDate string    `json:"verificationDate"`
+	SystemStatus     *string   `json:"systemStatus,omitempty"`
+	PhysicalStatus   *string   `json:"physicalStatus,omitempty"`
+	DiscrepancyNote  *string   `json:"discrepancyNote,omitempty"`
+	CreatedAt        *string   `json:"createdAt,omitempty"`
+	UpdatedAt        *string   `json:"updatedAt,omitempty"`
+	RowVersion       int32     `json:"rowVersion"`
+}
+
+func toVerificationDTO(r astdb.AstAssetVerification) verificationDTO {
+	return verificationDTO{
+		ID: r.ID, OrganizationID: r.OrganizationID, AssetID: r.AssetID,
+		VerificationDate: platform.FormatDate(r.VerificationDate),
+		SystemStatus: r.SystemStatus, PhysicalStatus: r.PhysicalStatus, DiscrepancyNote: r.DiscrepancyNote,
+		CreatedAt: fmtOptTS(r.CreatedAt), UpdatedAt: fmtOptTS(r.UpdatedAt), RowVersion: r.RowVersion,
+	}
+}
 
 func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /assets", s.listAssets)
@@ -107,7 +251,11 @@ func (s *Server) listAssets(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	items := make([]assetDTO, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, toAssetDTO(row))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: items, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
 }
 
 func (s *Server) createAsset(w http.ResponseWriter, r *http.Request) {
@@ -126,10 +274,11 @@ func (s *Server) createAsset(w http.ResponseWriter, r *http.Request) {
 		Barcode         *string         `json:"barcode"`
 		Status          string          `json:"status"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, idemHash, release, handled := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if handled {
 		return
 	}
+	defer release()
 	if strings.TrimSpace(req.AssetCode) == "" || strings.TrimSpace(req.Name) == "" || strings.TrimSpace(req.Category) == "" {
 		httpx.WriteError(w, r, httpx.BadRequest("assetCode, name, and category are required"))
 		return
@@ -178,7 +327,7 @@ func (s *Server) createAsset(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "status": st, "rowVersion": out.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, idemHash, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "status": st, "rowVersion": out.RowVersion})
 }
 
 func (s *Server) getAsset(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +345,7 @@ func (s *Server) getAsset(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, row)
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, toAssetDTO(row))
 }
 
 func (s *Server) updateAsset(w http.ResponseWriter, r *http.Request) {
@@ -277,7 +426,11 @@ func (s *Server) listLocations(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"data": rows})
+	items := make([]locationHistoryDTO, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, toLocationHistoryDTO(row))
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"data": items})
 }
 
 func (s *Server) createLocation(w http.ResponseWriter, r *http.Request) {
@@ -296,10 +449,11 @@ func (s *Server) createLocation(w http.ResponseWriter, r *http.Request) {
 		LocationNote    *string `json:"locationNote"`
 		EffectiveFrom   string  `json:"effectiveFrom"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, idemHash, release, handled := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if handled {
 		return
 	}
+	defer release()
 	eff, err := platform.ParseDate(req.EffectiveFrom)
 	if err != nil {
 		httpx.WriteError(w, r, httpx.BadRequest("effectiveFrom must be YYYY-MM-DD"))
@@ -331,7 +485,7 @@ func (s *Server) createLocation(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "rowVersion": out.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, idemHash, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "rowVersion": out.RowVersion})
 }
 
 func (s *Server) listMovements(w http.ResponseWriter, r *http.Request) {
@@ -354,7 +508,11 @@ func (s *Server) listMovements(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	items := make([]movementDTO, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, toMovementDTO(row))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: items, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
 }
 
 func (s *Server) createMovement(w http.ResponseWriter, r *http.Request) {
@@ -367,10 +525,11 @@ func (s *Server) createMovement(w http.ResponseWriter, r *http.Request) {
 		FromOrganizationRef *string `json:"fromOrganizationRef"`
 		ToOrganizationRef   string  `json:"toOrganizationRef"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, idemHash, release, handled := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if handled {
 		return
 	}
+	defer release()
 	aid, err := uuid.Parse(req.AssetID)
 	if err != nil {
 		httpx.WriteError(w, r, httpx.BadRequest("valid assetId is required"))
@@ -398,7 +557,7 @@ func (s *Server) createMovement(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "status": "Draft", "rowVersion": out.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, idemHash, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "status": "Draft", "rowVersion": out.RowVersion})
 }
 
 func (s *Server) approveMovement(w http.ResponseWriter, r *http.Request) {
@@ -416,12 +575,18 @@ func (s *Server) approveMovement(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	var req struct{}
+	idemKey, idemHash, release, handled := beginIdemOptional(w, r, s.idem, scope, &req)
+	if handled {
+		return
+	}
+	defer release()
 	next, err := s.store.ApproveMovement(r.Context(), scope, id, user, ver)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"id": id, "status": "Approved", "rowVersion": next})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, idemHash, http.StatusOK, next, map[string]any{"id": id, "status": "Approved", "rowVersion": next})
 }
 
 func (s *Server) completeMovement(w http.ResponseWriter, r *http.Request) {
@@ -439,12 +604,18 @@ func (s *Server) completeMovement(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	var req struct{}
+	idemKey, idemHash, release, handled := beginIdemOptional(w, r, s.idem, scope, &req)
+	if handled {
+		return
+	}
+	defer release()
 	next, err := s.store.CompleteMovementAndEmit(r.Context(), scope, id, scope[0], user, httpx.CorrelationUUID(r), ver)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"id": id, "status": "Completed", "rowVersion": next})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, idemHash, http.StatusOK, next, map[string]any{"id": id, "status": "Completed", "rowVersion": next})
 }
 
 func (s *Server) listVerifications(w http.ResponseWriter, r *http.Request) {
@@ -467,7 +638,11 @@ func (s *Server) listVerifications(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	items := make([]verificationDTO, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, toVerificationDTO(row))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: items, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
 }
 
 func (s *Server) createVerification(w http.ResponseWriter, r *http.Request) {
@@ -482,10 +657,11 @@ func (s *Server) createVerification(w http.ResponseWriter, r *http.Request) {
 		PhysicalStatus   *string `json:"physicalStatus"`
 		DiscrepancyNote  *string `json:"discrepancyNote"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, idemHash, release, handled := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if handled {
 		return
 	}
+	defer release()
 	aid, err := uuid.Parse(req.AssetID)
 	if err != nil {
 		httpx.WriteError(w, r, httpx.BadRequest("valid assetId is required"))
@@ -505,5 +681,5 @@ func (s *Server) createVerification(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "rowVersion": out.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, idemHash, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "rowVersion": out.RowVersion})
 }

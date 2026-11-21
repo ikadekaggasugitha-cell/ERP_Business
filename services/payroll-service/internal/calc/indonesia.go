@@ -32,6 +32,7 @@ type EmployeeResult struct {
 	Basic           pgtype.Numeric
 	Allowance       pgtype.Numeric
 	Bonus           pgtype.Numeric
+	OtherDeductions pgtype.Numeric
 	BPJSKesEmp      pgtype.Numeric
 	BPJSKesEmployer pgtype.Numeric
 	BPJSJHTEmp      pgtype.Numeric
@@ -42,11 +43,11 @@ type EmployeeResult struct {
 }
 
 var (
-	bpjsKesCap = big.NewRat(12_000_000, 1)
-	bpjsJPCap  = big.NewRat(10_042_300, 1)
-	biayaCap   = big.NewRat(500_000, 1)
-	twelve     = big.NewRat(12, 1)
-	thousand   = big.NewInt(1000)
+	bpjsKesCap     = big.NewRat(12_000_000, 1)
+	bpjsJPCap      = big.NewRat(10_042_300, 1)
+	biayaCapAnnual = big.NewRat(6_000_000, 1)
+	twelve         = big.NewRat(12, 1)
+	thousand       = big.NewInt(1000)
 )
 
 var ptkpAnnual = map[string]int64{
@@ -96,49 +97,12 @@ func roundHalfUp(r *big.Rat, scale int) *big.Rat {
 	return new(big.Rat).SetFrac(q, factor)
 }
 
-// ComputeEmployee calculates gross, BPJS Kesehatan/TK, PPh 21, and net pay using exact rationals.
-func ComputeEmployee(in EmployeeInput) (EmployeeResult, error) {
-	basic := zeroIfNil(in.BasicSalary)
-	allow := zeroIfNil(in.Allowance)
-	bonus := zeroIfNil(in.Bonus)
-	otherDed := zeroIfNil(in.OtherDeductions)
-
-	gross := new(big.Rat).Add(basic, allow)
-	gross.Add(gross, bonus)
-	if gross.Sign() < 0 || otherDed.Sign() < 0 {
-		return EmployeeResult{}, fmt.Errorf("gross and deduction amounts must be non-negative")
-	}
-
-	// BPJS Kesehatan (1% employee, 4% employer, capped at Rp 12M).
-	kesBase := minRat(gross, bpjsKesCap)
-	kesEmp := roundHalfUp(new(big.Rat).Mul(kesBase, big.NewRat(1, 100)), 2)
-	kesEmpr := roundHalfUp(new(big.Rat).Mul(kesBase, big.NewRat(4, 100)), 2)
-
-	// BPJS Ketenagakerjaan: JHT (2%/3.7%), JP (1%/2% capped), JKK+JKM (0.54% employer).
-	jhtEmp := roundHalfUp(new(big.Rat).Mul(gross, big.NewRat(2, 100)), 2)
-	jhtEmpr := roundHalfUp(new(big.Rat).Mul(gross, big.NewRat(37, 1000)), 2)
-	jpBase := minRat(gross, bpjsJPCap)
-	jpEmp := roundHalfUp(new(big.Rat).Mul(jpBase, big.NewRat(1, 100)), 2)
-	jpEmpr := roundHalfUp(new(big.Rat).Mul(jpBase, big.NewRat(2, 100)), 2)
-	jkkJkmEmpr := roundHalfUp(new(big.Rat).Mul(gross, big.NewRat(54, 10000)), 2)
-
-	// PPh 21 annualized Pasal 17 UU HPP.
-	biayaJabatan := minRat(new(big.Rat).Mul(gross, big.NewRat(5, 100)), biayaCap)
-	monthlyNetTaxable := new(big.Rat).Sub(gross, biayaJabatan)
-	monthlyNetTaxable.Sub(monthlyNetTaxable, jhtEmp)
-	monthlyNetTaxable.Sub(monthlyNetTaxable, jpEmp)
-	if monthlyNetTaxable.Sign() < 0 {
-		monthlyNetTaxable = new(big.Rat)
-	}
-	annualNet := new(big.Rat).Mul(monthlyNetTaxable, twelve)
-
-	ptkpKey := strings.ToUpper(strings.TrimSpace(in.PTKP))
-	if ptkpKey == "" {
-		ptkpKey = "TK/0"
-	}
-	ptkpVal, ok := ptkpAnnual[ptkpKey]
-	if !ok {
-		return EmployeeResult{}, fmt.Errorf("unsupported PTKP status %q", in.PTKP)
+func computeAnnualPPh21(annualTaxableGross, annualJhtJp *big.Rat, ptkpVal int64, hasNPWP bool) *big.Rat {
+	biayaJabatan := minRat(new(big.Rat).Mul(annualTaxableGross, big.NewRat(5, 100)), biayaCapAnnual)
+	annualNet := new(big.Rat).Sub(annualTaxableGross, biayaJabatan)
+	annualNet.Sub(annualNet, annualJhtJp)
+	if annualNet.Sign() < 0 {
+		annualNet = new(big.Rat)
 	}
 	pkp := new(big.Rat).Sub(annualNet, big.NewRat(ptkpVal, 1))
 	annualTax := new(big.Rat)
@@ -159,11 +123,65 @@ func ComputeEmployee(in EmployeeInput) (EmployeeResult, error) {
 			annualTax.Add(annualTax, new(big.Rat).Mul(slice, br.rate))
 			rem = new(big.Rat).Sub(rem, slice)
 		}
-		if !in.HasNPWP {
+		if !hasNPWP {
 			annualTax.Mul(annualTax, big.NewRat(120, 100))
 		}
 	}
-	pph21 := roundHalfUp(new(big.Rat).Quo(annualTax, twelve), 2)
+	return annualTax
+}
+
+// ComputeEmployee calculates gross, BPJS Kesehatan/TK, PPh 21, and net pay using exact rationals.
+func ComputeEmployee(in EmployeeInput) (EmployeeResult, error) {
+	basic := zeroIfNil(in.BasicSalary)
+	allow := zeroIfNil(in.Allowance)
+	bonus := zeroIfNil(in.Bonus)
+	otherDed := zeroIfNil(in.OtherDeductions)
+
+	recurringGross := new(big.Rat).Add(basic, allow)
+	gross := new(big.Rat).Add(recurringGross, bonus)
+	if basic.Sign() < 0 || allow.Sign() < 0 || bonus.Sign() < 0 || otherDed.Sign() < 0 {
+		return EmployeeResult{}, fmt.Errorf("gross and deduction amounts must be non-negative")
+	}
+
+	// BPJS base excludes irregular one-time bonuses (basic + fixed allowance only).
+	// BPJS Kesehatan (1% employee, 4% employer, capped at Rp 12M).
+	kesBase := minRat(recurringGross, bpjsKesCap)
+	kesEmp := roundHalfUp(new(big.Rat).Mul(kesBase, big.NewRat(1, 100)), 2)
+	kesEmpr := roundHalfUp(new(big.Rat).Mul(kesBase, big.NewRat(4, 100)), 2)
+
+	// BPJS Ketenagakerjaan: JHT (2%/3.7%), JP (1%/2% capped), JKK+JKM (0.54% employer).
+	jhtEmp := roundHalfUp(new(big.Rat).Mul(recurringGross, big.NewRat(2, 100)), 2)
+	jhtEmpr := roundHalfUp(new(big.Rat).Mul(recurringGross, big.NewRat(37, 1000)), 2)
+	jpBase := minRat(recurringGross, bpjsJPCap)
+	jpEmp := roundHalfUp(new(big.Rat).Mul(jpBase, big.NewRat(1, 100)), 2)
+	jpEmpr := roundHalfUp(new(big.Rat).Mul(jpBase, big.NewRat(2, 100)), 2)
+	jkkJkmEmpr := roundHalfUp(new(big.Rat).Mul(recurringGross, big.NewRat(54, 10000)), 2)
+
+	ptkpKey := strings.ToUpper(strings.TrimSpace(in.PTKP))
+	if ptkpKey == "" {
+		ptkpKey = "TK/0"
+	}
+	ptkpVal, ok := ptkpAnnual[ptkpKey]
+	if !ok {
+		return EmployeeResult{}, fmt.Errorf("unsupported PTKP status %q", in.PTKP)
+	}
+
+	// PPh 21 annualized Pasal 17 UU HPP:
+	// Taxable recurring gross includes employer-paid BPJS Kesehatan and JKK+JKM premiums.
+	// One-time irregular bonus is added once (NOT multiplied by 12) and taxed at marginal rate.
+	monthlyTaxableRecurring := new(big.Rat).Add(recurringGross, kesEmpr)
+	monthlyTaxableRecurring.Add(monthlyTaxableRecurring, jkkJkmEmpr)
+	annualTaxableRecurring := new(big.Rat).Mul(monthlyTaxableRecurring, twelve)
+	annualJhtJp := new(big.Rat).Mul(new(big.Rat).Add(jhtEmp, jpEmp), twelve)
+
+	annualTaxRecurring := computeAnnualPPh21(annualTaxableRecurring, annualJhtJp, ptkpVal, in.HasNPWP)
+	pph21 := new(big.Rat).Quo(annualTaxRecurring, twelve)
+	if bonus.Sign() > 0 {
+		annualTaxWithBonus := computeAnnualPPh21(new(big.Rat).Add(annualTaxableRecurring, bonus), annualJhtJp, ptkpVal, in.HasNPWP)
+		bonusTax := new(big.Rat).Sub(annualTaxWithBonus, annualTaxRecurring)
+		pph21.Add(pph21, bonusTax)
+	}
+	pph21 = roundHalfUp(pph21, 2)
 
 	dedTotal := new(big.Rat).Add(kesEmp, jhtEmp)
 	dedTotal.Add(dedTotal, jpEmp)
@@ -196,6 +214,9 @@ func ComputeEmployee(in EmployeeInput) (EmployeeResult, error) {
 		return res, err
 	}
 	if res.Bonus, err = platform.RatToNumeric(bonus, 4); err != nil {
+		return res, err
+	}
+	if res.OtherDeductions, err = platform.RatToNumeric(otherDed, 4); err != nil {
 		return res, err
 	}
 	if res.BPJSKesEmp, err = platform.RatToNumeric(kesEmp, 4); err != nil {

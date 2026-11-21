@@ -28,8 +28,10 @@ import (
 
 const (
 	systemOrgID  = "00000000-0000-0000-0000-000000000000"
-	defaultOrgID = "11111111-1111-1111-1111-111111111111"
-	branchOrgID  = "22222222-2222-2222-2222-222222222222"
+	defaultOrgID = "11111111-1111-1111-1111-111111111111" // HLD-01 (Head Office / Holding)
+	branchOrgID  = "22222222-2222-2222-2222-222222222222" // SUB-PRO (Subsidiary 1)
+	subLogOrgID  = "33333333-3333-3333-3333-333333333333" // SUB-LOG (Subsidiary 2)
+	brcJktOrgID  = "44444444-4444-4444-4444-444444444444" // BRC-JKT (Branch under SUB-PRO)
 	defaultUID   = "00000000-0000-0000-0000-000000000101"
 	sessionCookie = "erp_session"
 )
@@ -49,6 +51,7 @@ type userSummary struct {
 	FullName    string   `json:"fullName"`
 	Email       string   `json:"email"`
 	ActiveOrgID string   `json:"activeOrgId"`
+	AdminTier   int      `json:"adminTier"`
 	Roles       []string `json:"roles"`
 	Permissions []string `json:"permissions"`
 }
@@ -57,17 +60,33 @@ var devOrganizations = []orgSummary{
 	{
 		ID:                 defaultOrgID,
 		Code:               "HLD-01",
-		Name:               "PT Sinergi Investasi Properti (Holding)",
+		Name:               "PT Sinergi Investasi Properti (Head Office / Holding)",
 		Type:               "HOLDING",
 		ParentID:           nil,
 		FunctionalCurrency: "IDR",
 	},
 	{
 		ID:                 branchOrgID,
-		Code:               "BRC-JKT",
-		Name:               "PT Sinergi Properti Jakarta (Branch)",
-		Type:               "BRANCH",
+		Code:               "SUB-PRO",
+		Name:               "PT Sinergi Properti Jakarta (Anak Perusahaan)",
+		Type:               "COMPANY",
 		ParentID:           strPtr(defaultOrgID),
+		FunctionalCurrency: "IDR",
+	},
+	{
+		ID:                 subLogOrgID,
+		Code:               "SUB-LOG",
+		Name:               "PT Sinergi Logistik Nusantara (Anak Perusahaan)",
+		Type:               "COMPANY",
+		ParentID:           strPtr(defaultOrgID),
+		FunctionalCurrency: "IDR",
+	},
+	{
+		ID:                 brcJktOrgID,
+		Code:               "BRC-JKT",
+		Name:               "Cabang Jakarta Selatan (Branch)",
+		Type:               "BRANCH",
+		ParentID:           strPtr(branchOrgID),
 		FunctionalCurrency: "IDR",
 	},
 }
@@ -111,6 +130,115 @@ var rolePermissions = map[string][]string{
 		"asset.read", "asset.create", "asset.update", "asset:read", "asset:write",
 		"maintenance.read", "maintenance.create", "maintenance.update", "maintenance:read", "maintenance:write",
 		"crm.read", "crm.create", "crm.update", "crm:read", "crm:write",
+	},
+	"HOLDING_ADMIN": {
+		"gl.create", "gl.read", "gl.update", "gl.approve",
+		"ap.create", "ap.read", "ap.update", "ap.approve",
+		"ar.create", "ar.read", "ar.update", "ar.approve",
+		"tax.create", "tax.read", "tax.update", "tax.approve",
+		"treasury.create", "treasury.read", "treasury.update", "treasury.approve",
+		"procurement.create", "procurement.read", "procurement.update", "procurement.approve",
+		"inventory.create", "inventory.read", "inventory.update",
+		"sales.create", "sales.read", "sales.update",
+		"audit.read", "reporting.read", "org.read",
+		"gl:read", "gl:write", "gl:approve",
+		"ap:read", "ap:write", "ap:approve",
+		"ar:read", "ar:write", "ar:approve",
+		"coa:read", "coa:write",
+		"tax:read", "tax:write", "tax:approve",
+		"currency:read", "currency:write",
+		"treasury:read", "treasury:write", "treasury:approve",
+		"workflow:read", "workflow:write", "workflow:approve", "workflow.approve",
+		"inventory:read", "inventory:write",
+		"procurement:read", "procurement:write", "procurement:approve",
+		"sales:read", "sales:write",
+		"manufacturing:read", "manufacturing:write",
+		"hr:read", "hr:write",
+		"payroll:read", "payroll:write", "payroll:approve", "payroll.approve",
+		"masterdata:read", "masterdata:write",
+		"org:read", "org:write",
+		"user:read", "user:write",
+		"security:read", "security:write",
+		"audit:read",
+		"dimension:read", "dimension:write", "localization:read", "localization:write",
+		"fixedasset.read", "fixedasset.create", "fixedasset.update", "fixedasset:read", "fixedasset:write",
+		"budget.read", "budget.create", "budget.update", "budget.approve", "budget:read", "budget:write", "budget:approve",
+		"financialclose.read", "financialclose.create", "financialclose.update", "financialclose.approve", "financialclose:read", "financialclose:write", "financialclose:approve",
+		"consolidation.read", "consolidation.create", "consolidation.update", "consolidation.approve", "consolidation:read", "consolidation:write", "consolidation:approve",
+		"project.read", "project.create", "project.update", "project.approve", "project:read", "project:write", "project:approve",
+		"asset.read", "asset.create", "asset.update", "asset:read", "asset:write",
+		"maintenance.read", "maintenance.create", "maintenance.update", "maintenance:read", "maintenance:write",
+		"crm.read", "crm.create", "crm.update", "crm:read", "crm:write",
+	},
+	"SUBSIDIARY_ADMIN": {
+		"gl.create", "gl.read", "gl.update", "gl.approve",
+		"ap.create", "ap.read", "ap.update", "ap.approve",
+		"ar.create", "ar.read", "ar.update", "ar.approve",
+		"tax.create", "tax.read", "tax.update", "tax.approve",
+		"treasury.create", "treasury.read", "treasury.update", "treasury.approve",
+		"procurement.create", "procurement.read", "procurement.update", "procurement.approve",
+		"inventory.create", "inventory.read", "inventory.update",
+		"sales.create", "sales.read", "sales.update",
+		"audit.read", "reporting.read", "org.read",
+		"gl:read", "gl:write", "gl:approve",
+		"ap:read", "ap:write", "ap:approve",
+		"ar:read", "ar:write", "ar:approve",
+		"coa:read", "coa:write",
+		"tax:read", "tax:write", "tax:approve",
+		"currency:read", "currency:write",
+		"treasury:read", "treasury:write", "treasury:approve",
+		"workflow:read", "workflow:write", "workflow:approve", "workflow.approve",
+		"inventory:read", "inventory:write",
+		"procurement:read", "procurement:write", "procurement:approve",
+		"sales:read", "sales:write",
+		"manufacturing:read", "manufacturing:write",
+		"hr:read", "hr:write",
+		"payroll:read", "payroll:write", "payroll:approve", "payroll.approve",
+		"masterdata:read", "masterdata:write",
+		"org:read", "org:write",
+		"user:read", "user:write",
+		"security:read", "security:write",
+		"audit:read",
+		"dimension:read", "dimension:write", "localization:read", "localization:write",
+		"fixedasset.read", "fixedasset.create", "fixedasset.update", "fixedasset:read", "fixedasset:write",
+		"budget.read", "budget.create", "budget.update", "budget.approve", "budget:read", "budget:write", "budget:approve",
+		"financialclose.read", "financialclose.create", "financialclose.update", "financialclose.approve", "financialclose:read", "financialclose:write", "financialclose:approve",
+		"project.read", "project.create", "project.update", "project.approve", "project:read", "project:write", "project:approve",
+		"asset.read", "asset.create", "asset.update", "asset:read", "asset:write",
+		"maintenance.read", "maintenance.create", "maintenance.update", "maintenance:read", "maintenance:write",
+		"crm.read", "crm.create", "crm.update", "crm:read", "crm:write",
+	},
+	"BRANCH_ADMIN": {
+		"gl.create", "gl.read", "gl.update",
+		"ap.create", "ap.read", "ap.update",
+		"ar.create", "ar.read", "ar.update",
+		"tax.read", "treasury.read",
+		"procurement.create", "procurement.read", "procurement.update",
+		"inventory.create", "inventory.read", "inventory.update",
+		"sales.create", "sales.read", "sales.update",
+		"audit.read", "reporting.read", "org.read",
+		"gl:read", "gl:write",
+		"ap:read", "ap:write",
+		"ar:read", "ar:write",
+		"coa:read", "tax:read", "currency:read", "treasury:read",
+		"workflow:read", "workflow:write",
+		"inventory:read", "inventory:write",
+		"procurement:read", "procurement:write",
+		"sales:read", "sales:write",
+		"manufacturing:read", "manufacturing:write",
+		"hr:read", "hr:write",
+		"payroll:read",
+		"masterdata:read", "masterdata:write",
+		"org:read",
+		"user:read", "user:write",
+		"audit:read",
+		"dimension:read", "localization:read",
+		"fixedasset.read", "fixedasset:read",
+		"budget.read", "budget:read",
+		"project.read", "project:read", "project:write",
+		"asset.read", "asset:read", "asset:write",
+		"maintenance.read", "maintenance:read", "maintenance:write",
+		"crm.read", "crm:read", "crm:write",
 	},
 	"FINANCE_MANAGER": {
 		"gl.create", "gl.read", "gl.update", "gl.approve",
@@ -367,6 +495,7 @@ func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuth
 		r.Header.Del("X-Roles")
 		r.Header.Del("X-Permissions")
 		r.Header.Del("X-Org-Scope")
+		r.Header.Del("X-Admin-Tier")
 		r.Header.Del("X-Gateway-Signature")
 		r.Header.Del("X-Gateway-Timestamp")
 
@@ -397,6 +526,7 @@ func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuth
 			r.Header.Set("X-Org-Scope", scope)
 			r.Header.Set("X-User-Id", defaultUID)
 			r.Header.Set("X-Roles", "SYSTEM_ADMIN")
+			r.Header.Set("X-Admin-Tier", strconv.Itoa(httpx.AdminTierSystem))
 			r.Header.Set("X-Permissions", strings.Join(permissionsForRoles([]string{"SYSTEM_ADMIN"}), ","))
 			httpx.SignGatewayRequest(r, jwtSecret)
 			rp.ServeHTTP(w, r)
@@ -437,10 +567,12 @@ func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuth
 			}
 		}
 
+		adminTier := httpx.AdminTierForRoles(claims.Roles)
 		r.Header.Set("X-Organization-Id", strings.Join(scopeList, ","))
 		r.Header.Set("X-Org-Scope", strings.Join(scopeList, ","))
 		r.Header.Set("X-User-Id", claims.Subject)
 		r.Header.Set("X-Roles", strings.Join(claims.Roles, ","))
+		r.Header.Set("X-Admin-Tier", strconv.Itoa(adminTier))
 		r.Header.Set("X-Permissions", strings.Join(effectivePerms, ","))
 		httpx.SignGatewayRequest(r, jwtSecret)
 		rp.ServeHTTP(w, r)
@@ -473,22 +605,25 @@ func handleLogin(secret []byte, devAuthMode bool) http.HandlerFunc {
 
 		activeOrg := resolveOrg(req.OrganizationID, req.OrgCode)
 		userID := defaultUID
-		if req.Username != "admin.finance" {
+		if req.Username != "admin.finance" && req.Username != "admin.ho" {
 			userID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("erp-user:"+req.Username)).String()
 		}
 
-		roles := []string{"SYSTEM_ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"}
-		perms := permissionsForRoles(roles)
-		orgScope := []string{defaultOrgID, branchOrgID}
-		if !slices.Contains(orgScope, activeOrg.ID) {
-			orgScope = append([]string{activeOrg.ID}, orgScope...)
+		roles, orgScope, defaultActiveOrg, fullName := resolveDevPersona(req.Username, activeOrg)
+		if req.OrganizationID == "" && req.OrgCode == "" {
+			activeOrg = defaultActiveOrg
+		} else if !slices.Contains(orgScope, activeOrg.ID) {
+			// Prevent a subsidiary/branch persona from selecting an org outside its hierarchy at login.
+			if slices.Contains(roles, "SYSTEM_ADMIN") {
+				orgScope = append([]string{activeOrg.ID}, orgScope...)
+			} else {
+				activeOrg = defaultActiveOrg
+			}
 		}
+		perms := permissionsForRoles(roles)
+		adminTier := httpx.AdminTierForRoles(roles)
 
 		now := time.Now().UTC()
-		fullName := "Chief Financial Officer"
-		if req.Username != "admin.finance" {
-			fullName = req.Username
-		}
 		email := req.Username
 		if !strings.Contains(email, "@") {
 			email += "@sinergi.example.com"
@@ -503,6 +638,7 @@ func handleLogin(secret []byte, devAuthMode bool) http.HandlerFunc {
 			OrgScope:    orgScope,
 			Roles:       roles,
 			Permissions: perms,
+			AdminTier:   adminTier,
 			TokenUse:    "access",
 			IssuedAt:    now.Unix(),
 			ExpiresAt:   now.Add(8 * time.Hour).Unix(),
@@ -542,13 +678,66 @@ func handleLogin(secret []byte, devAuthMode bool) http.HandlerFunc {
 				FullName:    fullName,
 				Email:       email,
 				ActiveOrgID: activeOrg.ID,
+				AdminTier:   adminTier,
 				Roles:       roles,
 				Permissions: perms,
 			},
 			"activeOrg":     activeOrg,
-			"organizations": devOrganizations,
+			"organizations": filterOrgsForScope(orgScope, roles),
 		})
 	}
+}
+
+func resolveDevPersona(username string, requested orgSummary) (roles []string, orgScope []string, defaultOrg orgSummary, fullName string) {
+	u := strings.ToLower(strings.TrimSpace(username))
+	switch u {
+	case "admin.finance", "admin.system":
+		return []string{"SYSTEM_ADMIN", "HOLDING_ADMIN", "FINANCE_MANAGER", "ACCOUNTANT"},
+			[]string{defaultOrgID, branchOrgID, subLogOrgID, brcJktOrgID},
+			devOrganizations[0],
+			"Chief Financial Officer (Head Office)"
+	case "admin.ho":
+		return []string{"HOLDING_ADMIN", "FINANCE_MANAGER"},
+			[]string{defaultOrgID, branchOrgID, subLogOrgID, brcJktOrgID},
+			devOrganizations[0],
+			"Admin Utama Head Office (Holding)"
+	case "admin.properti", "admin.sub":
+		return []string{"SUBSIDIARY_ADMIN"},
+			[]string{branchOrgID, brcJktOrgID},
+			devOrganizations[1],
+			"Admin Anak Perusahaan (Properti)"
+	case "admin.logistik":
+		return []string{"SUBSIDIARY_ADMIN"},
+			[]string{subLogOrgID},
+			devOrganizations[2],
+			"Admin Anak Perusahaan (Logistik)"
+	case "admin.cabang", "admin.jkt":
+		return []string{"BRANCH_ADMIN"},
+			[]string{brcJktOrgID},
+			devOrganizations[3],
+			"Admin Cabang Jakarta Selatan"
+	default:
+		return []string{"ACCOUNTANT"},
+			[]string{requested.ID},
+			requested,
+			username
+	}
+}
+
+func filterOrgsForScope(orgScope, roles []string) []orgSummary {
+	if slices.Contains(roles, "SYSTEM_ADMIN") {
+		return devOrganizations
+	}
+	out := make([]orgSummary, 0, len(orgScope))
+	for _, o := range devOrganizations {
+		if slices.Contains(orgScope, o.ID) {
+			out = append(out, o)
+		}
+	}
+	if len(out) == 0 {
+		return []orgSummary{devOrganizations[0]}
+	}
+	return out
 }
 
 func handleLogout() http.HandlerFunc {
@@ -599,11 +788,12 @@ func handleMe(secret []byte) http.HandlerFunc {
 				FullName:    claims.FullName,
 				Email:       claims.Email,
 				ActiveOrgID: claims.OrgID,
+				AdminTier:   httpx.AdminTierForRoles(claims.Roles),
 				Roles:       claims.Roles,
 				Permissions: claims.Permissions,
 			},
 			"activeOrg":     activeOrg,
-			"organizations": devOrganizations,
+			"organizations": filterOrgsForScope(claims.OrgScope, claims.Roles),
 		})
 	}
 }

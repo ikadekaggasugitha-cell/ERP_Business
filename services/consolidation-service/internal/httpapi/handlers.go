@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"math/big"
 	"net/http"
 	"strings"
@@ -16,9 +18,13 @@ import (
 
 type Store interface {
 	CreateGroup(ctx context.Context, scope []uuid.UUID, arg consdb.CreateConsolidationGroupParams) (consdb.CreateConsolidationGroupRow, error)
+	GetGroup(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (consdb.ConsConsolidationGroup, error)
 	ListGroups(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]consdb.ConsConsolidationGroup, int64, error)
+	UpdateGroup(ctx context.Context, scope []uuid.UUID, arg consdb.UpdateConsolidationGroupParams) (int32, error)
+	DeleteGroup(ctx context.Context, scope []uuid.UUID, arg consdb.DeleteConsolidationGroupParams) error
 	AddMember(ctx context.Context, scope []uuid.UUID, arg consdb.CreateConsolidationMemberParams) (consdb.CreateConsolidationMemberRow, error)
 	ListMembers(ctx context.Context, scope []uuid.UUID, groupID uuid.UUID) ([]consdb.ConsConsolidationMember, error)
+	DeleteMember(ctx context.Context, scope []uuid.UUID, arg consdb.DeleteConsolidationMemberParams) error
 	CreateRule(ctx context.Context, scope []uuid.UUID, arg consdb.CreateEliminationRuleParams) (consdb.CreateEliminationRuleRow, error)
 	ListRules(ctx context.Context, scope []uuid.UUID, groupID *uuid.UUID, limit, offset int32) ([]consdb.ConsEliminationRule, int64, error)
 	CreateRun(ctx context.Context, scope []uuid.UUID, arg consdb.CreateConsolidationRunParams) (consdb.CreateConsolidationRunRow, error)
@@ -39,8 +45,12 @@ func NewServer(repo Store) *Server { return &Server{repo: repo, idem: httpx.NewI
 func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /consolidation-groups", s.listGroups)
 	mux.HandleFunc("POST /consolidation-groups", s.createGroup)
+	mux.HandleFunc("GET /consolidation-groups/{id}", s.getGroup)
+	mux.HandleFunc("PUT /consolidation-groups/{id}", s.updateGroup)
+	mux.HandleFunc("DELETE /consolidation-groups/{id}", s.deleteGroup)
 	mux.HandleFunc("GET /consolidation-groups/{id}/members", s.listMembers)
 	mux.HandleFunc("POST /consolidation-groups/{id}/members", s.addMember)
+	mux.HandleFunc("DELETE /consolidation-groups/{id}/members/{memberId}", s.deleteMember)
 	mux.HandleFunc("GET /elimination-rules", s.listRules)
 	mux.HandleFunc("POST /elimination-rules", s.createRule)
 	mux.HandleFunc("GET /consolidation-runs", s.listRuns)
@@ -49,6 +59,31 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /consolidation-runs/{id}/eliminate", s.postEliminations)
 	mux.HandleFunc("POST /consolidation-runs/{id}/adjustments", s.postAdjustments)
 	mux.HandleFunc("POST /consolidation-runs/{id}/finalize", s.finalizeRun)
+}
+
+func beginIdemOptional(w http.ResponseWriter, r *http.Request, idem *httpx.IdemStore, scope []uuid.UUID, dst any) (string, string, func(), bool) {
+	if dst == nil {
+		var empty map[string]any
+		dst = &empty
+	}
+	if r.Body == nil {
+		r.Body = io.NopCloser(strings.NewReader("{}"))
+	} else {
+		raw, err := io.ReadAll(io.LimitReader(r.Body, (1<<20)+1))
+		if err == nil && len(bytes.TrimSpace(raw)) == 0 {
+			r.Body = io.NopCloser(strings.NewReader("{}"))
+		} else {
+			r.Body = io.NopCloser(bytes.NewReader(raw))
+		}
+	}
+	return httpx.BeginIdempotent(w, r, idem, scope, dst)
+}
+
+func rawJSONOrEmptyObj(b []byte) json.RawMessage {
+	if len(bytes.TrimSpace(b)) == 0 {
+		return json.RawMessage(`{}`)
+	}
+	return json.RawMessage(b)
 }
 
 func requireRead(w http.ResponseWriter, r *http.Request) ([]uuid.UUID, bool) {
@@ -79,7 +114,89 @@ func requireWrite(w http.ResponseWriter, r *http.Request) ([]uuid.UUID, uuid.UUI
 		httpx.WriteError(w, r, err)
 		return nil, uuid.Nil, false
 	}
+	if err := httpx.RequireMaxAdminTier(r, httpx.AdminTierHolding); err != nil {
+		httpx.WriteError(w, r, err)
+		return nil, uuid.Nil, false
+	}
 	return scope, user, true
+}
+
+func groupDTO(g consdb.ConsConsolidationGroup) map[string]any {
+	return map[string]any{
+		"id":                       g.ID,
+		"organizationId":           g.OrganizationID,
+		"code":                     g.Code,
+		"name":                     g.Name,
+		"parentGroupId":            g.ParentGroupID,
+		"presentationCurrencyCode": g.PresentationCurrencyCode,
+		"isSystem":                 g.OrganizationID == platform.SystemOrgID,
+		"rowVersion":               g.RowVersion,
+	}
+}
+
+func memberDTO(m consdb.ConsConsolidationMember) map[string]any {
+	return map[string]any{
+		"id":                   m.ID,
+		"organizationId":       m.OrganizationID,
+		"consolidationGroupId": m.ConsolidationGroupID,
+		"companyRef":           m.CompanyRef,
+		"ownershipPercentage":  platform.FormatNumeric(m.OwnershipPercentage, 4),
+		"consolidationMethod":  m.ConsolidationMethod,
+		"rowVersion":           m.RowVersion,
+	}
+}
+
+func ruleDTO(r consdb.ConsEliminationRule) map[string]any {
+	return map[string]any{
+		"id":                   r.ID,
+		"organizationId":       r.OrganizationID,
+		"consolidationGroupId": r.ConsolidationGroupID,
+		"ruleType":             r.RuleType,
+		"config":               rawJSONOrEmptyObj(r.Config),
+		"isActive":             r.IsActive,
+		"isSystem":             r.OrganizationID == platform.SystemOrgID,
+		"rowVersion":           r.RowVersion,
+	}
+}
+
+func runDTO(r consdb.ConsConsolidationRun) map[string]any {
+	return map[string]any{
+		"id":                   r.ID,
+		"organizationId":       r.OrganizationID,
+		"consolidationGroupId": r.ConsolidationGroupID,
+		"fiscalPeriodRef":      r.FiscalPeriodRef,
+		"status":               r.Status,
+		"version":              r.Version,
+		"rowVersion":           r.RowVersion,
+	}
+}
+
+func eliminationEntryDTO(e consdb.ConsEliminationEntry) map[string]any {
+	return map[string]any{
+		"id":                 e.ID,
+		"organizationId":     e.OrganizationID,
+		"consolidationRunId": e.ConsolidationRunID,
+		"eliminationRuleId":  e.EliminationRuleID,
+		"accountRef":         e.AccountRef,
+		"debitAmount":        platform.FormatNumeric(e.DebitAmount, 4),
+		"creditAmount":       platform.FormatNumeric(e.CreditAmount, 4),
+		"description":        e.Description,
+		"rowVersion":         e.RowVersion,
+	}
+}
+
+func adjustmentDTO(a consdb.ConsConsolidationAdjustment) map[string]any {
+	return map[string]any{
+		"id":                 a.ID,
+		"organizationId":     a.OrganizationID,
+		"consolidationRunId": a.ConsolidationRunID,
+		"accountRef":         a.AccountRef,
+		"debitAmount":        platform.FormatNumeric(a.DebitAmount, 4),
+		"creditAmount":       platform.FormatNumeric(a.CreditAmount, 4),
+		"adjustmentType":     a.AdjustmentType,
+		"notes":              a.Notes,
+		"rowVersion":         a.RowVersion,
+	}
 }
 
 func (s *Server) listGroups(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +210,29 @@ func (s *Server) listGroups(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	out := make([]map[string]any, 0, len(rows))
+	for _, g := range rows {
+		out = append(out, groupDTO(g))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: out, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+}
+
+func (s *Server) getGroup(w http.ResponseWriter, r *http.Request) {
+	scope, ok := requireRead(w, r)
+	if !ok {
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	g, err := s.repo.GetGroup(r.Context(), scope, id)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteIDResponse(w, http.StatusOK, g.RowVersion, groupDTO(g))
 }
 
 func (s *Server) createGroup(w http.ResponseWriter, r *http.Request) {
@@ -128,6 +267,70 @@ func (s *Server) createGroup(w http.ResponseWriter, r *http.Request) {
 	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID, "rowVersion": created.RowVersion})
 }
 
+func (s *Server) updateGroup(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var req struct {
+		Name                     string     `json:"name"`
+		ParentGroupID            *uuid.UUID `json:"parentGroupId,omitempty"`
+		PresentationCurrencyCode string     `json:"presentationCurrencyCode"`
+	}
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	curr := strings.ToUpper(strings.TrimSpace(req.PresentationCurrencyCode))
+	if strings.TrimSpace(req.Name) == "" || len(curr) != 3 {
+		httpx.WriteError(w, r, httpx.BadRequest("name and 3-letter presentationCurrencyCode are required"))
+		return
+	}
+	next, err := s.repo.UpdateGroup(r.Context(), scope, consdb.UpdateConsolidationGroupParams{
+		ID: id, RowVersion: rowVer, Name: strings.TrimSpace(req.Name),
+		ParentGroupID: req.ParentGroupID, PresentationCurrencyCode: curr, UpdatedBy: &user,
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"id": id, "rowVersion": next})
+}
+
+func (s *Server) deleteGroup(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := s.repo.DeleteGroup(r.Context(), scope, consdb.DeleteConsolidationGroupParams{
+		ID: id, RowVersion: rowVer, UpdatedBy: &user,
+	}); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) listMembers(w http.ResponseWriter, r *http.Request) {
 	scope, ok := requireRead(w, r)
 	if !ok {
@@ -143,7 +346,11 @@ func (s *Server) listMembers(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(1, len(rows), len(rows))})
+	out := make([]map[string]any, 0, len(rows))
+	for _, m := range rows {
+		out = append(out, memberDTO(m))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: out, Page: httpx.NewPageMeta(1, len(out), len(out))})
 }
 
 func (s *Server) addMember(w http.ResponseWriter, r *http.Request) {
@@ -161,10 +368,11 @@ func (s *Server) addMember(w http.ResponseWriter, r *http.Request) {
 		OwnershipPercentage string    `json:"ownershipPercentage"`
 		ConsolidationMethod string    `json:"consolidationMethod"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
 	if req.CompanyRef == uuid.Nil {
 		httpx.WriteError(w, r, httpx.BadRequest("companyRef is required"))
 		return
@@ -191,7 +399,31 @@ func (s *Server) addMember(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID, "rowVersion": created.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID, "rowVersion": created.RowVersion})
+}
+
+func (s *Server) deleteMember(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	memberID, err := httpx.ParseUUIDParam("memberId", r.PathValue("memberId"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := s.repo.DeleteMember(r.Context(), scope, consdb.DeleteConsolidationMemberParams{
+		ID: memberID, RowVersion: rowVer, UpdatedBy: &user,
+	}); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) listRules(w http.ResponseWriter, r *http.Request) {
@@ -211,7 +443,11 @@ func (s *Server) listRules(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	out := make([]map[string]any, 0, len(rows))
+	for _, rl := range rows {
+		out = append(out, ruleDTO(rl))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: out, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
 }
 
 func (s *Server) createRule(w http.ResponseWriter, r *http.Request) {
@@ -225,10 +461,11 @@ func (s *Server) createRule(w http.ResponseWriter, r *http.Request) {
 		Config               json.RawMessage `json:"config"`
 		IsActive             *bool           `json:"isActive,omitempty"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
 	if req.ConsolidationGroupID == uuid.Nil {
 		httpx.WriteError(w, r, httpx.BadRequest("consolidationGroupId is required"))
 		return
@@ -255,7 +492,7 @@ func (s *Server) createRule(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID, "rowVersion": created.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID, "rowVersion": created.RowVersion})
 }
 
 func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
@@ -269,7 +506,11 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	out := make([]map[string]any, 0, len(rows))
+	for _, run := range rows {
+		out = append(out, runDTO(run))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: out, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
 }
 
 func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
@@ -323,8 +564,16 @@ func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	elimDTOs := make([]map[string]any, 0, len(elims))
+	for _, e := range elims {
+		elimDTOs = append(elimDTOs, eliminationEntryDTO(e))
+	}
+	adjDTOs := make([]map[string]any, 0, len(adjs))
+	for _, a := range adjs {
+		adjDTOs = append(adjDTOs, adjustmentDTO(a))
+	}
 	httpx.WriteIDResponse(w, http.StatusOK, run.RowVersion, map[string]any{
-		"run": run, "eliminations": elims, "adjustments": adjs,
+		"run": runDTO(run), "eliminations": elimDTOs, "adjustments": adjDTOs,
 	})
 }
 
@@ -352,10 +601,11 @@ func (s *Server) postEliminations(w http.ResponseWriter, r *http.Request) {
 			Description       *string    `json:"description,omitempty"`
 		} `json:"entries"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
 	if len(req.Entries) < 2 {
 		httpx.WriteError(w, r, httpx.Unprocessable("CONSOLIDATION_UNBALANCED", "at least 2 balanced elimination entries are required"))
 		return
@@ -373,8 +623,13 @@ func (s *Server) postEliminations(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, r, httpx.BadRequest("invalid creditAmount"))
 			return
 		}
-		totDr.Add(totDr, platform.NumericToRat(dr))
-		totCr.Add(totCr, platform.NumericToRat(cr))
+		drRat, crRat := platform.NumericToRat(dr), platform.NumericToRat(cr)
+		if drRat.Sign() < 0 || crRat.Sign() < 0 || (drRat.Sign() > 0 && crRat.Sign() > 0) || (drRat.Sign() == 0 && crRat.Sign() == 0) {
+			httpx.WriteError(w, r, httpx.Unprocessable("INVALID_ENTRY_LINE", "each elimination entry must have strictly one positive debit or credit amount"))
+			return
+		}
+		totDr.Add(totDr, drRat)
+		totCr.Add(totCr, crRat)
 		params = append(params, consdb.CreateEliminationEntryParams{
 			OrganizationID: scope[0], ConsolidationRunID: runID, EliminationRuleID: e.EliminationRuleID,
 			AccountRef: e.AccountRef, DebitAmount: dr, CreditAmount: cr, Description: e.Description, CreatedBy: user,
@@ -389,7 +644,7 @@ func (s *Server) postEliminations(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"id": runID, "status": "Eliminated", "rowVersion": next})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, next, map[string]any{"id": runID, "status": "Eliminated", "rowVersion": next})
 }
 
 func (s *Server) postAdjustments(w http.ResponseWriter, r *http.Request) {
@@ -416,10 +671,11 @@ func (s *Server) postAdjustments(w http.ResponseWriter, r *http.Request) {
 			Notes          *string   `json:"notes,omitempty"`
 		} `json:"adjustments"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
 	if len(req.Adjustments) < 2 {
 		httpx.WriteError(w, r, httpx.Unprocessable("CONSOLIDATION_UNBALANCED", "at least 2 balanced adjustment entries are required"))
 		return
@@ -441,8 +697,13 @@ func (s *Server) postAdjustments(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, r, httpx.BadRequest("invalid creditAmount"))
 			return
 		}
-		totDr.Add(totDr, platform.NumericToRat(dr))
-		totCr.Add(totCr, platform.NumericToRat(cr))
+		drRat, crRat := platform.NumericToRat(dr), platform.NumericToRat(cr)
+		if drRat.Sign() < 0 || crRat.Sign() < 0 || (drRat.Sign() > 0 && crRat.Sign() > 0) || (drRat.Sign() == 0 && crRat.Sign() == 0) {
+			httpx.WriteError(w, r, httpx.Unprocessable("INVALID_ENTRY_LINE", "each adjustment entry must have strictly one positive debit or credit amount"))
+			return
+		}
+		totDr.Add(totDr, drRat)
+		totCr.Add(totCr, crRat)
 		params = append(params, consdb.CreateConsolidationAdjustmentParams{
 			OrganizationID: scope[0], ConsolidationRunID: runID, AccountRef: a.AccountRef,
 			DebitAmount: dr, CreditAmount: cr, AdjustmentType: a.AdjustmentType, Notes: a.Notes, CreatedBy: user,
@@ -457,7 +718,7 @@ func (s *Server) postAdjustments(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"id": runID, "status": "Adjusted", "rowVersion": next})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, next, map[string]any{"id": runID, "status": "Adjusted", "rowVersion": next})
 }
 
 func (s *Server) finalizeRun(w http.ResponseWriter, r *http.Request) {
@@ -475,10 +736,15 @@ func (s *Server) finalizeRun(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	idemKey, reqHash, release, done := beginIdemOptional(w, r, s.idem, scope, nil)
+	if done {
+		return
+	}
+	defer release()
 	next, err := s.repo.FinalizeRunAndEmit(r.Context(), scope, runID, rowVer, user, httpx.CorrelationUUID(r))
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"id": runID, "status": "Finalized", "rowVersion": next})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, next, map[string]any{"id": runID, "status": "Finalized", "rowVersion": next})
 }

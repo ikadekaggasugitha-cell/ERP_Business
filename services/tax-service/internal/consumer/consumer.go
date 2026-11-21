@@ -108,23 +108,21 @@ func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 		if tRat.Sign() < 0 {
 			return eventbus.ErrPoison{Err: fmt.Errorf("taxAmount must be >= 0")}
 		}
-		if tRat.Sign() > 0 {
-			explicitTax = true
-			taxNum = parsedTax
-			if rawSub := strings.TrimSpace(p.SubtotalAmount); rawSub != "" {
-				subNum, err := platform.ParseOptionalNumeric(rawSub)
-				if err != nil {
-					return eventbus.ErrPoison{Err: fmt.Errorf("invalid subtotalAmount: %w", err)}
-				}
-				baseNum = subNum
-			} else {
-				baseRat := new(big.Rat).Sub(totalRat, tRat)
-				if baseRat.Sign() < 0 {
-					return eventbus.ErrPoison{Err: fmt.Errorf("taxAmount exceeds totalAmount")}
-				}
-				if baseNum, err = platform.RatToNumeric(baseRat, 4); err != nil {
-					return err
-				}
+		explicitTax = true
+		taxNum = parsedTax
+		if rawSub := strings.TrimSpace(p.SubtotalAmount); rawSub != "" {
+			subNum, err := platform.ParseOptionalNumeric(rawSub)
+			if err != nil {
+				return eventbus.ErrPoison{Err: fmt.Errorf("invalid subtotalAmount: %w", err)}
+			}
+			baseNum = subNum
+		} else {
+			baseRat := new(big.Rat).Sub(totalRat, tRat)
+			if baseRat.Sign() < 0 {
+				return eventbus.ErrPoison{Err: fmt.Errorf("taxAmount exceeds totalAmount")}
+			}
+			if baseNum, err = platform.RatToNumeric(baseRat, 4); err != nil {
+				return err
 			}
 		}
 	}
@@ -145,6 +143,9 @@ func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 	}
 
 	efaktur := "EF-" + ref
+	if len(efaktur) > 50 {
+		efaktur = efaktur[:50]
+	}
 	draft := "Draft"
 	baseStr := platform.FormatNumeric(baseNum, 4)
 	taxStr := platform.FormatNumeric(taxNum, 4)

@@ -97,4 +97,23 @@ func TestHandleExactRatVATAndExplicitTaxHandling(t *testing.T) {
 	if !errors.As(err, &poison) {
 		t.Fatalf("expected ErrPoison when taxAmount > totalAmount, got %v", err)
 	}
+
+	// 5. Explicit zero taxAmount ("0.0000") must NOT be overwritten with 11% VAT, and long ref capped to 50 chars
+	longRef := "INV-2026-VERY-LONG-REFERENCE-NUMBER-EXCEEDING-FIFTY-CHARACTERS-TOTAL"
+	err = c.Handle(context.Background(), eventbus.Envelope{
+		EventID:        uuid.NewString(),
+		EventType:      "ar.invoice.issued",
+		AggregateID:    uuid.NewString(),
+		OrganizationID: uuid.NewString(),
+		Data:           []byte(`{"invoiceNo":"` + longRef + `","totalAmount":"500000.0000","taxAmount":"0.0000"}`),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error on explicit zero tax: %v", err)
+	}
+	if !s.explicitTax || platform.FormatNumeric(s.txn.TaxAmount, 4) != "0.0000" {
+		t.Fatalf("expected explicitTax=true taxAmount=0.0000, got explicit=%v tax=%s", s.explicitTax, platform.FormatNumeric(s.txn.TaxAmount, 4))
+	}
+	if s.txn.EfakturNo == nil || len(*s.txn.EfakturNo) > 50 {
+		t.Fatalf("expected efakturNo capped <= 50 chars, got %v", s.txn.EfakturNo)
+	}
 }

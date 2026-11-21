@@ -16,6 +16,13 @@ SELECT * FROM ar.ar_invoice
 WHERE id = $1 AND deleted_at IS NULL
 LIMIT 1;
 
+-- name: GetInvoiceByRef :one
+SELECT * FROM ar.ar_invoice
+WHERE organization_id = $1 AND deleted_at IS NULL
+  AND (id::text = sqlc.arg(invoice_ref)::text OR invoice_no = sqlc.arg(invoice_ref)::text)
+ORDER BY invoice_date DESC
+LIMIT 1;
+
 -- name: ListInvoices :many
 SELECT id, invoice_no, customer_id, invoice_date, due_date, status,
        currency_code, total_amount, outstanding_amount, row_version
@@ -63,10 +70,29 @@ UPDATE ar.ar_invoice
 SET status = 'Paid', outstanding_amount = 0, updated_by = $4
 WHERE id = $1 AND invoice_date = $2 AND status = 'Issued' AND row_version = $3 AND deleted_at IS NULL;
 
+-- name: CreateReceiptAllocation :exec
+INSERT INTO ar.ar_receipt_allocation (
+    organization_id, ar_invoice_id, invoice_date, receipt_id, allocated_amount, created_by
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+)
+ON CONFLICT (ar_invoice_id, receipt_id) DO NOTHING;
+
+-- name: ApplyReceiptToInvoice :one
+UPDATE ar.ar_invoice
+SET outstanding_amount = GREATEST(outstanding_amount - sqlc.arg(paid_amount)::numeric(20,4), 0),
+    status = CASE
+        WHEN outstanding_amount - sqlc.arg(paid_amount)::numeric(20,4) <= 0 THEN 'Paid'
+        ELSE 'PartiallyPaid'
+    END,
+    updated_by = $3
+WHERE id = $1 AND invoice_date = $2 AND status IN ('Issued', 'PartiallyPaid', 'Overdue') AND deleted_at IS NULL
+RETURNING id, invoice_no, customer_id, currency_code, total_amount, outstanding_amount, status;
+
 -- name: DeleteDraftInvoice :execrows
 UPDATE ar.ar_invoice
 SET status = 'Cancelled', deleted_at = now(), updated_by = $4
-WHERE id = $1 AND invoice_date = $2 AND status = 'Issued' AND row_version = $3 AND deleted_at IS NULL;
+WHERE id = $1 AND invoice_date = $2 AND status = 'Draft' AND row_version = $3 AND deleted_at IS NULL;
 
 -- name: InsertOutbox :exec
 INSERT INTO ar.outbox (aggregate_type, aggregate_id, event_type, payload, organization_id, correlation_id)

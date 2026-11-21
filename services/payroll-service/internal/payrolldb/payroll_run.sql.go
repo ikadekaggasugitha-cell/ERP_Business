@@ -70,26 +70,27 @@ const createPayrollResult = `-- name: CreatePayrollResult :one
 INSERT INTO pay.payroll_result (
     organization_id, payroll_run_id, employee_id,
     gross_amount, deduction_amount, tax_amount, net_amount,
-    encrypted_gross, encrypted_net, encrypted_tax, pii_key_version, created_by
+    encrypted_gross, encrypted_deduction, encrypted_net, encrypted_tax, pii_key_version, created_by
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
 RETURNING id, row_version
 `
 
 type CreatePayrollResultParams struct {
-	OrganizationID  uuid.UUID      `json:"organization_id"`
-	PayrollRunID    uuid.UUID      `json:"payroll_run_id"`
-	EmployeeID      uuid.UUID      `json:"employee_id"`
-	GrossAmount     pgtype.Numeric `json:"gross_amount"`
-	DeductionAmount pgtype.Numeric `json:"deduction_amount"`
-	TaxAmount       pgtype.Numeric `json:"tax_amount"`
-	NetAmount       pgtype.Numeric `json:"net_amount"`
-	EncryptedGross  *string        `json:"encrypted_gross"`
-	EncryptedNet    *string        `json:"encrypted_net"`
-	EncryptedTax    *string        `json:"encrypted_tax"`
-	PiiKeyVersion   *string        `json:"pii_key_version"`
-	CreatedBy       uuid.UUID      `json:"created_by"`
+	OrganizationID     uuid.UUID      `json:"organization_id"`
+	PayrollRunID       uuid.UUID      `json:"payroll_run_id"`
+	EmployeeID         uuid.UUID      `json:"employee_id"`
+	GrossAmount        pgtype.Numeric `json:"gross_amount"`
+	DeductionAmount    pgtype.Numeric `json:"deduction_amount"`
+	TaxAmount          pgtype.Numeric `json:"tax_amount"`
+	NetAmount          pgtype.Numeric `json:"net_amount"`
+	EncryptedGross     *string        `json:"encrypted_gross"`
+	EncryptedDeduction *string        `json:"encrypted_deduction"`
+	EncryptedNet       *string        `json:"encrypted_net"`
+	EncryptedTax       *string        `json:"encrypted_tax"`
+	PiiKeyVersion      *string        `json:"pii_key_version"`
+	CreatedBy          uuid.UUID      `json:"created_by"`
 }
 
 type CreatePayrollResultRow struct {
@@ -107,6 +108,7 @@ func (q *Queries) CreatePayrollResult(ctx context.Context, arg CreatePayrollResu
 		arg.TaxAmount,
 		arg.NetAmount,
 		arg.EncryptedGross,
+		arg.EncryptedDeduction,
 		arg.EncryptedNet,
 		arg.EncryptedTax,
 		arg.PiiKeyVersion,
@@ -119,9 +121,9 @@ func (q *Queries) CreatePayrollResult(ctx context.Context, arg CreatePayrollResu
 
 const createPayrollResultLine = `-- name: CreatePayrollResultLine :exec
 INSERT INTO pay.payroll_result_line (
-    organization_id, payroll_result_id, component_code, amount, created_by
+    organization_id, payroll_result_id, component_code, amount, encrypted_amount, created_by
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6
 )
 `
 
@@ -130,6 +132,7 @@ type CreatePayrollResultLineParams struct {
 	PayrollResultID uuid.UUID      `json:"payroll_result_id"`
 	ComponentCode   string         `json:"component_code"`
 	Amount          pgtype.Numeric `json:"amount"`
+	EncryptedAmount *string        `json:"encrypted_amount"`
 	CreatedBy       uuid.UUID      `json:"created_by"`
 }
 
@@ -139,6 +142,7 @@ func (q *Queries) CreatePayrollResultLine(ctx context.Context, arg CreatePayroll
 		arg.PayrollResultID,
 		arg.ComponentCode,
 		arg.Amount,
+		arg.EncryptedAmount,
 		arg.CreatedBy,
 	)
 	return err
@@ -202,19 +206,22 @@ func (q *Queries) CreatePayrollRun(ctx context.Context, arg CreatePayrollRunPara
 
 const createStatutoryContribution = `-- name: CreateStatutoryContribution :exec
 INSERT INTO pay.statutory_contribution (
-    organization_id, payroll_result_id, contribution_type, employee_amount, employer_amount, created_by
+    organization_id, payroll_result_id, contribution_type, employee_amount, employer_amount,
+    encrypted_employee_amount, encrypted_employer_amount, created_by
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6, $7, $8
 )
 `
 
 type CreateStatutoryContributionParams struct {
-	OrganizationID   uuid.UUID      `json:"organization_id"`
-	PayrollResultID  uuid.UUID      `json:"payroll_result_id"`
-	ContributionType string         `json:"contribution_type"`
-	EmployeeAmount   pgtype.Numeric `json:"employee_amount"`
-	EmployerAmount   pgtype.Numeric `json:"employer_amount"`
-	CreatedBy        uuid.UUID      `json:"created_by"`
+	OrganizationID          uuid.UUID      `json:"organization_id"`
+	PayrollResultID         uuid.UUID      `json:"payroll_result_id"`
+	ContributionType        string         `json:"contribution_type"`
+	EmployeeAmount          pgtype.Numeric `json:"employee_amount"`
+	EmployerAmount          pgtype.Numeric `json:"employer_amount"`
+	EncryptedEmployeeAmount *string        `json:"encrypted_employee_amount"`
+	EncryptedEmployerAmount *string        `json:"encrypted_employer_amount"`
+	CreatedBy               uuid.UUID      `json:"created_by"`
 }
 
 func (q *Queries) CreateStatutoryContribution(ctx context.Context, arg CreateStatutoryContributionParams) error {
@@ -224,6 +231,8 @@ func (q *Queries) CreateStatutoryContribution(ctx context.Context, arg CreateSta
 		arg.ContributionType,
 		arg.EmployeeAmount,
 		arg.EmployerAmount,
+		arg.EncryptedEmployeeAmount,
+		arg.EncryptedEmployerAmount,
 		arg.CreatedBy,
 	)
 	return err
@@ -288,8 +297,32 @@ func (q *Queries) DrainOutbox(ctx context.Context, limit int32) ([]DrainOutboxRo
 	return items, nil
 }
 
+const getEmployeeCache = `-- name: GetEmployeeCache :one
+SELECT organization_id, employee_id, employee_no, status, updated_at
+FROM pay.employee_cache
+WHERE organization_id = $1 AND employee_id = $2
+`
+
+type GetEmployeeCacheParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	EmployeeID     uuid.UUID `json:"employee_id"`
+}
+
+func (q *Queries) GetEmployeeCache(ctx context.Context, arg GetEmployeeCacheParams) (PayEmployeeCache, error) {
+	row := q.db.QueryRow(ctx, getEmployeeCache, arg.OrganizationID, arg.EmployeeID)
+	var i PayEmployeeCache
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.EmployeeID,
+		&i.EmployeeNo,
+		&i.Status,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getPayrollRun = `-- name: GetPayrollRun :one
-SELECT id, organization_id, run_no, period_month, period_year, status, gl_journal_ref, correlation_id, row_version
+SELECT id, organization_id, run_no, period_month, period_year, status, gl_journal_ref, correlation_id, created_by, row_version
 FROM pay.payroll_run
 WHERE id = $1 AND deleted_at IS NULL
 `
@@ -303,6 +336,7 @@ type GetPayrollRunRow struct {
 	Status         string    `json:"status"`
 	GlJournalRef   *string   `json:"gl_journal_ref"`
 	CorrelationID  uuid.UUID `json:"correlation_id"`
+	CreatedBy      uuid.UUID `json:"created_by"`
 	RowVersion     int32     `json:"row_version"`
 }
 
@@ -318,6 +352,7 @@ func (q *Queries) GetPayrollRun(ctx context.Context, id uuid.UUID) (GetPayrollRu
 		&i.Status,
 		&i.GlJournalRef,
 		&i.CorrelationID,
+		&i.CreatedBy,
 		&i.RowVersion,
 	)
 	return i, err
@@ -350,7 +385,7 @@ func (q *Queries) InsertOutbox(ctx context.Context, arg InsertOutboxParams) erro
 }
 
 const listPayrollResultLinesByRun = `-- name: ListPayrollResultLinesByRun :many
-SELECT l.id, l.payroll_result_id, l.component_code, l.amount, l.row_version
+SELECT l.id, l.payroll_result_id, l.component_code, l.amount, l.encrypted_amount, l.row_version
 FROM pay.payroll_result_line l
 JOIN pay.payroll_result r ON r.id = l.payroll_result_id
 WHERE r.payroll_run_id = $1 AND l.deleted_at IS NULL AND r.deleted_at IS NULL
@@ -362,6 +397,7 @@ type ListPayrollResultLinesByRunRow struct {
 	PayrollResultID uuid.UUID      `json:"payroll_result_id"`
 	ComponentCode   string         `json:"component_code"`
 	Amount          pgtype.Numeric `json:"amount"`
+	EncryptedAmount *string        `json:"encrypted_amount"`
 	RowVersion      int32          `json:"row_version"`
 }
 
@@ -379,6 +415,7 @@ func (q *Queries) ListPayrollResultLinesByRun(ctx context.Context, payrollRunID 
 			&i.PayrollResultID,
 			&i.ComponentCode,
 			&i.Amount,
+			&i.EncryptedAmount,
 			&i.RowVersion,
 		); err != nil {
 			return nil, err
@@ -394,26 +431,27 @@ func (q *Queries) ListPayrollResultLinesByRun(ctx context.Context, payrollRunID 
 const listPayrollResultsByRun = `-- name: ListPayrollResultsByRun :many
 SELECT id, organization_id, payroll_run_id, employee_id,
        gross_amount, deduction_amount, tax_amount, net_amount,
-       encrypted_gross, encrypted_net, encrypted_tax, pii_key_version, row_version
+       encrypted_gross, encrypted_deduction, encrypted_net, encrypted_tax, pii_key_version, row_version
 FROM pay.payroll_result
 WHERE payroll_run_id = $1 AND deleted_at IS NULL
 ORDER BY created_at
 `
 
 type ListPayrollResultsByRunRow struct {
-	ID              uuid.UUID      `json:"id"`
-	OrganizationID  uuid.UUID      `json:"organization_id"`
-	PayrollRunID    uuid.UUID      `json:"payroll_run_id"`
-	EmployeeID      uuid.UUID      `json:"employee_id"`
-	GrossAmount     pgtype.Numeric `json:"gross_amount"`
-	DeductionAmount pgtype.Numeric `json:"deduction_amount"`
-	TaxAmount       pgtype.Numeric `json:"tax_amount"`
-	NetAmount       pgtype.Numeric `json:"net_amount"`
-	EncryptedGross  *string        `json:"encrypted_gross"`
-	EncryptedNet    *string        `json:"encrypted_net"`
-	EncryptedTax    *string        `json:"encrypted_tax"`
-	PiiKeyVersion   *string        `json:"pii_key_version"`
-	RowVersion      int32          `json:"row_version"`
+	ID                 uuid.UUID      `json:"id"`
+	OrganizationID     uuid.UUID      `json:"organization_id"`
+	PayrollRunID       uuid.UUID      `json:"payroll_run_id"`
+	EmployeeID         uuid.UUID      `json:"employee_id"`
+	GrossAmount        pgtype.Numeric `json:"gross_amount"`
+	DeductionAmount    pgtype.Numeric `json:"deduction_amount"`
+	TaxAmount          pgtype.Numeric `json:"tax_amount"`
+	NetAmount          pgtype.Numeric `json:"net_amount"`
+	EncryptedGross     *string        `json:"encrypted_gross"`
+	EncryptedDeduction *string        `json:"encrypted_deduction"`
+	EncryptedNet       *string        `json:"encrypted_net"`
+	EncryptedTax       *string        `json:"encrypted_tax"`
+	PiiKeyVersion      *string        `json:"pii_key_version"`
+	RowVersion         int32          `json:"row_version"`
 }
 
 func (q *Queries) ListPayrollResultsByRun(ctx context.Context, payrollRunID uuid.UUID) ([]ListPayrollResultsByRunRow, error) {
@@ -435,6 +473,7 @@ func (q *Queries) ListPayrollResultsByRun(ctx context.Context, payrollRunID uuid
 			&i.TaxAmount,
 			&i.NetAmount,
 			&i.EncryptedGross,
+			&i.EncryptedDeduction,
 			&i.EncryptedNet,
 			&i.EncryptedTax,
 			&i.PiiKeyVersion,
@@ -506,7 +545,8 @@ func (q *Queries) ListPayrollRuns(ctx context.Context, arg ListPayrollRunsParams
 }
 
 const listStatutoryContributionsByRun = `-- name: ListStatutoryContributionsByRun :many
-SELECT s.id, s.payroll_result_id, s.contribution_type, s.employee_amount, s.employer_amount, s.row_version
+SELECT s.id, s.payroll_result_id, s.contribution_type, s.employee_amount, s.employer_amount,
+       s.encrypted_employee_amount, s.encrypted_employer_amount, s.row_version
 FROM pay.statutory_contribution s
 JOIN pay.payroll_result r ON r.id = s.payroll_result_id
 WHERE r.payroll_run_id = $1 AND s.deleted_at IS NULL AND r.deleted_at IS NULL
@@ -514,12 +554,14 @@ ORDER BY s.payroll_result_id, s.contribution_type
 `
 
 type ListStatutoryContributionsByRunRow struct {
-	ID               uuid.UUID      `json:"id"`
-	PayrollResultID  uuid.UUID      `json:"payroll_result_id"`
-	ContributionType string         `json:"contribution_type"`
-	EmployeeAmount   pgtype.Numeric `json:"employee_amount"`
-	EmployerAmount   pgtype.Numeric `json:"employer_amount"`
-	RowVersion       int32          `json:"row_version"`
+	ID                      uuid.UUID      `json:"id"`
+	PayrollResultID         uuid.UUID      `json:"payroll_result_id"`
+	ContributionType        string         `json:"contribution_type"`
+	EmployeeAmount          pgtype.Numeric `json:"employee_amount"`
+	EmployerAmount          pgtype.Numeric `json:"employer_amount"`
+	EncryptedEmployeeAmount *string        `json:"encrypted_employee_amount"`
+	EncryptedEmployerAmount *string        `json:"encrypted_employer_amount"`
+	RowVersion              int32          `json:"row_version"`
 }
 
 func (q *Queries) ListStatutoryContributionsByRun(ctx context.Context, payrollRunID uuid.UUID) ([]ListStatutoryContributionsByRunRow, error) {
@@ -537,6 +579,8 @@ func (q *Queries) ListStatutoryContributionsByRun(ctx context.Context, payrollRu
 			&i.ContributionType,
 			&i.EmployeeAmount,
 			&i.EmployerAmount,
+			&i.EncryptedEmployeeAmount,
+			&i.EncryptedEmployerAmount,
 			&i.RowVersion,
 		); err != nil {
 			return nil, err
@@ -547,6 +591,25 @@ func (q *Queries) ListStatutoryContributionsByRun(ctx context.Context, payrollRu
 		return nil, err
 	}
 	return items, nil
+}
+
+const markEventProcessed = `-- name: MarkEventProcessed :execrows
+INSERT INTO pay.processed_event (event_id, event_type)
+VALUES ($1, $2)
+ON CONFLICT (event_id) DO NOTHING
+`
+
+type MarkEventProcessedParams struct {
+	EventID   uuid.UUID `json:"event_id"`
+	EventType string    `json:"event_type"`
+}
+
+func (q *Queries) MarkEventProcessed(ctx context.Context, arg MarkEventProcessedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markEventProcessed, arg.EventID, arg.EventType)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const markOutboxPublished = `-- name: MarkOutboxPublished :exec
@@ -608,4 +671,28 @@ func (q *Queries) SoftDeleteDraftPayrollRun(ctx context.Context, arg SoftDeleteD
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertEmployeeCache = `-- name: UpsertEmployeeCache :exec
+INSERT INTO pay.employee_cache (organization_id, employee_id, employee_no, status)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, employee_id) DO UPDATE
+SET employee_no = EXCLUDED.employee_no, status = EXCLUDED.status, updated_at = now()
+`
+
+type UpsertEmployeeCacheParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	EmployeeID     uuid.UUID `json:"employee_id"`
+	EmployeeNo     string    `json:"employee_no"`
+	Status         string    `json:"status"`
+}
+
+func (q *Queries) UpsertEmployeeCache(ctx context.Context, arg UpsertEmployeeCacheParams) error {
+	_, err := q.db.Exec(ctx, upsertEmployeeCache,
+		arg.OrganizationID,
+		arg.EmployeeID,
+		arg.EmployeeNo,
+		arg.Status,
+	)
+	return err
 }

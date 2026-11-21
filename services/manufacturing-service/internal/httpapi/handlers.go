@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math/big"
 	"net/http"
 	"strings"
 
@@ -99,6 +100,8 @@ type woUpsertReq struct {
 
 type completeReq struct {
 	ProducedQty string `json:"producedQty,omitempty"`
+	UnitCost    string `json:"unitCost,omitempty"`
+	WarehouseID string `json:"warehouseId,omitempty"`
 }
 
 type woDTO struct {
@@ -129,10 +132,12 @@ func (s *Server) createBOM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req bomReq
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
+
 	if strings.TrimSpace(req.Code) == "" {
 		httpx.WriteError(w, r, httpx.BadRequest("code BOM wajib diisi"))
 		return
@@ -147,11 +152,17 @@ func (s *Server) createBOM(w http.ResponseWriter, r *http.Request) {
 		ver = 1
 	}
 	lines := make([]manufacturingdb.CreateBomLineParams, 0, len(req.Lines))
+	seenLines := make(map[int32]struct{}, len(req.Lines))
 	for _, l := range req.Lines {
 		if l.LineNo <= 0 || strings.TrimSpace(l.Uom) == "" {
 			httpx.WriteError(w, r, httpx.BadRequest("lines[].lineNo harus > 0 dan uom wajib diisi"))
 			return
 		}
+		if _, dup := seenLines[l.LineNo]; dup {
+			httpx.WriteError(w, r, httpx.BadRequest("lines[].lineNo tidak boleh duplikat"))
+			return
+		}
+		seenLines[l.LineNo] = struct{}{}
 		compID, err := httpx.ParseUUIDParam("lines[].componentItemId", l.ComponentItemID)
 		if err != nil {
 			httpx.WriteError(w, r, err)
@@ -186,7 +197,7 @@ func (s *Server) createBOM(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, "kode dan versi BOM sudah dipakai"))
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, created.RowVersion, bomDTO{
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, created.RowVersion, bomDTO{
 		ID:            created.ID.String(),
 		Code:          created.Code,
 		ProductItemID: created.ProductItemID.String(),
@@ -716,14 +727,72 @@ func (s *Server) completeWO(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	payload, _ := json.Marshal(map[string]any{
+	prodRat := platform.NumericToRat(produced)
+	if prodRat == nil {
+		prodRat = big.NewRat(1, 1)
+	}
+	unitCostRat := new(big.Rat)
+	if strings.TrimSpace(req.UnitCost) != "" {
+		ucNum, err := platform.ParseNumeric(req.UnitCost)
+		if err != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("unitCost tidak valid"))
+			return
+		}
+		ucRat := platform.NumericToRat(ucNum)
+		if ucRat == nil || ucRat.Sign() < 0 {
+			httpx.WriteError(w, r, httpx.BadRequest("unitCost tidak boleh negatif"))
+			return
+		}
+		unitCostRat = ucRat
+	}
+	var bomLinesPayload []map[string]any
+	bomQtySum := new(big.Rat)
+	if bomDetail, err := s.repo.GetBOM(r.Context(), scope, wo.BomID); err == nil {
+		bomLinesPayload = make([]map[string]any, 0, len(bomDetail.Lines))
+		for _, bl := range bomDetail.Lines {
+			lr := platform.NumericToRat(bl.Quantity)
+			if lr == nil || lr.Sign() <= 0 {
+				continue
+			}
+			bomQtySum.Add(bomQtySum, lr)
+			scaled := new(big.Rat).Mul(lr, prodRat)
+			scaledNum, _ := platform.RatToNumeric(scaled, 4)
+			bomLinesPayload = append(bomLinesPayload, map[string]any{
+				"componentItemId": bl.ComponentItemID.String(),
+				"quantity":        platform.FormatNumeric(scaledNum, 4),
+				"uom":             bl.Uom,
+			})
+		}
+	}
+	if unitCostRat.Sign() == 0 {
+		if bomQtySum.Sign() > 0 {
+			unitCostRat = bomQtySum
+		} else {
+			unitCostRat = big.NewRat(1, 1)
+		}
+	}
+	totalCostRat := new(big.Rat).Mul(unitCostRat, prodRat)
+	unitCostNum, _ := platform.RatToNumeric(unitCostRat, 4)
+	totalCostNum, _ := platform.RatToNumeric(totalCostRat, 4)
+	evMap := map[string]any{
 		"woNo":          wo.WoNo,
 		"productItemId": wo.ProductItemID.String(),
 		"bomId":         wo.BomID.String(),
 		"plannedQty":    platform.FormatNumeric(wo.PlannedQty, 4),
 		"producedQty":   platform.FormatNumeric(produced, 4),
+		"unitCost":      platform.FormatNumeric(unitCostNum, 4),
+		"totalCost":     platform.FormatNumeric(totalCostNum, 4),
+		"bomLines":      bomLinesPayload,
 		"status":        "Completed",
-	})
+	}
+	if wh := strings.TrimSpace(req.WarehouseID); wh != "" {
+		if _, err := httpx.ParseUUIDParam("warehouseId", wh); err != nil {
+			httpx.WriteError(w, r, err)
+			return
+		}
+		evMap["warehouseId"] = wh
+	}
+	payload, _ := json.Marshal(evMap)
 	ev := manufacturingdb.InsertOutboxParams{
 		AggregateType:  "WorkOrder",
 		AggregateID:    wo.ID,

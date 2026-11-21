@@ -17,8 +17,9 @@ import (
 )
 
 var (
-	sysActor = uuid.MustParse("00000000-0000-0000-0000-0000000000d1")
-	sysCust  = uuid.MustParse("10000000-0000-0000-0000-0000000000d1")
+	sysActor      = uuid.MustParse("00000000-0000-0000-0000-0000000000d1")
+	sysCust       = uuid.MustParse("10000000-0000-0000-0000-0000000000d1")
+	defaultCRMItm = uuid.MustParse("20000000-0000-0000-0000-0000000000d1")
 )
 
 // ReservationCompensationStore persists idempotent SO compensation and CRM-won draft SOs.
@@ -55,6 +56,14 @@ func (c *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 
 	switch env.EventType {
 	case "inventory.reservation.failed":
+		if len(env.Data) > 0 {
+			var fp struct {
+				SourceEventType string `json:"sourceEventType"`
+			}
+			if err := json.Unmarshal(env.Data, &fp); err == nil && fp.SourceEventType == "maintenance.workorder.parts_requested" {
+				return nil
+			}
+		}
 		soID, err := uuid.Parse(env.AggregateID)
 		if err != nil {
 			return eventbus.ErrPoison{Err: fmt.Errorf("invalid aggregateId %q: %w", env.AggregateID, err)}
@@ -109,6 +118,7 @@ func (c *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 		if occ.IsZero() {
 			occ = time.Now().UTC()
 		}
+		oneQty, _ := platform.ParseNumeric("1.0000")
 		return c.store.ConsumeAndCreateDraftSO(ctx, orgID, evID, env.EventType, repository.CreateSOInput{
 			OrganizationID: orgID,
 			SoNo:           soNo,
@@ -116,8 +126,14 @@ func (c *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 			OrderDate:      pgtype.Date{Time: occ.UTC(), Valid: true},
 			CurrencyCode:   ccy,
 			TotalAmount:    totalNum,
-			CorrelationID:  corrID,
-			CreatedBy:      sysActor,
+			Lines: []repository.CreateSOLineInput{{
+				LineNo:    1,
+				ItemID:    defaultCRMItm,
+				OrderQty:  oneQty,
+				UnitPrice: totalNum,
+			}},
+			CorrelationID: corrID,
+			CreatedBy:     sysActor,
 		})
 
 	default:

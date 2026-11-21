@@ -428,8 +428,8 @@ func (s *Server) deletePO(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) approvePO(w http.ResponseWriter, r *http.Request) {
-	if err := httpx.RequirePermission(r, "procurement:write"); err != nil {
-		httpx.WriteError(w, r, err)
+	if !httpx.HasPermission(r.Context(), "procurement:approve") && !httpx.HasPermission(r.Context(), "procurement.approve") {
+		httpx.WriteError(w, r, httpx.Forbidden("izin procurement:approve dibutuhkan"))
 		return
 	}
 	scope, err := httpx.RequireScope(r)
@@ -452,6 +452,15 @@ func (s *Server) approvePO(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	var body struct {
+		AccountID    string `json:"accountId,omitempty"`
+		CostCenterID string `json:"costCenterId,omitempty"`
+		FiscalYear   int32  `json:"fiscalYear,omitempty"`
+	}
+	if err := httpx.DecodeOptionalJSON(w, r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
 	detail, err := s.repo.GetByID(r.Context(), scope, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -461,12 +470,41 @@ func (s *Server) approvePO(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
-	payload, _ := json.Marshal(map[string]any{
-		"poNo":        detail.Header.PoNo,
-		"vendorId":    detail.Header.VendorID.String(),
-		"totalAmount": platform.FormatNumeric(detail.Header.TotalAmount, 4),
-		"status":      "Approved",
-	})
+	if detail.Header.CreatedBy != uuid.Nil && user == detail.Header.CreatedBy && !httpx.HasRole(r.Context(), "SYSTEM_ADMIN") {
+		httpx.WriteError(w, r, &httpx.APIError{Status: http.StatusForbidden, Code: "SOD_VIOLATION", Message: "pembuat purchase order tidak boleh menyetujui PO sendiri"})
+		return
+	}
+	fy := body.FiscalYear
+	if fy <= 0 {
+		if detail.Header.OrderDate.Valid {
+			fy = int32(detail.Header.OrderDate.Time.Year())
+		} else {
+			fy = int32(time.Now().UTC().Year())
+		}
+	}
+	evMap := map[string]any{
+		"poNo":         detail.Header.PoNo,
+		"vendorId":     detail.Header.VendorID.String(),
+		"currencyCode": detail.Header.CurrencyCode,
+		"totalAmount":  platform.FormatNumeric(detail.Header.TotalAmount, 4),
+		"fiscalYear":   fy,
+		"status":       "Approved",
+	}
+	if acc := strings.TrimSpace(body.AccountID); acc != "" {
+		if _, err := httpx.ParseUUIDParam("accountId", acc); err != nil {
+			httpx.WriteError(w, r, err)
+			return
+		}
+		evMap["accountId"] = acc
+	}
+	if cc := strings.TrimSpace(body.CostCenterID); cc != "" {
+		if _, err := httpx.ParseUUIDParam("costCenterId", cc); err != nil {
+			httpx.WriteError(w, r, err)
+			return
+		}
+		evMap["costCenterId"] = cc
+	}
+	payload, _ := json.Marshal(evMap)
 	ev := procurementdb.InsertOutboxParams{
 		AggregateType:  "PurchaseOrder",
 		AggregateID:    detail.Header.ID,
@@ -536,12 +574,21 @@ func (s *Server) receivePO(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	whID := detail.Header.OrganizationID
+	var whID uuid.UUID
+	explicitWH := false
 	if strings.TrimSpace(req.WarehouseID) != "" {
 		if whID, err = httpx.ParseUUIDParam("warehouseId", req.WarehouseID); err != nil {
 			httpx.WriteError(w, r, err)
 			return
 		}
+		if whID == detail.Header.OrganizationID || whID == platform.SystemOrgID {
+			httpx.WriteError(w, r, httpx.BadRequest("warehouseId tidak valid"))
+			return
+		}
+		explicitWH = true
+	} else {
+		// Deterministic non-org fallback for NOT NULL gr.warehouse_id; omitted from outbox so inventory-service resolves default warehouse.
+		whID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("default-warehouse:"+detail.Header.OrganizationID.String()))
 	}
 	recDate := pgtype.Date{Time: time.Now().UTC(), Valid: true}
 	if strings.TrimSpace(req.ReceiptDate) != "" {
@@ -575,16 +622,20 @@ func (s *Server) receivePO(w http.ResponseWriter, r *http.Request) {
 				"unitPrice": platform.FormatNumeric(l.UnitPrice, 4),
 			})
 		}
-		payload, _ := json.Marshal(map[string]any{
-			"poNo":        detail.Header.PoNo,
-			"vendorId":    detail.Header.VendorID.String(),
-			"grId":        gr.ID.String(),
-			"grNo":        gr.GrNo,
-			"warehouseId": whID.String(),
-			"amount":      platform.FormatNumeric(detail.Header.TotalAmount, 4),
-			"status":      "Received",
-			"lines":       evLines,
-		})
+		evMap := map[string]any{
+			"poNo":         detail.Header.PoNo,
+			"vendorId":     detail.Header.VendorID.String(),
+			"currencyCode": detail.Header.CurrencyCode,
+			"grId":         gr.ID.String(),
+			"grNo":         gr.GrNo,
+			"amount":       platform.FormatNumeric(detail.Header.TotalAmount, 4),
+			"status":       "Received",
+			"lines":        evLines,
+		}
+		if explicitWH {
+			evMap["warehouseId"] = whID.String()
+		}
+		payload, _ := json.Marshal(evMap)
 		return procurementdb.InsertOutboxParams{
 			AggregateType:  "PurchaseOrder",
 			AggregateID:    detail.Header.ID,
@@ -905,7 +956,12 @@ func (s *Server) approvePR(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) transitionPR(w http.ResponseWriter, r *http.Request, fromStatus, toStatus string) {
-	if err := httpx.RequirePermission(r, "procurement:write"); err != nil {
+	if toStatus == "Approved" {
+		if !httpx.HasPermission(r.Context(), "procurement:approve") && !httpx.HasPermission(r.Context(), "procurement.approve") {
+			httpx.WriteError(w, r, httpx.Forbidden("izin procurement:approve dibutuhkan"))
+			return
+		}
+	} else if err := httpx.RequirePermission(r, "procurement:write"); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
@@ -928,6 +984,21 @@ func (s *Server) transitionPR(w http.ResponseWriter, r *http.Request, fromStatus
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
+	}
+	if toStatus == "Approved" {
+		prDetail, err := s.repo.GetRequisition(r.Context(), scope, id)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				httpx.WriteError(w, r, httpx.NotFound("purchase requisition tidak ditemukan"))
+				return
+			}
+			httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+			return
+		}
+		if (prDetail.Header.CreatedBy != uuid.Nil && user == prDetail.Header.CreatedBy || user == prDetail.Header.RequesterID) && !httpx.HasRole(r.Context(), "SYSTEM_ADMIN") {
+			httpx.WriteError(w, r, &httpx.APIError{Status: http.StatusForbidden, Code: "SOD_VIOLATION", Message: "pemohon purchase requisition tidak boleh menyetujui PR sendiri"})
+			return
+		}
 	}
 	row, n, err := s.repo.TransitionRequisition(r.Context(), scope, procurementdb.TransitionPurchaseRequisitionParams{
 		ID:         id,

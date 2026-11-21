@@ -37,7 +37,7 @@ func (r *SnapshotRepository) ConsumeGL(
 	mark reportingdb.MarkEventProcessedParams,
 	accountDeltas []GLAccountDelta,
 ) (applied bool, err error) {
-	err = r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err = r.db.WithOrgScope(ctx, platform.ScopeWithSystemOrg(scope), func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		n, e := q.MarkEventProcessed(ctx, mark)
 		if e != nil || n == 0 {
@@ -93,6 +93,23 @@ func (r *SnapshotRepository) ConsumeCOAAccount(
 		if e = q.UpsertCOACache(ctx, up); e != nil {
 			return e
 		}
+		placeholder := "ACCT:" + up.AccountID.String()
+		if len(placeholder) > 50 {
+			placeholder = placeholder[:50]
+		}
+		if e = q.MergePlaceholderGLBalanceSnapshots(ctx, reportingdb.MergePlaceholderGLBalanceSnapshotsParams{
+			OrganizationID: up.OrganizationID,
+			NewAccountCode: up.AccountCode,
+			OldAccountCode: placeholder,
+		}); e != nil {
+			return e
+		}
+		if e = q.DeletePlaceholderGLBalanceSnapshots(ctx, reportingdb.DeletePlaceholderGLBalanceSnapshotsParams{
+			OrganizationID: up.OrganizationID,
+			OldAccountCode: placeholder,
+		}); e != nil {
+			return e
+		}
 		applied = true
 		return nil
 	})
@@ -122,7 +139,7 @@ func (r *SnapshotRepository) ConsumeSalesSummary(
 func (r *SnapshotRepository) ConsumeInventoryPosition(
 	ctx context.Context, scope []uuid.UUID,
 	mark reportingdb.MarkEventProcessedParams,
-	up reportingdb.UpsertInventoryPositionParams,
+	ups ...reportingdb.UpsertInventoryPositionParams,
 ) (applied bool, err error) {
 	err = r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
@@ -130,8 +147,10 @@ func (r *SnapshotRepository) ConsumeInventoryPosition(
 		if e != nil || n == 0 {
 			return e
 		}
-		if _, e = q.UpsertInventoryPosition(ctx, up); e != nil {
-			return e
+		for _, up := range ups {
+			if _, e = q.UpsertInventoryPosition(ctx, up); e != nil {
+				return e
+			}
 		}
 		applied = true
 		return nil

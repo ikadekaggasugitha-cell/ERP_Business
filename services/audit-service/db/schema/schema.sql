@@ -14,7 +14,7 @@ CREATE TABLE audit.audit_log (
     occurred_at      timestamptz  NOT NULL,
     organization_id  uuid         NOT NULL,
     actor_id         uuid,
-    action           varchar(50)  NOT NULL,
+    action           varchar(150) NOT NULL,
     entity_type      varchar(100) NOT NULL,
     entity_id        uuid,
     before_value     jsonb,

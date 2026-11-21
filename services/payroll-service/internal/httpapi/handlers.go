@@ -315,8 +315,8 @@ func (h *Handler) handleApproveRun(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	if err := httpx.RequirePermission(r, "payroll:write"); err != nil {
-		httpx.WriteError(w, r, err)
+	if !httpx.HasPermission(r.Context(), "payroll:approve") && !httpx.HasPermission(r.Context(), "payroll.approve") {
+		httpx.WriteError(w, r, httpx.Forbidden("izin payroll:approve dibutuhkan"))
 		return
 	}
 	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))

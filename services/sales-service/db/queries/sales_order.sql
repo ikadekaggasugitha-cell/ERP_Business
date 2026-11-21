@@ -65,7 +65,7 @@ RETURNING row_version;
 -- name: CancelSalesOrder :execrows
 UPDATE so.sales_order
 SET status = 'Cancelled', updated_by = $2
-WHERE id = $1 AND status <> 'Cancelled' AND deleted_at IS NULL;
+WHERE id = $1 AND status NOT IN ('Delivered', 'Invoiced', 'Cancelled') AND deleted_at IS NULL;
 
 -- name: CreateDelivery :one
 INSERT INTO so.delivery (

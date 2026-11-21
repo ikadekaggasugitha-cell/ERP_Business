@@ -20,14 +20,15 @@ import (
 )
 
 type mockStore struct {
-	currencies []currencydb.ListCurrenciesRow
-	rateTypes  []currencydb.ListExchangeRateTypesRow
-	rates      []currencydb.ListExchangeRatesRow
-	currency   *currencydb.CurCurrency
-	rateType   *currencydb.CurExchangeRateType
-	rate       *currencydb.GetExchangeRateRow
-	convertRes *repository.ConvertResult
-	err        error
+	currencies          []currencydb.ListCurrenciesRow
+	rateTypes           []currencydb.ListExchangeRateTypesRow
+	rates               []currencydb.ListExchangeRatesRow
+	currency            *currencydb.CurCurrency
+	rateType            *currencydb.CurExchangeRateType
+	rate                *currencydb.GetExchangeRateRow
+	convertRes          *repository.ConvertResult
+	lastListRatesParams currencydb.ListExchangeRatesParams
+	err                 error
 }
 
 func (m *mockStore) CreateCurrency(_ context.Context, _ []uuid.UUID, _ currencydb.CreateCurrencyParams, _ uuid.UUID) (currencydb.CreateCurrencyRow, error) {
@@ -140,7 +141,8 @@ func (m *mockStore) GetExchangeRate(_ context.Context, _ []uuid.UUID, id uuid.UU
 	}, nil
 }
 
-func (m *mockStore) ListExchangeRates(_ context.Context, _ []uuid.UUID, _ currencydb.ListExchangeRatesParams) ([]currencydb.ListExchangeRatesRow, int64, error) {
+func (m *mockStore) ListExchangeRates(_ context.Context, _ []uuid.UUID, p currencydb.ListExchangeRatesParams) ([]currencydb.ListExchangeRatesRow, int64, error) {
+	m.lastListRatesParams = p
 	if m.err != nil {
 		return nil, 0, m.err
 	}
@@ -487,6 +489,65 @@ func TestExchangeRatesEndpoints(t *testing.T) {
 
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404 Not Found, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("GET single resources return ETag", func(t *testing.T) {
+		t.Parallel()
+		store := &mockStore{
+			currency: &currencydb.CurCurrency{ID: uuid.New(), Code: "USD", Name: "US Dollar", Precision: 2, IsActive: true, RowVersion: 3},
+		}
+		srv := setupTestServer(store)
+
+		for _, tc := range []struct {
+			path string
+			etag string
+		}{
+			{"/currencies/" + store.currency.ID.String(), `"3"`},
+			{"/exchange-rate-types/" + uuid.NewString(), `"1"`},
+			{"/exchange-rates/" + uuid.NewString(), `"1"`},
+		} {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set("X-Organization-Id", orgID)
+			rec := httptest.NewRecorder()
+			srv.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("GET %s: expected 200, got %d: %s", tc.path, rec.Code, rec.Body.String())
+			}
+			if got := rec.Header().Get("ETag"); got != tc.etag {
+				t.Fatalf("GET %s: expected ETag %s, got %q", tc.path, tc.etag, got)
+			}
+		}
+	})
+
+	t.Run("POST /currencies - precision > 8 rejected (422)", func(t *testing.T) {
+		t.Parallel()
+		store := &mockStore{}
+		srv := setupTestServer(store)
+		req := httptest.NewRequest(http.MethodPost, "/currencies", strings.NewReader(`{"code":"BTC","name":"Bitcoin","precision":9}`))
+		req.Header.Set("X-Organization-Id", orgID)
+		req.Header.Set("X-User-Id", userID)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("expected 422, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("GET /exchange-rates?type=SPOT forwards rate type filter", func(t *testing.T) {
+		t.Parallel()
+		store := &mockStore{}
+		srv := setupTestServer(store)
+		req := httptest.NewRequest(http.MethodGet, "/exchange-rates?type=SPOT", nil)
+		req.Header.Set("X-Organization-Id", orgID)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		if store.lastListRatesParams.RateTypeID != "SPOT" {
+			t.Fatalf("expected RateTypeID=SPOT, got %q", store.lastListRatesParams.RateTypeID)
 		}
 	})
 }

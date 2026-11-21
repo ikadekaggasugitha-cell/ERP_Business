@@ -54,14 +54,17 @@ func (s *Server) Register(mux *http.ServeMux) {
 }
 
 type createRoleReq struct {
-	Code     string `json:"code"`
-	Name     string `json:"name"`
-	IsSystem bool   `json:"isSystem"`
+	Code             string `json:"code"`
+	Name             string `json:"name"`
+	IsSystem         bool   `json:"isSystem"`
+	AdminTier        *int   `json:"adminTier,omitempty"`
+	DefaultScopeType string `json:"defaultScopeType,omitempty"`
 }
 
 type updateRoleReq struct {
-	Name     string `json:"name"`
-	IsSystem bool   `json:"isSystem"`
+	Name      string `json:"name"`
+	IsSystem  bool   `json:"isSystem"`
+	AdminTier *int   `json:"adminTier,omitempty"`
 }
 
 type createPermReq struct {
@@ -71,7 +74,32 @@ type createPermReq struct {
 }
 
 type grantPermReq struct {
-	PermissionID uuid.UUID `json:"permissionId"`
+	PermissionID   uuid.UUID `json:"permissionId"`
+	PermissionCode string    `json:"permissionCode,omitempty"`
+}
+
+func isReservedAdminRoleCode(code string) bool {
+	switch strings.ToUpper(strings.TrimSpace(code)) {
+	case "SYSTEM_ADMIN", "HOLDING_ADMIN", "SUBSIDIARY_ADMIN", "BRANCH_ADMIN":
+		return true
+	default:
+		return false
+	}
+}
+
+func defaultScopeForRoleCode(code string) string {
+	switch strings.ToUpper(strings.TrimSpace(code)) {
+	case "SYSTEM_ADMIN":
+		return "all"
+	case "HOLDING_ADMIN":
+		return "holding"
+	case "SUBSIDIARY_ADMIN":
+		return "subsidiary"
+	case "BRANCH_ADMIN":
+		return "branch"
+	default:
+		return "organization"
+	}
 }
 
 func (s *Server) createRole(w http.ResponseWriter, r *http.Request) {
@@ -106,6 +134,21 @@ func (s *Server) createRole(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.Forbidden("tidak diizinkan membuat system role melalui endpoint tenant"))
 		return
 	}
+	if len(httpx.Roles(r.Context())) > 0 {
+		callerTier := httpx.CallerAdminTier(r.Context())
+		if isReservedAdminRoleCode(code) && callerTier > httpx.AdminTierSystem {
+			httpx.WriteError(w, r, httpx.Forbidden("kode role admin berjenjang hanya boleh dikelola oleh SYSTEM_ADMIN"))
+			return
+		}
+		targetTier := httpx.AdminTierNone
+		if req.AdminTier != nil {
+			targetTier = *req.AdminTier
+		}
+		if !httpx.CanDelegateTier(callerTier, targetTier) {
+			httpx.WriteError(w, r, httpx.Forbidden("admin tier tidak mencukupi untuk membuat role pada tingkat ini"))
+			return
+		}
+	}
 	payload, _ := json.Marshal(map[string]any{"code": code, "name": name, "isSystem": false})
 	ev := securitydb.InsertOutboxParams{
 		AggregateType:  "Role",
@@ -126,11 +169,13 @@ func (s *Server) createRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.SaveIDResponse(w, s.idem, scope, key, hash, http.StatusCreated, created.RowVersion, map[string]any{
-		"id":         created.ID,
-		"code":       code,
-		"name":       name,
-		"isSystem":   false,
-		"rowVersion": created.RowVersion,
+		"id":               created.ID,
+		"code":             code,
+		"name":             name,
+		"isSystem":         false,
+		"adminTier":        httpx.AdminTierForRoles([]string{code}),
+		"defaultScopeType": defaultScopeForRoleCode(code),
+		"rowVersion":       created.RowVersion,
 	})
 }
 
@@ -166,12 +211,14 @@ func (s *Server) listRoles(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, len(rows))
 	for _, rl := range rows {
 		out = append(out, map[string]any{
-			"id":             rl.ID,
-			"organizationId": rl.OrganizationID,
-			"code":           rl.Code,
-			"name":           rl.Name,
-			"isSystem":       rl.IsSystem,
-			"rowVersion":     rl.RowVersion,
+			"id":               rl.ID,
+			"organizationId":   rl.OrganizationID,
+			"code":             rl.Code,
+			"name":             rl.Name,
+			"isSystem":         rl.IsSystem,
+			"adminTier":        httpx.AdminTierForRoles([]string{rl.Code}),
+			"defaultScopeType": defaultScopeForRoleCode(rl.Code),
+			"rowVersion":       rl.RowVersion,
 		})
 	}
 	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{
@@ -523,6 +570,13 @@ func (s *Server) grantRolePermission(w http.ResponseWriter, r *http.Request) {
 	if existing.IsSystem || existing.OrganizationID == platform.SystemOrgID {
 		httpx.WriteError(w, r, httpx.Forbidden("system role tidak dapat dimodifikasi"))
 		return
+	}
+	if len(httpx.Roles(r.Context())) > 0 && httpx.CallerAdminTier(r.Context()) >= httpx.AdminTierSubsidiary {
+		pCode := strings.ToLower(strings.TrimSpace(req.PermissionCode))
+		if strings.HasPrefix(pCode, "consolidation.") || strings.HasPrefix(pCode, "consolidation:") {
+			httpx.WriteError(w, r, httpx.Forbidden("permission konsolidasi hanya boleh diberikan oleh Head Office / Holding Admin"))
+			return
+		}
 	}
 	payload, _ := json.Marshal(map[string]any{"roleId": roleID, "permissionId": req.PermissionID})
 	_, err = s.repo.GrantPermissionAndEmit(r.Context(), scope, securitydb.CreateRolePermissionParams{

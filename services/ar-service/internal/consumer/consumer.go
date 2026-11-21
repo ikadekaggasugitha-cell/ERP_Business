@@ -1,5 +1,6 @@
-// Package consumer reacts to inventory.goods.issued by issuing an AR customer
-// invoice and emitting ar.invoice.issued idempotently and atomically.
+// Package consumer reacts to inventory.goods.issued and project.billing.approved
+// by issuing an AR customer invoice, and reacts to treasury.payment.settled by
+// recording receipt allocations and updating AR invoice status.
 package consumer
 
 import (
@@ -13,14 +14,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/sinergiinvestasiproperti/erp/services/ar-service/internal/ardb"
+	"github.com/sinergiinvestasiproperti/erp/services/ar-service/internal/repository"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/eventbus"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
 )
 
-// Topics consumed by ar-service (Saga INT-001 + Project Billing).
+// Topics consumed by ar-service (Saga INT-001 + Project Billing + Treasury Settlement).
 var Topics = []string{
 	eventbus.TopicFor("inventory.goods.issued"),
 	eventbus.TopicFor("project.billing.approved"),
+	eventbus.TopicFor("treasury.payment.settled"),
 }
 
 var (
@@ -30,17 +33,34 @@ var (
 )
 
 type inboundPayload struct {
-	Reference    string `json:"reference"`
-	ArInvoiceRef string `json:"arInvoiceRef"`
-	ProjectCode  string `json:"projectCode"`
-	CustomerID   string `json:"customerId"`
-	CurrencyCode string `json:"currencyCode"`
-	Amount       string `json:"amount"`
+	Reference       string `json:"reference"`
+	ArInvoiceRef    string `json:"arInvoiceRef"`
+	ProjectCode     string `json:"projectCode"`
+	CustomerID      string `json:"customerId"`
+	CurrencyCode    string `json:"currencyCode"`
+	Amount          string `json:"amount"`
+	TotalAmount     string `json:"totalAmount"`
+	SourceEventType string `json:"sourceEventType"`
+}
+
+type paymentSettledPayload struct {
+	PaymentID   string `json:"paymentId"`
+	PaymentNo   string `json:"paymentNo"`
+	PaymentType string `json:"paymentType"`
+	Amount      string `json:"amount"`
+	ExternalRef string `json:"externalRef"`
+	Allocations []struct {
+		InvoiceID         string `json:"invoiceId"`
+		TargetDocumentRef string `json:"targetDocumentRef"`
+		InvoiceType       string `json:"invoiceType"`
+		AllocatedAmount   string `json:"allocatedAmount"`
+	} `json:"allocations"`
 }
 
 // Store abstracts AR repository calls for unit testing.
 type Store interface {
 	ConsumeAndCreateInvoice(ctx context.Context, scope []uuid.UUID, mark ardb.MarkEventProcessedParams, invoice ardb.CreateInvoiceParams, lines []ardb.CreateInvoiceLineParams, ev ardb.InsertOutboxParams) (bool, error)
+	ConsumePaymentSettled(ctx context.Context, scope []uuid.UUID, mark ardb.MarkEventProcessedParams, orgID, receiptID, actor, corrID uuid.UUID, allocs []repository.SettlementAllocation) (bool, error)
 }
 
 type Consumer struct {
@@ -65,10 +85,10 @@ func (x *Consumer) Close() error {
 	return x.c.Close()
 }
 
-// Handle creates+emits an AR invoice for inventory.goods.issued and project.billing.approved;
-// returns ErrPoison on malformed envelopes.
+// Handle creates+emits an AR invoice for inventory.goods.issued and project.billing.approved,
+// and applies treasury.payment.settled allocations; returns ErrPoison on malformed envelopes.
 func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
-	if env.EventType != "inventory.goods.issued" && env.EventType != "project.billing.approved" {
+	if env.EventType != "inventory.goods.issued" && env.EventType != "project.billing.approved" && env.EventType != "treasury.payment.settled" {
 		return nil
 	}
 	org, err := uuid.Parse(strings.TrimSpace(env.OrganizationID))
@@ -84,12 +104,21 @@ func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 		corr = c
 	}
 
+	if env.EventType == "treasury.payment.settled" {
+		return x.handlePaymentSettled(ctx, org, eventID, corr, env)
+	}
+
 	var p inboundPayload
 	if len(env.Data) > 0 {
 		if err := json.Unmarshal(env.Data, &p); err != nil {
 			return eventbus.ErrPoison{Err: fmt.Errorf("invalid payload: %w", err)}
 		}
 	}
+	// Never issue customer AR invoices for internal maintenance spare-part issues.
+	if env.EventType == "inventory.goods.issued" && strings.EqualFold(strings.TrimSpace(p.SourceEventType), "maintenance.workorder.parts_requested") {
+		return nil
+	}
+
 	ref := strings.TrimSpace(p.ArInvoiceRef)
 	if ref == "" {
 		ref = strings.TrimSpace(p.Reference)
@@ -103,7 +132,11 @@ func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 	if ref == "" {
 		return eventbus.ErrPoison{Err: fmt.Errorf("missing reference/aggregateId")}
 	}
-	total, err := platform.ParseOptionalNumeric(p.Amount)
+	amtRaw := strings.TrimSpace(p.TotalAmount)
+	if amtRaw == "" {
+		amtRaw = strings.TrimSpace(p.Amount)
+	}
+	total, err := platform.ParseOptionalNumeric(amtRaw)
 	if err != nil {
 		return eventbus.ErrPoison{Err: fmt.Errorf("invalid amount: %w", err)}
 	}
@@ -152,7 +185,6 @@ func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 		"dueDate":           platform.FormatDate(dt),
 		"currencyCode":      ccy,
 		"totalAmount":       platform.FormatNumeric(total, 4),
-		"taxAmount":         "0.0000",
 		"status":            "Issued",
 		"sourceEventType":   env.EventType,
 		"sourceDocumentRef": ref,
@@ -171,5 +203,67 @@ func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 	}
 	_, err = x.repo.ConsumeAndCreateInvoice(ctx, []uuid.UUID{org},
 		ardb.MarkEventProcessedParams{EventID: eventID, EventType: env.EventType}, invoice, lines, ev)
+	return err
+}
+
+func (x *Consumer) handlePaymentSettled(ctx context.Context, org, eventID, corr uuid.UUID, env eventbus.Envelope) error {
+	var p paymentSettledPayload
+	if len(env.Data) > 0 {
+		if err := json.Unmarshal(env.Data, &p); err != nil {
+			return eventbus.ErrPoison{Err: fmt.Errorf("invalid treasury.payment.settled payload: %w", err)}
+		}
+	}
+	if strings.EqualFold(strings.TrimSpace(p.PaymentType), "Outgoing") {
+		return nil
+	}
+	receiptID, err := uuid.Parse(strings.TrimSpace(p.PaymentID))
+	if err != nil || receiptID == uuid.Nil {
+		receiptID, err = uuid.Parse(strings.TrimSpace(env.AggregateID))
+		if err != nil || receiptID == uuid.Nil {
+			receiptID = eventID
+		}
+	}
+	var allocs []repository.SettlementAllocation
+	for _, a := range p.Allocations {
+		if a.InvoiceType != "" && !strings.EqualFold(strings.TrimSpace(a.InvoiceType), "AR") {
+			continue
+		}
+		ref := strings.TrimSpace(a.InvoiceID)
+		if ref == "" {
+			ref = strings.TrimSpace(a.TargetDocumentRef)
+		}
+		if ref == "" {
+			continue
+		}
+		amt, err := platform.ParseNumeric(a.AllocatedAmount)
+		if err != nil {
+			return eventbus.ErrPoison{Err: fmt.Errorf("invalid allocatedAmount %q: %w", a.AllocatedAmount, err)}
+		}
+		if rVal := platform.NumericToRat(amt); rVal == nil || rVal.Sign() <= 0 {
+			continue
+		}
+		allocs = append(allocs, repository.SettlementAllocation{
+			InvoiceRef:      ref,
+			AllocatedAmount: amt,
+		})
+	}
+	if len(allocs) == 0 && strings.TrimSpace(p.ExternalRef) != "" && strings.TrimSpace(p.Amount) != "" {
+		amt, err := platform.ParseNumeric(p.Amount)
+		if err != nil {
+			return eventbus.ErrPoison{Err: fmt.Errorf("invalid payment amount %q: %w", p.Amount, err)}
+		}
+		if rVal := platform.NumericToRat(amt); rVal != nil && rVal.Sign() > 0 {
+			allocs = append(allocs, repository.SettlementAllocation{
+				InvoiceRef:      strings.TrimSpace(p.ExternalRef),
+				AllocatedAmount: amt,
+			})
+		}
+	}
+	if len(allocs) == 0 {
+		return nil
+	}
+	_, err = x.repo.ConsumePaymentSettled(ctx, []uuid.UUID{org},
+		ardb.MarkEventProcessedParams{EventID: eventID, EventType: env.EventType},
+		org, receiptID, sysActor, corr, allocs)
 	return err
 }

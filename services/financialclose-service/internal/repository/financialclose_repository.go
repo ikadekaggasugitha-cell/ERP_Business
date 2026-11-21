@@ -1,5 +1,5 @@
 // Package repository implements RLS-enforced Financial Close checklists, closing runs,
-// mandatory task gates, period status locks, SoD period reopenings, and outbox relay.
+// mandatory task gates, period status locks, SoD period reopenings, FX revaluation, and outbox relay.
 package repository
 
 import (
@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -16,6 +17,30 @@ import (
 	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
 )
+
+type FXPositionInput struct {
+	AccountRef    uuid.UUID `json:"accountRef"`
+	CurrencyCode  string    `json:"currencyCode"`
+	ForeignAmount string    `json:"foreignAmount"`
+	BookRate      string    `json:"bookRate"`
+	ClosingRate   string    `json:"closingRate"`
+}
+
+type FXRevaluationLine struct {
+	AccountRef     uuid.UUID `json:"accountRef"`
+	CurrencyCode   string    `json:"currencyCode"`
+	ForeignAmount  string    `json:"foreignAmount"`
+	BookRate       string    `json:"bookRate"`
+	ClosingRate    string    `json:"closingRate"`
+	UnrealizedGain string    `json:"unrealizedGainLoss"`
+}
+
+type FXRevaluationResult struct {
+	ClosingRunID        uuid.UUID           `json:"closingRunId"`
+	FiscalPeriodRef     uuid.UUID           `json:"fiscalPeriodRef"`
+	TotalUnrealizedGain string              `json:"totalUnrealizedGainLoss"`
+	Lines               []FXRevaluationLine `json:"lines"`
+}
 
 type FinancialCloseRepository struct {
 	db *platform.DB
@@ -34,7 +59,7 @@ func (r *FinancialCloseRepository) withOrgTx(ctx context.Context, scope []uuid.U
 	if len(scope) == 0 {
 		return errors.New("org scope must not be empty")
 	}
-	return r.db.WithOrgScope(ctx, scope, fn)
+	return r.db.WithOrgScope(ctx, platform.ScopeWithSystemOrg(scope), fn)
 }
 
 func emit(ctx context.Context, q *fcldb.Queries, aggType, eventType string, id, org, corr uuid.UUID, payload map[string]any) error {
@@ -45,6 +70,49 @@ func emit(ctx context.Context, q *fcldb.Queries, aggType, eventType string, id, 
 		AggregateType: aggType, AggregateID: id, EventType: eventType,
 		Payload: b, OrganizationID: org, CorrelationID: corr,
 	})
+}
+
+// ComputeFXRevaluation computes exact unrealized FX gain/loss per PSAK 10 / IAS 21:
+// gainLoss = foreignAmount * (closingRate - bookRate).
+func ComputeFXRevaluation(runID, periodID uuid.UUID, positions []FXPositionInput) (FXRevaluationResult, error) {
+	lines := make([]FXRevaluationLine, 0, len(positions))
+	total := new(big.Rat)
+	for _, pos := range positions {
+		if pos.AccountRef == uuid.Nil {
+			return FXRevaluationResult{}, httpx.BadRequest("positions[].accountRef is required")
+		}
+		amtNum, err := platform.ParseNumeric(pos.ForeignAmount)
+		if err != nil {
+			return FXRevaluationResult{}, httpx.BadRequest("invalid foreignAmount")
+		}
+		bookNum, err := platform.ParseNumeric(pos.BookRate)
+		if err != nil || platform.NumericToRat(bookNum).Sign() <= 0 {
+			return FXRevaluationResult{}, httpx.BadRequest("bookRate must be > 0")
+		}
+		closeNum, err := platform.ParseNumeric(pos.ClosingRate)
+		if err != nil || platform.NumericToRat(closeNum).Sign() <= 0 {
+			return FXRevaluationResult{}, httpx.BadRequest("closingRate must be > 0")
+		}
+		diff := new(big.Rat).Sub(platform.NumericToRat(closeNum), platform.NumericToRat(bookNum))
+		gain := new(big.Rat).Mul(platform.NumericToRat(amtNum), diff)
+		gainNum, _ := platform.RatToNumeric(gain, 4)
+		total.Add(total, platform.NumericToRat(gainNum))
+		lines = append(lines, FXRevaluationLine{
+			AccountRef:     pos.AccountRef,
+			CurrencyCode:   pos.CurrencyCode,
+			ForeignAmount:  platform.FormatNumeric(amtNum, 4),
+			BookRate:       platform.FormatNumeric(bookNum, 8),
+			ClosingRate:    platform.FormatNumeric(closeNum, 8),
+			UnrealizedGain: platform.FormatNumeric(gainNum, 4),
+		})
+	}
+	totNum, _ := platform.RatToNumeric(total, 4)
+	return FXRevaluationResult{
+		ClosingRunID:        runID,
+		FiscalPeriodRef:     periodID,
+		TotalUnrealizedGain: platform.FormatNumeric(totNum, 4),
+		Lines:               lines,
+	}, nil
 }
 
 func (r *FinancialCloseRepository) CreateTemplate(ctx context.Context, scope []uuid.UUID, arg fcldb.CreateChecklistTemplateParams, tasks []fcldb.CreateTaskTemplateParams) (fcldb.CreateChecklistTemplateRow, error) {
@@ -85,6 +153,14 @@ func (r *FinancialCloseRepository) CreateClosingRun(ctx context.Context, scope [
 	var out fcldb.CreateClosingRunRow
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
+		if templateID != nil && *templateID != uuid.Nil {
+			var found uuid.UUID
+			if e := tx.QueryRow(ctx, `SELECT id FROM fcl.closing_checklist_template WHERE id = $1 AND deleted_at IS NULL`, *templateID).Scan(&found); errors.Is(e, pgx.ErrNoRows) {
+				return httpx.NotFound("closing checklist template not found")
+			} else if e != nil {
+				return e
+			}
+		}
 		var e error
 		if out, e = q.CreateClosingRun(ctx, arg); e != nil {
 			return e
@@ -155,6 +231,33 @@ func (r *FinancialCloseRepository) CompleteTask(ctx context.Context, scope []uui
 	return next, httpx.MapDBError(err, "")
 }
 
+func (r *FinancialCloseRepository) RunFXRevaluationAndEmit(ctx context.Context, scope []uuid.UUID, runID uuid.UUID, positions []FXPositionInput, corr uuid.UUID) (FXRevaluationResult, error) {
+	var res FXRevaluationResult
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		run, e := q.GetClosingRun(ctx, runID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("closing run not found")
+		}
+		if e != nil {
+			return e
+		}
+		if run.Status == "Locked" {
+			return httpx.Conflict("PERIOD_LOCKED", "cannot run FX revaluation on a locked closing run")
+		}
+		res, e = ComputeFXRevaluation(run.ID, run.FiscalPeriodRef, positions)
+		if e != nil {
+			return e
+		}
+		return emit(ctx, q, "ClosingRun", "financialclose.fx_revaluation.completed", run.ID, run.OrganizationID, corr, map[string]any{
+			"fiscalPeriodId":          run.FiscalPeriodRef.String(),
+			"totalUnrealizedGainLoss": res.TotalUnrealizedGain,
+			"lineCount":               len(res.Lines),
+		})
+	})
+	return res, httpx.MapDBError(err, "")
+}
+
 func (r *FinancialCloseRepository) TransitionClosingRunAndEmit(ctx context.Context, scope []uuid.UUID, id uuid.UUID, rowVer int32, targetStatus string, actor, corr uuid.UUID) (int32, error) {
 	var next int32
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
@@ -187,6 +290,13 @@ func (r *FinancialCloseRepository) TransitionClosingRunAndEmit(ctx context.Conte
 		if e != nil {
 			return e
 		}
+		// Sync local fcl.period_status atomically.
+		if _, e = q.UpsertPeriodStatus(ctx, fcldb.UpsertPeriodStatusParams{
+			OrganizationID: run.OrganizationID, FinancialOrganizationRef: run.FinancialOrganizationRef,
+			FiscalPeriodRef: run.FiscalPeriodRef, Module: "GL", Status: targetStatus, CreatedBy: actor,
+		}); e != nil {
+			return e
+		}
 		evType := "financialclose.period.closed"
 		if targetStatus == "Locked" {
 			evType = "financialclose.period.locked"
@@ -204,6 +314,17 @@ func (r *FinancialCloseRepository) TransitionClosingRunAndEmit(ctx context.Conte
 func (r *FinancialCloseRepository) UpsertPeriodStatus(ctx context.Context, scope []uuid.UUID, arg fcldb.UpsertPeriodStatusParams) (fcldb.UpsertPeriodStatusRow, error) {
 	var out fcldb.UpsertPeriodStatusRow
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		var curStatus string
+		err := tx.QueryRow(ctx, `
+			SELECT status FROM fcl.period_status
+			WHERE organization_id = $1 AND financial_organization_ref = $2 AND fiscal_period_ref = $3 AND module = $4 AND deleted_at IS NULL
+		`, arg.OrganizationID, arg.FinancialOrganizationRef, arg.FiscalPeriodRef, arg.Module).Scan(&curStatus)
+		if err == nil && curStatus == "Locked" && arg.Status != "Locked" {
+			return httpx.Conflict("PERIOD_LOCKED", "locked period status cannot be downgraded without an approved reopening")
+		}
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
 		var e error
 		out, e = r.q.WithTx(tx).UpsertPeriodStatus(ctx, arg)
 		return e
@@ -221,6 +342,21 @@ func (r *FinancialCloseRepository) ListPeriodStatuses(ctx context.Context, scope
 			return e
 		}
 		rows, e = q.ListPeriodStatuses(ctx, fcldb.ListPeriodStatusesParams{Limit: limit, Offset: offset})
+		return e
+	})
+	return rows, total, err
+}
+
+func (r *FinancialCloseRepository) ListReopenings(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]fcldb.FclPeriodReopening, int64, error) {
+	var rows []fcldb.FclPeriodReopening
+	var total int64
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		var e error
+		if total, e = q.CountPeriodReopenings(ctx); e != nil {
+			return e
+		}
+		rows, e = q.ListPeriodReopenings(ctx, fcldb.ListPeriodReopeningsParams{Limit: limit, Offset: offset})
 		return e
 	})
 	return rows, total, err
@@ -258,6 +394,14 @@ func (r *FinancialCloseRepository) ApproveReopeningAndEmit(ctx context.Context, 
 			return httpx.Conflict("STALE_ROW_VERSION", "already approved or rowVersion mismatch")
 		}
 		if e != nil {
+			return e
+		}
+		// Sync local fcl.period_status back to Open.
+		if _, e = tx.Exec(ctx, `
+			UPDATE fcl.period_status
+			SET status = 'Open', updated_by = $4
+			WHERE organization_id = $1 AND financial_organization_ref = $2 AND fiscal_period_ref = $3 AND deleted_at IS NULL
+		`, req.OrganizationID, req.FinancialOrganizationRef, req.FiscalPeriodRef, approver); e != nil {
 			return e
 		}
 		return emit(ctx, q, "PeriodReopening", "financialclose.period.reopened", req.ID, req.OrganizationID, corr, map[string]any{

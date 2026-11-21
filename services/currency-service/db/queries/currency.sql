@@ -88,7 +88,7 @@ JOIN cur.exchange_rate_type rt ON rt.id = er.rate_type_id
 WHERE er.deleted_at IS NULL
   AND (sqlc.arg(from_currency)::text = '' OR er.from_currency = sqlc.arg(from_currency)::text)
   AND (sqlc.arg(to_currency)::text = '' OR er.to_currency = sqlc.arg(to_currency)::text)
-  AND (sqlc.arg(rate_type_id)::text = '' OR er.rate_type_id::text = sqlc.arg(rate_type_id)::text)
+  AND (sqlc.arg(rate_type_id)::text = '' OR er.rate_type_id::text = sqlc.arg(rate_type_id)::text OR UPPER(rt.code) = UPPER(sqlc.arg(rate_type_id)::text))
   AND (sqlc.narg('on_date')::date IS NULL OR (er.valid_from <= sqlc.narg('on_date')::date AND (er.valid_to IS NULL OR er.valid_to >= sqlc.narg('on_date')::date)))
 ORDER BY er.valid_from DESC, er.from_currency, er.to_currency
 LIMIT $1 OFFSET $2;
@@ -96,10 +96,11 @@ LIMIT $1 OFFSET $2;
 -- name: CountExchangeRates :one
 SELECT COUNT(*)
 FROM cur.exchange_rate er
+JOIN cur.exchange_rate_type rt ON rt.id = er.rate_type_id
 WHERE er.deleted_at IS NULL
   AND (sqlc.arg(from_currency)::text = '' OR er.from_currency = sqlc.arg(from_currency)::text)
   AND (sqlc.arg(to_currency)::text = '' OR er.to_currency = sqlc.arg(to_currency)::text)
-  AND (sqlc.arg(rate_type_id)::text = '' OR er.rate_type_id::text = sqlc.arg(rate_type_id)::text)
+  AND (sqlc.arg(rate_type_id)::text = '' OR er.rate_type_id::text = sqlc.arg(rate_type_id)::text OR UPPER(rt.code) = UPPER(sqlc.arg(rate_type_id)::text))
   AND (sqlc.narg('on_date')::date IS NULL OR (er.valid_from <= sqlc.narg('on_date')::date AND (er.valid_to IS NULL OR er.valid_to >= sqlc.narg('on_date')::date)));
 
 -- name: GetLatestRate :one

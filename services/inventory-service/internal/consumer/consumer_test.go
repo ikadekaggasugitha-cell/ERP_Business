@@ -63,17 +63,23 @@ func TestInventoryConsumerHandlersAndPoison(t *testing.T) {
 		t.Fatalf("expected ErrPoison for bad item UUID, got %v", err)
 	}
 
-	// Valid sales.order.confirmed delegates lines to FulfillSalesOrder
+	// Valid sales.order.confirmed delegates lines to FulfillSalesOrder and propagates customerId/currencyCode
 	itemID := uuid.NewString()
+	custID := uuid.NewString()
 	err = c.Handle(context.Background(), eventbus.Envelope{
 		EventID:        uuid.NewString(),
 		EventType:      "sales.order.confirmed",
 		AggregateID:    uuid.NewString(),
 		OrganizationID: uuid.NewString(),
-		Data:           json.RawMessage(`{"soNo":"SO-1","totalAmount":"1200.0000","lines":[{"itemId":"` + itemID + `","orderQty":"4","unitPrice":"300"}]}`),
+		Data:           json.RawMessage(`{"soNo":"SO-1","customerId":"` + custID + `","currencyCode":"IDR","totalAmount":"1200.0000","lines":[{"itemId":"` + itemID + `","orderQty":"4","unitPrice":"300"}]}`),
 	})
 	if err != nil || !store.soCalled || len(store.soLines) != 1 {
 		t.Fatalf("expected valid SO fulfillment call, err=%v called=%v lines=%d", err, store.soCalled, len(store.soLines))
+	}
+	var okMap map[string]any
+	_ = json.Unmarshal(store.emittedOK.Payload, &okMap)
+	if okMap["customerId"] != custID || okMap["currencyCode"] != "IDR" {
+		t.Fatalf("expected customerId & currencyCode in inventory.goods.issued, got %+v", okMap)
 	}
 
 	// Valid procurement.goods.received delegates lines to ReceiveProcurementGoods
@@ -88,21 +94,22 @@ func TestInventoryConsumerHandlersAndPoison(t *testing.T) {
 		t.Fatalf("expected valid GR receipt call, err=%v called=%v lines=%d", err, store.grCalled, len(store.grLines))
 	}
 
-	// Valid manufacturing.workorder.completed receives finished goods into inventory
+	// Valid manufacturing.workorder.completed receives finished goods + deducts BOM lines
 	store.grCalled = false
 	store.grLines = nil
+	compID := uuid.NewString()
 	err = c.Handle(context.Background(), eventbus.Envelope{
 		EventID:        uuid.NewString(),
 		EventType:      "manufacturing.workorder.completed",
 		AggregateID:    uuid.NewString(),
 		OrganizationID: uuid.NewString(),
-		Data:           json.RawMessage(`{"woNo":"WO-100","productItemId":"` + itemID + `","producedQty":"10.0000"}`),
+		Data:           json.RawMessage(`{"woNo":"WO-100","productItemId":"` + itemID + `","producedQty":"10.0000","unitCost":"25000.0000","bomLines":[{"componentItemId":"` + compID + `","quantity":"20.0000"}]}`),
 	})
-	if err != nil || !store.grCalled || len(store.grLines) != 1 {
-		t.Fatalf("expected finished goods receipt on WO completion, err=%v called=%v lines=%d", err, store.grCalled, len(store.grLines))
+	if err != nil || !store.grCalled || len(store.grLines) != 2 {
+		t.Fatalf("expected finished goods receipt + 1 BOM deduction on WO completion, err=%v called=%v lines=%d", err, store.grCalled, len(store.grLines))
 	}
 
-	// Valid maintenance.workorder.parts_requested deducts spare parts stock
+	// Valid maintenance.workorder.parts_requested deducts spare parts stock with computed cost
 	store.soCalled = false
 	store.soLines = nil
 	err = c.Handle(context.Background(), eventbus.Envelope{
@@ -114,6 +121,11 @@ func TestInventoryConsumerHandlersAndPoison(t *testing.T) {
 	})
 	if err != nil || !store.soCalled || len(store.soLines) != 1 {
 		t.Fatalf("expected spare parts issue on maintenance request, err=%v called=%v lines=%d", err, store.soCalled, len(store.soLines))
+	}
+	var mntMap map[string]any
+	_ = json.Unmarshal(store.emittedOK.Payload, &mntMap)
+	if mntMap["amount"] != "100000.0000" || mntMap["sourceEventType"] != "maintenance.workorder.parts_requested" {
+		t.Fatalf("expected amount=100000.0000 and sourceEventType on maintenance issue, got %+v", mntMap)
 	}
 }
 

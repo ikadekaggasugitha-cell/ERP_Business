@@ -45,6 +45,7 @@ export interface User {
   fullName: string;
   email: string;
   activeOrgId: string;
+  adminTier?: number;
   roles: string[];
   permissions: string[];
 }

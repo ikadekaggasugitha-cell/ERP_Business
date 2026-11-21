@@ -25,18 +25,27 @@ WHERE deleted_at IS NULL
 UPDATE prj.project
 SET name = $2, project_type = $3, start_date = $4, end_date = $5, updated_by = $6
 WHERE id = $1 AND row_version = $7 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: TransitionProjectStatus :one
 UPDATE prj.project
 SET status = $2, updated_by = $3
 WHERE id = $1 AND row_version = $4 AND status = $5 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: SoftDeleteProject :execrows
 UPDATE prj.project
 SET deleted_at = now(), updated_by = $2
-WHERE id = $1 AND row_version = $3 AND status = 'Draft' AND deleted_at IS NULL;
+WHERE id = $1 AND row_version = $3 AND status = 'Draft' AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
+
+-- name: ShiftProjectEndDate :exec
+UPDATE prj.project
+SET end_date = (end_date + ($2 * interval '1 day'))::date, updated_by = $3
+WHERE id = $1 AND end_date IS NOT NULL AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
 
 -- name: CreateWBSElement :one
 INSERT INTO prj.wbs_element (
@@ -56,6 +65,7 @@ ORDER BY level_no ASC, code ASC;
 UPDATE prj.wbs_element
 SET parent_id = $2, name = $3, level_no = $4, updated_by = $5
 WHERE id = $1 AND row_version = $6 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: CountWBSChildren :one
@@ -65,7 +75,8 @@ WHERE parent_id = $1 AND deleted_at IS NULL;
 -- name: SoftDeleteWBSElement :execrows
 UPDATE prj.wbs_element
 SET deleted_at = now(), updated_by = $2
-WHERE id = $1 AND row_version = $3 AND deleted_at IS NULL;
+WHERE id = $1 AND row_version = $3 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
 
 -- name: CreateProjectBudget :one
 INSERT INTO prj.project_budget (
@@ -145,6 +156,9 @@ INSERT INTO prj.change_order (
     organization_id, project_id, description, budget_impact_amount, schedule_impact_days, status, created_by
 ) VALUES ($1, $2, $3, $4, $5, 'Draft', $6)
 RETURNING id, row_version;
+
+-- name: GetChangeOrder :one
+SELECT * FROM prj.change_order WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: ListChangeOrders :many
 SELECT * FROM prj.change_order

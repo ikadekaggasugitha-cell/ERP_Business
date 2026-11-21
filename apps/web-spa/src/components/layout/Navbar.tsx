@@ -12,6 +12,7 @@ import {
   Sun,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { getAdminTierLabel } from '../../lib/permissions';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../store/auth-store';
 import { useUiStore } from '../../store/ui-store';
@@ -46,6 +47,7 @@ export function Navbar() {
   const isOffline = isDemoSession || demoMode;
   const userInitials = (user?.fullName || user?.username || 'U').slice(0, 2).toUpperCase();
   const visiblePermissions = (user?.permissions ?? []).slice(0, 4);
+  const adminTierLabel = getAdminTierLabel(user);
 
   return (
     <header className="sticky top-0 z-30 h-14 border-b border-border bg-chrome/95 backdrop-blur-md">
@@ -268,6 +270,11 @@ export function Navbar() {
                       {user?.email || user?.username}
                       {user?.roles?.length ? ` · ${user.roles[0]}` : ''}
                     </p>
+                    {adminTierLabel ? (
+                      <span className="mt-1 inline-flex items-center rounded-md border border-brand-200 bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 dark:border-brand-800/70 dark:bg-brand-950/60 dark:text-brand-300">
+                        {adminTierLabel}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
 

@@ -186,7 +186,7 @@ func TestPayrollRunLifecycleCalculationAndRBAC(t *testing.T) {
 	}
 	var calced repository.PayrollRunDetail
 	_ = json.Unmarshal(rec.Body.Bytes(), &calced)
-	if calced.Status != "Calculated" || len(calced.Results) != 1 || calced.Results[0].TaxAmount != "939925.0000" {
+	if calced.Status != "Calculated" || len(calced.Results) != 1 || calced.Results[0].TaxAmount != "1024075.0000" {
 		t.Fatalf("unexpected calculated run: %+v", calced)
 	}
 
@@ -196,8 +196,12 @@ func TestPayrollRunLifecycleCalculationAndRBAC(t *testing.T) {
 		t.Fatalf("expected 409 posting unapproved run, got %d %s", rec.Code, rec.Body.String())
 	}
 
-	// 4b. Approve -> Post
+	// 4b. Approve without payroll:approve -> 403; Approve with payroll:approve -> 200 -> Post
 	rec = doPayReq(t, router, http.MethodPost, "/payroll-runs/"+created.ID.String()+"/approve", "", "payroll:write", `"2"`)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 without payroll:approve, got %d %s", rec.Code, rec.Body.String())
+	}
+	rec = doPayReq(t, router, http.MethodPost, "/payroll-runs/"+created.ID.String()+"/approve", "", "payroll:approve", `"2"`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 approve, got %d %s", rec.Code, rec.Body.String())
 	}

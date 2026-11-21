@@ -25,6 +25,7 @@ type Claims struct {
 	OrgScope    []string `json:"org_scope"`
 	Roles       []string `json:"roles"`
 	Permissions []string `json:"permissions"`
+	AdminTier   int      `json:"adminTier,omitempty"`
 	TokenUse    string   `json:"use"` // "access" or "stream"
 	IssuedAt    int64    `json:"iat"`
 	ExpiresAt   int64    `json:"exp"`

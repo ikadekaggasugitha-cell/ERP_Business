@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"math/big"
 	"net/http"
 	"strings"
@@ -21,7 +23,7 @@ type CRMStore interface {
 	GetLead(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (crmdb.CrmLead, error)
 	ListLeads(ctx context.Context, scope []uuid.UUID, status *string, limit, offset int32) ([]crmdb.CrmLead, int64, error)
 	UpdateLead(ctx context.Context, scope []uuid.UUID, arg crmdb.UpdateLeadParams) (int32, error)
-	TransitionLead(ctx context.Context, scope []uuid.UUID, id, actor uuid.UUID, version int32, fromStatus, toStatus string, customerRef *uuid.UUID) (int32, error)
+	TransitionLead(ctx context.Context, scope []uuid.UUID, id, org, actor, corr uuid.UUID, version int32, fromStatus, toStatus string, customerRef *uuid.UUID) (int32, *uuid.UUID, error)
 	LoseLead(ctx context.Context, scope []uuid.UUID, id, actor uuid.UUID, version int32) (int32, error)
 	DeleteLead(ctx context.Context, scope []uuid.UUID, id, actor uuid.UUID, version int32) error
 	CreateOpportunity(ctx context.Context, scope []uuid.UUID, arg crmdb.CreateOpportunityParams) (crmdb.CreateOpportunityRow, error)
@@ -47,9 +49,199 @@ type CRMStore interface {
 	CompleteActivityTask(ctx context.Context, scope []uuid.UUID, id, actor uuid.UUID, version int32) (int32, error)
 }
 
-type Server struct{ store CRMStore }
+type Server struct {
+	store CRMStore
+	idem  *httpx.IdemStore
+}
 
-func NewServer(store CRMStore) *Server { return &Server{store: store} }
+func NewServer(store CRMStore) *Server {
+	return &Server{store: store, idem: httpx.NewIdemStore()}
+}
+
+func beginIdemOptional(w http.ResponseWriter, r *http.Request, idem *httpx.IdemStore, scope []uuid.UUID, dst any) (string, string, func(), bool) {
+	if r.Body == nil {
+		r.Body = io.NopCloser(strings.NewReader("{}"))
+	} else {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("failed to read request body"))
+			return "", "", func() {}, true
+		}
+		if len(bytes.TrimSpace(raw)) == 0 {
+			raw = []byte("{}")
+		}
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+	}
+	return httpx.BeginIdempotent(w, r, idem, scope, dst)
+}
+
+func fmtOptTS(ts pgtype.Timestamptz) *string {
+	if !ts.Valid {
+		return nil
+	}
+	s := ts.Time.UTC().Format(time.RFC3339)
+	return &s
+}
+
+func fmtOptDate(d pgtype.Date) *string {
+	if !d.Valid {
+		return nil
+	}
+	s := platform.FormatDate(d)
+	return &s
+}
+
+func fmtOptNumeric(n pgtype.Numeric, scale int) *string {
+	if !n.Valid {
+		return nil
+	}
+	s := platform.FormatNumeric(n, scale)
+	return &s
+}
+
+func rawJSONOrEmptyObj(b []byte) json.RawMessage {
+	if len(bytes.TrimSpace(b)) == 0 {
+		return json.RawMessage("{}")
+	}
+	return json.RawMessage(b)
+}
+
+type leadDTO struct {
+	ID             uuid.UUID  `json:"id"`
+	OrganizationID uuid.UUID  `json:"organizationId"`
+	Code           string     `json:"code"`
+	Name           string     `json:"name"`
+	Source         *string    `json:"source,omitempty"`
+	Status         string     `json:"status"`
+	EstimatedValue *string    `json:"estimatedValue,omitempty"`
+	CustomerRef    *uuid.UUID `json:"customerRef,omitempty"`
+	CreatedAt      *string    `json:"createdAt,omitempty"`
+	UpdatedAt      *string    `json:"updatedAt,omitempty"`
+	RowVersion     int32      `json:"rowVersion"`
+}
+
+func toLeadDTO(r crmdb.CrmLead) leadDTO {
+	return leadDTO{
+		ID: r.ID, OrganizationID: r.OrganizationID, Code: r.Code, Name: r.Name,
+		Source: r.Source, Status: r.Status, EstimatedValue: fmtOptNumeric(r.EstimatedValue, 4),
+		CustomerRef: r.CustomerRef, CreatedAt: fmtOptTS(r.CreatedAt), UpdatedAt: fmtOptTS(r.UpdatedAt),
+		RowVersion: r.RowVersion,
+	}
+}
+
+type opportunityDTO struct {
+	ID                uuid.UUID  `json:"id"`
+	OrganizationID    uuid.UUID  `json:"organizationId"`
+	Code              string     `json:"code"`
+	LeadID            *uuid.UUID `json:"leadId,omitempty"`
+	CustomerRef       *uuid.UUID `json:"customerRef,omitempty"`
+	Stage             string     `json:"stage"`
+	ProbabilityPct    *string    `json:"probabilityPct,omitempty"`
+	EstimatedValue    *string    `json:"estimatedValue,omitempty"`
+	ExpectedCloseDate *string    `json:"expectedCloseDate,omitempty"`
+	Status            string     `json:"status"`
+	CreatedAt         *string    `json:"createdAt,omitempty"`
+	UpdatedAt         *string    `json:"updatedAt,omitempty"`
+	RowVersion        int32      `json:"rowVersion"`
+}
+
+func toOpportunityDTO(r crmdb.CrmOpportunity) opportunityDTO {
+	return opportunityDTO{
+		ID: r.ID, OrganizationID: r.OrganizationID, Code: r.Code, LeadID: r.LeadID,
+		CustomerRef: r.CustomerRef, Stage: r.Stage,
+		ProbabilityPct: fmtOptNumeric(r.ProbabilityPct, 2),
+		EstimatedValue: fmtOptNumeric(r.EstimatedValue, 4),
+		ExpectedCloseDate: fmtOptDate(r.ExpectedCloseDate), Status: r.Status,
+		CreatedAt: fmtOptTS(r.CreatedAt), UpdatedAt: fmtOptTS(r.UpdatedAt), RowVersion: r.RowVersion,
+	}
+}
+
+type segmentDTO struct {
+	ID             uuid.UUID       `json:"id"`
+	OrganizationID uuid.UUID       `json:"organizationId"`
+	Code           string          `json:"code"`
+	Name           string          `json:"name"`
+	Criteria       json.RawMessage `json:"criteria"`
+	IsSystem       bool            `json:"isSystem"`
+	CreatedAt      *string         `json:"createdAt,omitempty"`
+	UpdatedAt      *string         `json:"updatedAt,omitempty"`
+	RowVersion     int32           `json:"rowVersion"`
+}
+
+func toSegmentDTO(r crmdb.CrmCustomerSegment) segmentDTO {
+	return segmentDTO{
+		ID: r.ID, OrganizationID: r.OrganizationID, Code: r.Code, Name: r.Name,
+		Criteria: rawJSONOrEmptyObj(r.Criteria), IsSystem: r.OrganizationID == platform.SystemOrgID,
+		CreatedAt: fmtOptTS(r.CreatedAt), UpdatedAt: fmtOptTS(r.UpdatedAt), RowVersion: r.RowVersion,
+	}
+}
+
+type interactionDTO struct {
+	ID              uuid.UUID  `json:"id"`
+	OrganizationID  uuid.UUID  `json:"organizationId"`
+	CustomerRef     *uuid.UUID `json:"customerRef,omitempty"`
+	LeadID          *uuid.UUID `json:"leadId,omitempty"`
+	InteractionType string     `json:"interactionType"`
+	OccurredAt      *string    `json:"occurredAt,omitempty"`
+	Notes           *string    `json:"notes,omitempty"`
+	CreatedAt       *string    `json:"createdAt,omitempty"`
+	UpdatedAt       *string    `json:"updatedAt,omitempty"`
+	RowVersion      int32      `json:"rowVersion"`
+}
+
+func toInteractionDTO(r crmdb.CrmInteraction) interactionDTO {
+	return interactionDTO{
+		ID: r.ID, OrganizationID: r.OrganizationID, CustomerRef: r.CustomerRef, LeadID: r.LeadID,
+		InteractionType: r.InteractionType, OccurredAt: fmtOptTS(r.OccurredAt), Notes: r.Notes,
+		CreatedAt: fmtOptTS(r.CreatedAt), UpdatedAt: fmtOptTS(r.UpdatedAt), RowVersion: r.RowVersion,
+	}
+}
+
+type supportCaseDTO struct {
+	ID             uuid.UUID  `json:"id"`
+	OrganizationID uuid.UUID  `json:"organizationId"`
+	CaseNo         string     `json:"caseNo"`
+	CustomerRef    *uuid.UUID `json:"customerRef,omitempty"`
+	Subject        string     `json:"subject"`
+	Status         string     `json:"status"`
+	Resolution     *string    `json:"resolution,omitempty"`
+	OpenedAt       *string    `json:"openedAt,omitempty"`
+	ResolvedAt     *string    `json:"resolvedAt,omitempty"`
+	CreatedAt      *string    `json:"createdAt,omitempty"`
+	UpdatedAt      *string    `json:"updatedAt,omitempty"`
+	RowVersion     int32      `json:"rowVersion"`
+}
+
+func toSupportCaseDTO(r crmdb.CrmSupportCase) supportCaseDTO {
+	return supportCaseDTO{
+		ID: r.ID, OrganizationID: r.OrganizationID, CaseNo: r.CaseNo, CustomerRef: r.CustomerRef,
+		Subject: r.Subject, Status: r.Status, Resolution: r.Resolution,
+		OpenedAt: fmtOptTS(r.OpenedAt), ResolvedAt: fmtOptTS(r.ResolvedAt),
+		CreatedAt: fmtOptTS(r.CreatedAt), UpdatedAt: fmtOptTS(r.UpdatedAt), RowVersion: r.RowVersion,
+	}
+}
+
+type activityTaskDTO struct {
+	ID             uuid.UUID  `json:"id"`
+	OrganizationID uuid.UUID  `json:"organizationId"`
+	AssigneeRef    uuid.UUID  `json:"assigneeRef"`
+	RelatedType    *string    `json:"relatedType,omitempty"`
+	RelatedRef     *uuid.UUID `json:"relatedRef,omitempty"`
+	DueDate        *string    `json:"dueDate,omitempty"`
+	Status         string     `json:"status"`
+	CreatedAt      *string    `json:"createdAt,omitempty"`
+	UpdatedAt      *string    `json:"updatedAt,omitempty"`
+	RowVersion     int32      `json:"rowVersion"`
+}
+
+func toActivityTaskDTO(r crmdb.CrmActivityTask) activityTaskDTO {
+	return activityTaskDTO{
+		ID: r.ID, OrganizationID: r.OrganizationID, AssigneeRef: r.AssigneeRef,
+		RelatedType: r.RelatedType, RelatedRef: r.RelatedRef, DueDate: fmtOptDate(r.DueDate),
+		Status: r.Status, CreatedAt: fmtOptTS(r.CreatedAt), UpdatedAt: fmtOptTS(r.UpdatedAt),
+		RowVersion: r.RowVersion,
+	}
+}
 
 func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /leads", s.listLeads)

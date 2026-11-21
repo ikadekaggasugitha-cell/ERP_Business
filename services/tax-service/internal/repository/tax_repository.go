@@ -37,9 +37,13 @@ func (r *TaxRepository) CreateTaxCode(ctx context.Context, scope []uuid.UUID, ar
 	return out, err
 }
 
+func (r *TaxRepository) withReadTx(ctx context.Context, scope []uuid.UUID, fn func(pgx.Tx) error) error {
+	return r.db.WithOrgScope(ctx, platform.ScopeWithSystemOrg(scope), fn)
+}
+
 func (r *TaxRepository) GetTaxCode(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (taxdb.TaxTaxCode, error) {
 	var out taxdb.TaxTaxCode
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.withReadTx(ctx, scope, func(tx pgx.Tx) error {
 		var e error
 		out, e = r.q.WithTx(tx).GetTaxCode(ctx, id)
 		return e
@@ -50,7 +54,7 @@ func (r *TaxRepository) GetTaxCode(ctx context.Context, scope []uuid.UUID, id uu
 func (r *TaxRepository) ListTaxCodesWithCount(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]taxdb.ListTaxCodesRow, int64, error) {
 	var rows []taxdb.ListTaxCodesRow
 	var total int64
-	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+	err := r.withReadTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if total, e = q.CountTaxCodes(ctx); e != nil {
@@ -105,7 +109,7 @@ func (r *TaxRepository) ConsumeAndCreateTaxInvoice(
 	taxCode string, explicitTax bool,
 	txn taxdb.CreateTaxTransactionParams, ev taxdb.InsertOutboxParams,
 ) (applied bool, err error) {
-	err = r.db.WithOrgScope(ctx, scope, func(dbtx pgx.Tx) error {
+	err = r.db.WithOrgScope(ctx, platform.ScopeWithSystemOrg(scope), func(dbtx pgx.Tx) error {
 		q := r.q.WithTx(dbtx)
 		n, e := q.MarkEventProcessed(ctx, mark)
 		if e != nil {

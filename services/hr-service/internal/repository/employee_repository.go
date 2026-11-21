@@ -208,6 +208,7 @@ func (r *EmployeeRepository) CreateAndEmit(ctx context.Context, scope []uuid.UUI
 			return httpx.MapDBError(err, "employeeNo atau nationalId sudah digunakan")
 		}
 		payload, err := json.Marshal(map[string]any{
+			"employeeId": row.ID.String(),
 			"employeeNo": row.EmployeeNo,
 			"status":     row.Status,
 			"hireDate":   platform.FormatDate(row.HireDate),
@@ -262,10 +263,7 @@ func (r *EmployeeRepository) FindByNationalID(ctx context.Context, scope []uuid.
 		return out, httpx.BadRequest("nationalId tidak boleh kosong")
 	}
 	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
-		row, err := r.q.WithTx(tx).GetEmployeeByNationalIDHash(ctx, hrdb.GetEmployeeByNationalIDHashParams{
-			OrganizationID: scope[0],
-			NationalIDHash: &hash,
-		})
+		row, err := r.q.WithTx(tx).GetEmployeeByNationalIDHash(ctx, &hash)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return httpx.NotFound("employee tidak ditemukan")
@@ -305,7 +303,7 @@ func (r *EmployeeRepository) ListWithCount(ctx context.Context, scope []uuid.UUI
 			dto, err := r.toDTO(
 				row.ID, row.OrganizationID, row.EmployeeNo, row.FullName,
 				row.EncryptedFullName, row.EncryptedNationalID, row.EncryptedDob, row.EncryptedEmail,
-				pgtype.Date{}, nil, row.HireDate, row.Status, row.UserRefID, row.RowVersion,
+				row.DateOfBirth, row.Email, row.HireDate, row.Status, row.UserRefID, row.RowVersion,
 			)
 			if err != nil {
 				return err
@@ -376,6 +374,7 @@ func (r *EmployeeRepository) UpdateAndEmit(ctx context.Context, scope []uuid.UUI
 			return httpx.MapDBError(err, "")
 		}
 		payload, err := json.Marshal(map[string]any{
+			"employeeId": row.ID.String(),
 			"employeeNo": row.EmployeeNo,
 			"status":     row.Status,
 			"hireDate":   platform.FormatDate(row.HireDate),
@@ -435,6 +434,7 @@ func (r *EmployeeRepository) TerminateAndEmit(ctx context.Context, scope []uuid.
 		cur.RowVersion = newVer
 
 		payload, err := json.Marshal(map[string]any{
+			"employeeId": cur.ID.String(),
 			"employeeNo": cur.EmployeeNo,
 			"status":     "Terminated",
 			"hireDate":   platform.FormatDate(cur.HireDate),
@@ -549,9 +549,40 @@ func (r *EmployeeRepository) ListEmploymentsByEmployee(ctx context.Context, scop
 func (r *EmployeeRepository) CreateCompensation(ctx context.Context, scope []uuid.UUID, in hrdb.CreateCompensationParams) (hrdb.CreateCompensationRow, error) {
 	var out hrdb.CreateCompensationRow
 	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
-		var e error
-		out, e = r.q.WithTx(tx).CreateCompensation(ctx, in)
-		return httpx.MapDBError(e, "")
+		qt := r.q.WithTx(tx)
+		emp, e := qt.GetEmployee(ctx, in.EmployeeID)
+		if e != nil {
+			if errors.Is(e, pgx.ErrNoRows) {
+				return httpx.NotFound("employee tidak ditemukan")
+			}
+			return httpx.MapDBError(e, "")
+		}
+		out, e = qt.CreateCompensation(ctx, in)
+		if e != nil {
+			return httpx.MapDBError(e, "")
+		}
+		payload, e := json.Marshal(map[string]any{
+			"employeeId":    emp.ID.String(),
+			"employeeNo":    emp.EmployeeNo,
+			"status":        emp.Status,
+			"componentCode": out.ComponentCode,
+			"amount":        platform.FormatNumeric(out.Amount, 4),
+			"effectiveFrom": platform.FormatDate(out.EffectiveFrom),
+		})
+		if e != nil {
+			return e
+		}
+		if e := qt.InsertOutbox(ctx, hrdb.InsertOutboxParams{
+			AggregateType:  "Employee",
+			AggregateID:    emp.ID,
+			EventType:      "hr.employee.updated",
+			Payload:        payload,
+			OrganizationID: emp.OrganizationID,
+			CorrelationID:  uuid.New(),
+		}); e != nil {
+			return httpx.MapDBError(e, "")
+		}
+		return nil
 	})
 	return out, err
 }

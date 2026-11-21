@@ -1,6 +1,24 @@
 import type { PortalMode, User } from '../types';
 
-const ADMIN_ROLES = new Set(['superadmin', 'admin', 'SYSTEM_ADMIN', 'SUPER_ADMIN']);
+const ADMIN_ROLES = new Set([
+  'superadmin',
+  'admin',
+  'SYSTEM_ADMIN',
+  'SUPER_ADMIN',
+  'HOLDING_ADMIN',
+]);
+
+export function getAdminTierLabel(
+  user: Pick<User, 'roles' | 'adminTier'> | null | undefined
+): string | null {
+  if (!user) return null;
+  const roles = new Set((user.roles ?? []).map((r) => r.trim().toUpperCase()));
+  if (user.adminTier === 0 || roles.has('SYSTEM_ADMIN')) return 'System Admin';
+  if (user.adminTier === 1 || roles.has('HOLDING_ADMIN')) return 'Head Office Admin';
+  if (user.adminTier === 2 || roles.has('SUBSIDIARY_ADMIN')) return 'Subsidiary Admin';
+  if (user.adminTier === 3 || roles.has('BRANCH_ADMIN')) return 'Branch Admin';
+  return null;
+}
 
 const WRITE_ACTION_ALIASES: Record<string, string[]> = {
   write: ['write', 'create', 'update', 'delete', 'post', 'reverse'],

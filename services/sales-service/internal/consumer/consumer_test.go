@@ -66,6 +66,21 @@ func TestConsumerHandleAndPoison(t *testing.T) {
 		t.Fatalf("store call mismatch: %+v", store)
 	}
 
+	// Maintenance spare-parts reservation failure must NOT cancel sales orders
+	store.called = false
+	if err := c.Handle(context.Background(), eventbus.Envelope{
+		EventID:        uuid.NewString(),
+		EventType:      "inventory.reservation.failed",
+		OrganizationID: orgID.String(),
+		AggregateID:    uuid.NewString(),
+		Data:           json.RawMessage(`{"sourceEventType":"maintenance.workorder.parts_requested","reason":"insufficient spare parts stock"}`),
+	}); err != nil {
+		t.Fatalf("unexpected error ignoring maintenance reservation failure: %v", err)
+	}
+	if store.called {
+		t.Fatalf("expected maintenance reservation failure to be ignored, but ConsumeAndCancel was called")
+	}
+
 	custID := uuid.New()
 	if err := c.Handle(context.Background(), eventbus.Envelope{
 		EventID:        uuid.NewString(),
@@ -76,7 +91,7 @@ func TestConsumerHandleAndPoison(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("unexpected crm.opportunity.won error: %v", err)
 	}
-	if !store.draftCall || store.draftIn.SoNo != "SO-CRM-OPP-42" || store.draftIn.CustomerID != custID || store.draftIn.CurrencyCode != "USD" {
+	if !store.draftCall || store.draftIn.SoNo != "SO-CRM-OPP-42" || store.draftIn.CustomerID != custID || store.draftIn.CurrencyCode != "USD" || len(store.draftIn.Lines) != 1 {
 		t.Fatalf("unexpected draft SO input: %+v", store.draftIn)
 	}
 }

@@ -35,7 +35,7 @@ func (r *AssetRepository) withOrgTx(ctx context.Context, scope []uuid.UUID, fn f
 	if len(scope) == 0 {
 		return errors.New("org scope must not be empty")
 	}
-	return r.db.WithOrgScope(ctx, scope, fn)
+	return r.db.WithOrgScope(ctx, platform.ScopeWithSystemOrg(scope), fn)
 }
 
 func emit(ctx context.Context, q *astdb.Queries, aggType, eventType string, id, org, corr uuid.UUID, payload map[string]any) error {
@@ -86,8 +86,15 @@ func (r *AssetRepository) ListAssets(ctx context.Context, scope []uuid.UUID, sta
 func (r *AssetRepository) UpdateAsset(ctx context.Context, scope []uuid.UUID, arg astdb.UpdateAssetParams) (int32, error) {
 	var next int32
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
-		var e error
-		next, e = r.q.WithTx(tx).UpdateAsset(ctx, arg)
+		q := r.q.WithTx(tx)
+		cur, e := q.GetAsset(ctx, arg.ID)
+		if e != nil {
+			return httpx.NotFound("asset not found")
+		}
+		if cur.OrganizationID == platform.SystemOrgID {
+			return httpx.Forbidden("system asset template is read-only")
+		}
+		next, e = q.UpdateAsset(ctx, arg)
 		return e
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -99,8 +106,15 @@ func (r *AssetRepository) UpdateAsset(ctx context.Context, scope []uuid.UUID, ar
 func (r *AssetRepository) DeleteAsset(ctx context.Context, scope []uuid.UUID, id, actor uuid.UUID, version int32) error {
 	var n int64
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
-		var e error
-		n, e = r.q.WithTx(tx).SoftDeleteAsset(ctx, astdb.SoftDeleteAssetParams{ID: id, UpdatedBy: &actor, RowVersion: version})
+		q := r.q.WithTx(tx)
+		cur, e := q.GetAsset(ctx, id)
+		if e != nil {
+			return httpx.NotFound("asset not found")
+		}
+		if cur.OrganizationID == platform.SystemOrgID {
+			return httpx.Forbidden("system asset template cannot be deleted")
+		}
+		n, e = q.SoftDeleteAsset(ctx, astdb.SoftDeleteAssetParams{ID: id, UpdatedBy: &actor, RowVersion: version})
 		return e
 	})
 	if err != nil {
@@ -143,9 +157,15 @@ func (r *AssetRepository) CreateMovement(ctx context.Context, scope []uuid.UUID,
 		if e != nil {
 			return httpx.NotFound("asset not found")
 		}
+		if asset.Status == "Disposed" {
+			return httpx.Conflict("ASSET_DISPOSED", "cannot move a Disposed asset")
+		}
 		if arg.FromOrganizationRef == nil {
 			from := asset.OrganizationRef
 			arg.FromOrganizationRef = &from
+		}
+		if *arg.FromOrganizationRef == arg.ToOrganizationRef {
+			return httpx.Unprocessable("SAME_ORGANIZATION", "fromOrganizationRef and toOrganizationRef must differ")
 		}
 		out, e = q.CreateAssetMovement(ctx, arg)
 		return e
@@ -191,6 +211,19 @@ func (r *AssetRepository) CompleteMovementAndEmit(ctx context.Context, scope []u
 		}
 		if mv.Status != "Approved" {
 			return httpx.Conflict("INVALID_STATE", "asset movement must be Approved before completion")
+		}
+		asset, e := q.GetAsset(ctx, mv.AssetID)
+		if e != nil {
+			return httpx.NotFound("asset not found")
+		}
+		if asset.OrganizationID == platform.SystemOrgID {
+			return httpx.Forbidden("system asset template cannot be moved")
+		}
+		if asset.Status == "Disposed" {
+			return httpx.Conflict("ASSET_DISPOSED", "cannot complete movement for a Disposed asset")
+		}
+		if mv.FromOrganizationRef != nil && *mv.FromOrganizationRef == mv.ToOrganizationRef {
+			return httpx.Unprocessable("SAME_ORGANIZATION", "fromOrganizationRef and toOrganizationRef must differ")
 		}
 		next, e = q.CompleteAssetMovement(ctx, astdb.CompleteAssetMovementParams{ID: id, UpdatedBy: &actor, RowVersion: version})
 		if errors.Is(e, pgx.ErrNoRows) {

@@ -149,6 +149,7 @@ func (h *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 	if len(afterValue) == 0 || !json.Valid(afterValue) {
 		afterValue = []byte("{}")
 	}
+	actorPtr := extractActorID(afterValue)
 
 	_, err = h.repo.RecordFromEvent(
 		ctx,
@@ -160,6 +161,7 @@ func (h *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 		auditdb.RecordAuditLogParams{
 			OccurredAt:     pgtype.Timestamptz{Time: occurredAt.UTC(), Valid: true},
 			OrganizationID: orgID,
+			ActorID:        actorPtr,
 			Action:         eventType,
 			EntityType:     entityType,
 			EntityID:       entityPtr,
@@ -168,6 +170,29 @@ func (h *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 		},
 	)
 	return err
+}
+
+// extractActorID inspects top-level actor/user UUID fields in the event payload
+// so audit_log.actor_id captures who triggered the domain event when present.
+func extractActorID(data []byte) *uuid.UUID {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil
+	}
+	for _, key := range []string{"actorId", "userId", "approvedBy", "postedBy", "settledBy", "reversedBy", "updatedBy", "createdBy"} {
+		val, ok := raw[key]
+		if !ok {
+			continue
+		}
+		var s string
+		if err := json.Unmarshal(val, &s); err != nil {
+			continue
+		}
+		if u, err := uuid.Parse(strings.TrimSpace(s)); err == nil && u != uuid.Nil {
+			return &u
+		}
+	}
+	return nil
 }
 
 func parseRequiredUUID(field, raw string) (uuid.UUID, error) {

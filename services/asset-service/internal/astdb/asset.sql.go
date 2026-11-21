@@ -582,6 +582,7 @@ const softDeleteAsset = `-- name: SoftDeleteAsset :execrows
 UPDATE ast.asset
 SET deleted_at = now(), updated_by = $2
 WHERE id = $1 AND row_version = $3 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type SoftDeleteAssetParams struct {
@@ -602,6 +603,7 @@ const updateAsset = `-- name: UpdateAsset :one
 UPDATE ast.asset
 SET name = $2, category = $3, specification = $4, barcode = $5, status = $6, updated_by = $7
 WHERE id = $1 AND row_version = $8 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 
@@ -635,7 +637,8 @@ func (q *Queries) UpdateAsset(ctx context.Context, arg UpdateAssetParams) (int32
 const updateAssetOrganizationRef = `-- name: UpdateAssetOrganizationRef :exec
 UPDATE ast.asset
 SET organization_ref = $2, updated_by = $3
-WHERE id = $1 AND deleted_at IS NULL
+WHERE id = $1 AND deleted_at IS NULL AND status <> 'Disposed'
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type UpdateAssetOrganizationRefParams struct {

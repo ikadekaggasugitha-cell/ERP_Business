@@ -325,6 +325,7 @@ func (r *SalesOrderRepository) ConfirmAndEmit(ctx context.Context, scope []uuid.
 		payloadMap := map[string]any{
 			"soNo":         hdr.SoNo,
 			"customerId":   hdr.CustomerID.String(),
+			"orderDate":    platform.FormatDate(hdr.OrderDate),
 			"currencyCode": hdr.CurrencyCode,
 			"totalAmount":  platform.FormatNumeric(hdr.TotalAmount, 4),
 			"status":       "Confirmed",
@@ -545,7 +546,7 @@ func (r *SalesOrderRepository) ConsumeAndCreateDraftSO(ctx context.Context, orgI
 		if err != nil || n == 0 {
 			return err
 		}
-		_, err = qt.CreateSalesOrder(ctx, salesdb.CreateSalesOrderParams{
+		created, err := qt.CreateSalesOrder(ctx, salesdb.CreateSalesOrderParams{
 			OrganizationID: in.OrganizationID,
 			SoNo:           in.SoNo,
 			CustomerID:     in.CustomerID,
@@ -555,7 +556,23 @@ func (r *SalesOrderRepository) ConsumeAndCreateDraftSO(ctx context.Context, orgI
 			CorrelationID:  in.CorrelationID,
 			CreatedBy:      in.CreatedBy,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		for _, l := range in.Lines {
+			if err := qt.CreateSalesOrderLine(ctx, salesdb.CreateSalesOrderLineParams{
+				OrganizationID: in.OrganizationID,
+				SalesOrderID:   created.ID,
+				LineNo:         l.LineNo,
+				ItemID:         l.ItemID,
+				OrderQty:       l.OrderQty,
+				UnitPrice:      l.UnitPrice,
+				CreatedBy:      in.CreatedBy,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 

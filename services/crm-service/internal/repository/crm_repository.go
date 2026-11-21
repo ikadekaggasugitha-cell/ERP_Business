@@ -33,7 +33,7 @@ func (r *CRMRepository) withOrgTx(ctx context.Context, scope []uuid.UUID, fn fun
 	if len(scope) == 0 {
 		return errors.New("org scope must not be empty")
 	}
-	return r.db.WithOrgScope(ctx, scope, fn)
+	return r.db.WithOrgScope(ctx, platform.ScopeWithSystemOrg(scope), fn)
 }
 
 func emit(ctx context.Context, q *crmdb.Queries, aggType, eventType string, id, org, corr uuid.UUID, payload map[string]any) error {
@@ -94,19 +94,66 @@ func (r *CRMRepository) UpdateLead(ctx context.Context, scope []uuid.UUID, arg c
 	return next, httpx.MapDBError(err, "lead update conflict")
 }
 
-func (r *CRMRepository) TransitionLead(ctx context.Context, scope []uuid.UUID, id, actor uuid.UUID, version int32, fromStatus, toStatus string, customerRef *uuid.UUID) (int32, error) {
+func (r *CRMRepository) TransitionLead(ctx context.Context, scope []uuid.UUID, id, org, actor, corr uuid.UUID, version int32, fromStatus, toStatus string, customerRef *uuid.UUID) (int32, *uuid.UUID, error) {
 	var next int32
+	var createdOppID *uuid.UUID
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
-		var e error
-		next, e = r.q.WithTx(tx).TransitionLeadStatus(ctx, crmdb.TransitionLeadStatusParams{
+		q := r.q.WithTx(tx)
+		lead, e := q.GetLead(ctx, id)
+		if e != nil {
+			return httpx.NotFound("lead not found")
+		}
+		next, e = q.TransitionLeadStatus(ctx, crmdb.TransitionLeadStatusParams{
 			ID: id, Status: toStatus, CustomerRef: customerRef, UpdatedBy: &actor, RowVersion: version, Status_2: fromStatus,
 		})
-		return e
+		if e != nil {
+			return e
+		}
+		if toStatus == "Qualified" {
+			return emit(ctx, q, "Lead", "crm.lead.qualified", id, org, corr, map[string]any{
+				"leadId":         id.String(),
+				"code":           lead.Code,
+				"name":           lead.Name,
+				"estimatedValue": platform.FormatNumeric(lead.EstimatedValue, 4),
+			})
+		}
+		if toStatus == "Converted" {
+			effCust := lead.CustomerRef
+			if customerRef != nil {
+				effCust = customerRef
+			}
+			prob, _ := platform.ParseNumeric("50.00")
+			opp, oe := q.CreateOpportunity(ctx, crmdb.CreateOpportunityParams{
+				OrganizationID: org,
+				Code:           "OPP-" + lead.Code,
+				LeadID:         &lead.ID,
+				CustomerRef:    effCust,
+				Stage:          "Qualification",
+				ProbabilityPct: prob,
+				EstimatedValue: lead.EstimatedValue,
+				CreatedBy:      actor,
+			})
+			if oe != nil {
+				return oe
+			}
+			oppID := opp.ID
+			createdOppID = &oppID
+			payload := map[string]any{
+				"leadId":        id.String(),
+				"opportunityId": opp.ID.String(),
+				"code":          lead.Code,
+			}
+			if effCust != nil {
+				payload["customerId"] = effCust.String()
+			}
+			return emit(ctx, q, "Lead", "crm.lead.converted", id, org, corr, payload)
+		}
+		return nil
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, httpx.Conflict("INVALID_STATE", "lead state or version mismatch")
+		return 0, nil, httpx.Conflict("INVALID_STATE", "lead state or version mismatch")
 	}
-	return next, err
+	return next, createdOppID, httpx.MapDBError(err, "lead transition conflict")
 }
 
 func (r *CRMRepository) LoseLead(ctx context.Context, scope []uuid.UUID, id, actor uuid.UUID, version int32) (int32, error) {
@@ -197,6 +244,12 @@ func (r *CRMRepository) WinOpportunityAndEmit(ctx context.Context, scope []uuid.
 		if opp.Status != "Open" {
 			return httpx.Conflict("INVALID_STATE", "only Open opportunity can be marked Won")
 		}
+		if opp.CustomerRef == nil {
+			return httpx.Unprocessable("CUSTOMER_REQUIRED", "opportunity must have customerRef before marking Won")
+		}
+		if ev := platform.NumericToRat(opp.EstimatedValue); ev == nil || ev.Sign() <= 0 {
+			return httpx.Unprocessable("POSITIVE_VALUE_REQUIRED", "opportunity must have positive estimatedValue before marking Won")
+		}
 		next, e = q.CloseOpportunity(ctx, crmdb.CloseOpportunityParams{ID: id, Status: "Won", UpdatedBy: &actor, RowVersion: version})
 		if errors.Is(e, pgx.ErrNoRows) {
 			return httpx.Conflict("VERSION_CONFLICT", "opportunity version mismatch")
@@ -263,8 +316,15 @@ func (r *CRMRepository) ListSegments(ctx context.Context, scope []uuid.UUID, lim
 func (r *CRMRepository) UpdateSegment(ctx context.Context, scope []uuid.UUID, arg crmdb.UpdateCustomerSegmentParams) (int32, error) {
 	var next int32
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
-		var e error
-		next, e = r.q.WithTx(tx).UpdateCustomerSegment(ctx, arg)
+		q := r.q.WithTx(tx)
+		cur, e := q.GetCustomerSegment(ctx, arg.ID)
+		if e != nil {
+			return httpx.NotFound("segment not found")
+		}
+		if cur.OrganizationID == platform.SystemOrgID {
+			return httpx.Forbidden("system customer segment is read-only")
+		}
+		next, e = q.UpdateCustomerSegment(ctx, arg)
 		return e
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -276,8 +336,15 @@ func (r *CRMRepository) UpdateSegment(ctx context.Context, scope []uuid.UUID, ar
 func (r *CRMRepository) DeleteSegment(ctx context.Context, scope []uuid.UUID, id, actor uuid.UUID, version int32) error {
 	var n int64
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
-		var e error
-		n, e = r.q.WithTx(tx).SoftDeleteCustomerSegment(ctx, crmdb.SoftDeleteCustomerSegmentParams{ID: id, UpdatedBy: &actor, RowVersion: version})
+		q := r.q.WithTx(tx)
+		cur, e := q.GetCustomerSegment(ctx, id)
+		if e != nil {
+			return httpx.NotFound("segment not found")
+		}
+		if cur.OrganizationID == platform.SystemOrgID {
+			return httpx.Forbidden("system customer segment cannot be deleted")
+		}
+		n, e = q.SoftDeleteCustomerSegment(ctx, crmdb.SoftDeleteCustomerSegmentParams{ID: id, UpdatedBy: &actor, RowVersion: version})
 		return e
 	})
 	if err != nil {

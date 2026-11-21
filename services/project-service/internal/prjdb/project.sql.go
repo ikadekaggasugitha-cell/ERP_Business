@@ -371,6 +371,31 @@ func (q *Queries) DecideChangeOrder(ctx context.Context, arg DecideChangeOrderPa
 	return row_version, err
 }
 
+const getChangeOrder = `-- name: GetChangeOrder :one
+SELECT id, organization_id, project_id, description, budget_impact_amount, schedule_impact_days, status, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM prj.change_order WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetChangeOrder(ctx context.Context, id uuid.UUID) (PrjChangeOrder, error) {
+	row := q.db.QueryRow(ctx, getChangeOrder, id)
+	var i PrjChangeOrder
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Description,
+		&i.BudgetImpactAmount,
+		&i.ScheduleImpactDays,
+		&i.Status,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+		&i.DeletedAt,
+		&i.RowVersion,
+	)
+	return i, err
+}
+
 const getProject = `-- name: GetProject :one
 SELECT id, organization_id, code, name, project_type, organization_ref, currency_code, start_date, end_date, status, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM prj.project WHERE id = $1 AND deleted_at IS NULL
 `
@@ -841,10 +866,29 @@ func (q *Queries) MarkOutboxPublished(ctx context.Context, arg MarkOutboxPublish
 	return err
 }
 
+const shiftProjectEndDate = `-- name: ShiftProjectEndDate :exec
+UPDATE prj.project
+SET end_date = (end_date + ($2 * interval '1 day'))::date, updated_by = $3
+WHERE id = $1 AND end_date IS NOT NULL AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
+`
+
+type ShiftProjectEndDateParams struct {
+	ID        uuid.UUID  `json:"id"`
+	Days      int32      `json:"days"`
+	UpdatedBy *uuid.UUID `json:"updated_by"`
+}
+
+func (q *Queries) ShiftProjectEndDate(ctx context.Context, arg ShiftProjectEndDateParams) error {
+	_, err := q.db.Exec(ctx, shiftProjectEndDate, arg.ID, arg.Days, arg.UpdatedBy)
+	return err
+}
+
 const softDeleteProject = `-- name: SoftDeleteProject :execrows
 UPDATE prj.project
 SET deleted_at = now(), updated_by = $2
 WHERE id = $1 AND row_version = $3 AND status = 'Draft' AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type SoftDeleteProjectParams struct {
@@ -865,6 +909,7 @@ const softDeleteWBSElement = `-- name: SoftDeleteWBSElement :execrows
 UPDATE prj.wbs_element
 SET deleted_at = now(), updated_by = $2
 WHERE id = $1 AND row_version = $3 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type SoftDeleteWBSElementParams struct {
@@ -885,6 +930,7 @@ const transitionProjectStatus = `-- name: TransitionProjectStatus :one
 UPDATE prj.project
 SET status = $2, updated_by = $3
 WHERE id = $1 AND row_version = $4 AND status = $5 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 
@@ -913,6 +959,7 @@ const updateProject = `-- name: UpdateProject :one
 UPDATE prj.project
 SET name = $2, project_type = $3, start_date = $4, end_date = $5, updated_by = $6
 WHERE id = $1 AND row_version = $7 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 
@@ -945,6 +992,7 @@ const updateWBSElement = `-- name: UpdateWBSElement :one
 UPDATE prj.wbs_element
 SET parent_id = $2, name = $3, level_no = $4, updated_by = $5
 WHERE id = $1 AND row_version = $6 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 

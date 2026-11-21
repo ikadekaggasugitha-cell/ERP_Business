@@ -22,7 +22,7 @@ WHERE deleted_at IS NULL
 -- name: UpdateLead :one
 UPDATE crm.lead
 SET name = $2, source = $3, estimated_value = $4, customer_ref = $5, updated_by = $6
-WHERE id = $1 AND row_version = $7 AND deleted_at IS NULL
+WHERE id = $1 AND row_version = $7 AND status IN ('New', 'Qualified') AND deleted_at IS NULL
 RETURNING row_version;
 
 -- name: TransitionLeadStatus :one
@@ -82,6 +82,9 @@ INSERT INTO crm.customer_segment (
 ) VALUES ($1, $2, $3, $4, $5)
 RETURNING id, row_version;
 
+-- name: GetCustomerSegment :one
+SELECT * FROM crm.customer_segment WHERE id = $1 AND deleted_at IS NULL;
+
 -- name: ListCustomerSegments :many
 SELECT * FROM crm.customer_segment
 WHERE deleted_at IS NULL
@@ -95,12 +98,14 @@ SELECT count(*) FROM crm.customer_segment WHERE deleted_at IS NULL;
 UPDATE crm.customer_segment
 SET name = $2, criteria = $3, updated_by = $4
 WHERE id = $1 AND row_version = $5 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version;
 
 -- name: SoftDeleteCustomerSegment :execrows
 UPDATE crm.customer_segment
 SET deleted_at = now(), updated_by = $2
-WHERE id = $1 AND row_version = $3 AND deleted_at IS NULL;
+WHERE id = $1 AND row_version = $3 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
 
 -- name: CreateInteraction :one
 INSERT INTO crm.interaction (

@@ -893,10 +893,34 @@ func (q *Queries) ResolveSupportCase(ctx context.Context, arg ResolveSupportCase
 	return row_version, err
 }
 
+const getCustomerSegment = `-- name: GetCustomerSegment :one
+SELECT id, organization_id, code, name, criteria, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM crm.customer_segment WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetCustomerSegment(ctx context.Context, id uuid.UUID) (CrmCustomerSegment, error) {
+	row := q.db.QueryRow(ctx, getCustomerSegment, id)
+	var i CrmCustomerSegment
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Code,
+		&i.Name,
+		&i.Criteria,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+		&i.DeletedAt,
+		&i.RowVersion,
+	)
+	return i, err
+}
+
 const softDeleteCustomerSegment = `-- name: SoftDeleteCustomerSegment :execrows
 UPDATE crm.customer_segment
 SET deleted_at = now(), updated_by = $2
 WHERE id = $1 AND row_version = $3 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type SoftDeleteCustomerSegmentParams struct {
@@ -967,6 +991,7 @@ const updateCustomerSegment = `-- name: UpdateCustomerSegment :one
 UPDATE crm.customer_segment
 SET name = $2, criteria = $3, updated_by = $4
 WHERE id = $1 AND row_version = $5 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 
@@ -994,7 +1019,7 @@ func (q *Queries) UpdateCustomerSegment(ctx context.Context, arg UpdateCustomerS
 const updateLead = `-- name: UpdateLead :one
 UPDATE crm.lead
 SET name = $2, source = $3, estimated_value = $4, customer_ref = $5, updated_by = $6
-WHERE id = $1 AND row_version = $7 AND deleted_at IS NULL
+WHERE id = $1 AND row_version = $7 AND status IN ('New', 'Qualified') AND deleted_at IS NULL
 RETURNING row_version
 `
 

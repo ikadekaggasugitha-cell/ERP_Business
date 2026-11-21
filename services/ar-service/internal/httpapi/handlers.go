@@ -172,17 +172,20 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		SalesOrderRef:     soRef,
 		CreatedBy:         user,
 	}
-	payload, _ := json.Marshal(map[string]any{
+	payloadMap := map[string]any{
 		"invoiceNo":    entry.InvoiceNo,
 		"customerId":   customerID.String(),
 		"invoiceDate":  platform.FormatDate(invDate),
 		"dueDate":      platform.FormatDate(dueDate),
 		"currencyCode": currency,
 		"totalAmount":  platform.FormatNumeric(totalNum, 4),
-		"taxAmount":    platform.FormatNumeric(taxNum, 4),
 		"status":       "Issued",
 		"lines":        eventLines,
-	})
+	}
+	if strings.TrimSpace(req.TaxAmount) != "" {
+		payloadMap["taxAmount"] = platform.FormatNumeric(taxNum, 4)
+	}
+	payload, _ := json.Marshal(payloadMap)
 	ev := ardb.InsertOutboxParams{
 		AggregateType:  "ARInvoice",
 		EventType:      "ar.invoice.issued",
@@ -292,6 +295,16 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func requireARApprove(r *http.Request) error {
+	if err := httpx.RequirePermission(r, "ar.approve"); err != nil {
+		if httpx.RequirePermission(r, "ar:approve") == nil {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 func (s *Server) markPaid(w http.ResponseWriter, r *http.Request) {
 	scope, err := httpx.RequireScope(r)
 	if err != nil {
@@ -303,7 +316,7 @@ func (s *Server) markPaid(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	if err := httpx.RequirePermission(r, "ar:write"); err != nil {
+	if err := requireARApprove(r); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
@@ -320,6 +333,10 @@ func (s *Server) markPaid(w http.ResponseWriter, r *http.Request) {
 	inv, err := s.repo.GetByID(r.Context(), scope, id)
 	if err != nil {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	if inv.CreatedBy != uuid.Nil && inv.CreatedBy == user && !httpx.HasRole(r.Context(), "SYSTEM_ADMIN") {
+		httpx.WriteError(w, r, httpx.Forbidden("maker-checker separation of duties: creator cannot approve own invoice"))
 		return
 	}
 	if inv.Status != "Issued" {
@@ -400,6 +417,11 @@ func (s *Server) deleteDraft(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
 	}
+	paidRat := new(big.Rat).Sub(platform.NumericToRat(inv.TotalAmount), platform.NumericToRat(inv.OutstandingAmount))
+	if inv.Status != "Draft" || paidRat.Sign() > 0 {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVOICE_NOT_DRAFT", "hanya invoice Draft tanpa pembayaran yang dapat dihapus"))
+		return
+	}
 	n, err := s.repo.DeleteDraft(r.Context(), scope, ardb.DeleteDraftInvoiceParams{
 		ID:          inv.ID,
 		InvoiceDate: inv.InvoiceDate,
@@ -411,7 +433,7 @@ func (s *Server) deleteDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if n == 0 {
-		httpx.WriteError(w, r, httpx.Conflict("STALE_ROW_VERSION", "rowVersion basi atau status bukan Issued"))
+		httpx.WriteError(w, r, httpx.Conflict("STALE_ROW_VERSION", "rowVersion basi atau status bukan Draft"))
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

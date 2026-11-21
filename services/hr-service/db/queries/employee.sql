@@ -25,11 +25,13 @@ SELECT id, organization_id, employee_no, full_name, national_id, date_of_birth, 
        encrypted_full_name, encrypted_national_id, encrypted_dob, encrypted_email, national_id_hash,
        hire_date, status, user_ref_id, row_version
 FROM hr.employee
-WHERE organization_id = $1 AND national_id_hash = $2 AND deleted_at IS NULL;
+WHERE national_id_hash = $1 AND deleted_at IS NULL
+LIMIT 1;
 
 -- name: ListEmployees :many
-SELECT id, organization_id, employee_no, full_name, encrypted_full_name, encrypted_national_id,
-       encrypted_dob, encrypted_email, hire_date, status, user_ref_id, row_version
+SELECT id, organization_id, employee_no, full_name, date_of_birth, email,
+       encrypted_full_name, encrypted_national_id, encrypted_dob, encrypted_email,
+       hire_date, status, user_ref_id, row_version
 FROM hr.employee
 WHERE deleted_at IS NULL
   AND (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status))

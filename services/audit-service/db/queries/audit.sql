@@ -15,12 +15,16 @@ FROM audit.audit_log
 ORDER BY occurred_at DESC
 LIMIT $1 OFFSET $2;
 
--- Filtered list of audit entries with optional entity_type / action predicates.
+-- Filtered list of audit entries with optional entity_type / action / time-range / entity_id / correlation_id predicates.
 -- name: ListAuditLogsFiltered :many
 SELECT id, occurred_at, organization_id, actor_id, action, entity_type, entity_id, correlation_id
 FROM audit.audit_log
 WHERE (sqlc.arg(entity_type)::text = '' OR entity_type = sqlc.arg(entity_type)::text)
   AND (sqlc.arg(action)::text = '' OR action = sqlc.arg(action)::text)
+  AND (sqlc.narg(from_ts)::timestamptz IS NULL OR occurred_at >= sqlc.narg(from_ts)::timestamptz)
+  AND (sqlc.narg(to_ts)::timestamptz IS NULL OR occurred_at <= sqlc.narg(to_ts)::timestamptz)
+  AND (sqlc.narg(entity_id)::uuid IS NULL OR entity_id = sqlc.narg(entity_id)::uuid)
+  AND (sqlc.narg(correlation_id)::uuid IS NULL OR correlation_id = sqlc.narg(correlation_id)::uuid)
 ORDER BY occurred_at DESC
 LIMIT $1 OFFSET $2;
 
@@ -29,7 +33,11 @@ LIMIT $1 OFFSET $2;
 SELECT COUNT(*)
 FROM audit.audit_log
 WHERE (sqlc.arg(entity_type)::text = '' OR entity_type = sqlc.arg(entity_type)::text)
-  AND (sqlc.arg(action)::text = '' OR action = sqlc.arg(action)::text);
+  AND (sqlc.arg(action)::text = '' OR action = sqlc.arg(action)::text)
+  AND (sqlc.narg(from_ts)::timestamptz IS NULL OR occurred_at >= sqlc.narg(from_ts)::timestamptz)
+  AND (sqlc.narg(to_ts)::timestamptz IS NULL OR occurred_at <= sqlc.narg(to_ts)::timestamptz)
+  AND (sqlc.narg(entity_id)::uuid IS NULL OR entity_id = sqlc.narg(entity_id)::uuid)
+  AND (sqlc.narg(correlation_id)::uuid IS NULL OR correlation_id = sqlc.narg(correlation_id)::uuid);
 
 -- name: ListAuditLogsByEntity :many
 SELECT id, occurred_at, actor_id, action, entity_type, entity_id, correlation_id

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -111,6 +112,9 @@ func (r *CurrencyRepository) ResolveExchangeRate(
 			}
 			return nil
 		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
 
 		// 2. Inverse rate
 		invRate, err := q.GetLatestRate(ctx, currencydb.GetLatestRateParams{
@@ -136,6 +140,9 @@ func (r *CurrencyRepository) ResolveExchangeRate(
 			}
 			return nil
 		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
 
 		// 3. Triangulation via anchor currency (default: USD)
 		anchor := DefaultAnchorCurrency
@@ -151,13 +158,19 @@ func (r *CurrencyRepository) ResolveExchangeRate(
 		// Resolve fromCurr -> anchor
 		ratFromAnchor, errFrom := resolveLeg(ctx, q, fromCurr, anchor, rateTypeID, onDate)
 		if errFrom != nil {
-			return httpx.NotFound(fmt.Sprintf("triangulation failed: no exchange rate between %s and anchor %s: %v", fromCurr, anchor, errFrom))
+			if !errors.Is(errFrom, pgx.ErrNoRows) {
+				return errFrom
+			}
+			return httpx.NotFound(fmt.Sprintf("triangulation failed: no exchange rate between %s and anchor %s", fromCurr, anchor))
 		}
 
 		// Resolve anchor -> toCurr
 		ratAnchorTo, errTo := resolveLeg(ctx, q, anchor, toCurr, rateTypeID, onDate)
 		if errTo != nil {
-			return httpx.NotFound(fmt.Sprintf("triangulation failed: no exchange rate between anchor %s and %s: %v", anchor, toCurr, errTo))
+			if !errors.Is(errTo, pgx.ErrNoRows) {
+				return errTo
+			}
+			return httpx.NotFound(fmt.Sprintf("triangulation failed: no exchange rate between anchor %s and %s", anchor, toCurr))
 		}
 
 		triangulated := new(big.Rat).Mul(ratFromAnchor, ratAnchorTo)
@@ -200,6 +213,8 @@ func resolveLeg(
 		if r != nil && r.Sign() > 0 {
 			return r, nil
 		}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
 	}
 
 	// Try inverse
@@ -214,9 +229,21 @@ func resolveLeg(
 		if r != nil && r.Sign() > 0 {
 			return new(big.Rat).Inv(r), nil
 		}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
 	}
 
-	return nil, fmt.Errorf("no exchange rate leg for %s to %s", from, to)
+	return nil, fmt.Errorf("no exchange rate leg for %s to %s: %w", from, to, pgx.ErrNoRows)
+}
+
+func clampPrecision(p int32) int {
+	if p < 0 {
+		return 0
+	}
+	if p > 8 {
+		return 8
+	}
+	return int(p)
 }
 
 // ConvertAmount performs exact rational multiplication of amount by the resolved exchange rate.
@@ -251,10 +278,10 @@ func (r *CurrencyRepository) ConvertAmount(
 	_ = r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		if fromC, e := q.GetCurrencyByCode(ctx, fromCurr); e == nil && fromC.Precision >= 0 {
-			sourcePrecision = int(fromC.Precision)
+			sourcePrecision = clampPrecision(fromC.Precision)
 		}
 		if toC, e := q.GetCurrencyByCode(ctx, toCurr); e == nil && toC.Precision >= 0 {
-			targetPrecision = int(toC.Precision)
+			targetPrecision = clampPrecision(toC.Precision)
 		}
 		return nil
 	})

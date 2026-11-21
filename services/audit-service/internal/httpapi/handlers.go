@@ -10,14 +10,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/sinergiinvestasiproperti/erp/services/audit-service/internal/auditdb"
+	"github.com/sinergiinvestasiproperti/erp/services/audit-service/internal/repository"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
 )
 
 // Store abstracts audit-service repository queries for handler unit testing.
 type Store interface {
-	ListFiltered(ctx context.Context, scope []uuid.UUID, entityType, action string, limit, offset int32) ([]auditdb.ListAuditLogsFilteredRow, int64, error)
+	ListFiltered(ctx context.Context, scope []uuid.UUID, filter repository.ListFilter) ([]auditdb.ListAuditLogsFilteredRow, int64, error)
 	GetByID(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (auditdb.AuditAuditLog, error)
 }
 
@@ -62,10 +64,48 @@ func (s *Server) listAuditEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page, size, limit, offset := httpx.PaginateParams(r)
-	entityType := strings.TrimSpace(r.URL.Query().Get("entityType"))
-	action := strings.TrimSpace(r.URL.Query().Get("action"))
+	q := r.URL.Query()
+	filter := repository.ListFilter{
+		EntityType: strings.TrimSpace(q.Get("entityType")),
+		Action:     strings.TrimSpace(q.Get("action")),
+		Limit:      limit,
+		Offset:     offset,
+	}
 
-	rows, total, err := s.repo.ListFiltered(r.Context(), scope, entityType, action, limit, offset)
+	if rawFrom := strings.TrimSpace(q.Get("from")); rawFrom != "" {
+		ts, err := parseFilterTime(rawFrom, false)
+		if err != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("from must be RFC3339 or YYYY-MM-DD"))
+			return
+		}
+		filter.From = pgtype.Timestamptz{Time: ts, Valid: true}
+	}
+	if rawTo := strings.TrimSpace(q.Get("to")); rawTo != "" {
+		ts, err := parseFilterTime(rawTo, true)
+		if err != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("to must be RFC3339 or YYYY-MM-DD"))
+			return
+		}
+		filter.To = pgtype.Timestamptz{Time: ts, Valid: true}
+	}
+	if rawEntityID := strings.TrimSpace(q.Get("entityId")); rawEntityID != "" {
+		uid, err := uuid.Parse(rawEntityID)
+		if err != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("entityId must be a valid UUID"))
+			return
+		}
+		filter.EntityID = &uid
+	}
+	if rawCorrID := strings.TrimSpace(q.Get("correlationId")); rawCorrID != "" {
+		uid, err := uuid.Parse(rawCorrID)
+		if err != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("correlationId must be a valid UUID"))
+			return
+		}
+		filter.CorrelationID = &uid
+	}
+
+	rows, total, err := s.repo.ListFiltered(r.Context(), scope, filter)
 	if err != nil {
 		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
 		return
@@ -132,4 +172,21 @@ func rawOrNil(b []byte) json.RawMessage {
 		return nil
 	}
 	return json.RawMessage(b)
+}
+
+func parseFilterTime(raw string, endOfDay bool) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return t.UTC(), nil
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t.UTC(), nil
+	}
+	d, err := time.Parse("2006-01-02", raw)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if endOfDay {
+		return d.UTC().Add(24*time.Hour - time.Nanosecond), nil
+	}
+	return d.UTC(), nil
 }

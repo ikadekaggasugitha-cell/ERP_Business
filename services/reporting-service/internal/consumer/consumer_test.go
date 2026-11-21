@@ -18,6 +18,7 @@ type fakeProjector struct {
 	deltas []repository.GLAccountDelta
 	coa    reportingdb.UpsertCOACacheParams
 	sales  reportingdb.UpsertSalesSummaryParams
+	invs   []reportingdb.UpsertInventoryPositionParams
 }
 
 func (f *fakeProjector) ConsumeGL(_ context.Context, _ []uuid.UUID, _ reportingdb.MarkEventProcessedParams, d []repository.GLAccountDelta) (bool, error) {
@@ -32,7 +33,8 @@ func (f *fakeProjector) ConsumeSalesSummary(_ context.Context, _ []uuid.UUID, _ 
 	f.sales = u
 	return true, nil
 }
-func (f *fakeProjector) ConsumeInventoryPosition(context.Context, []uuid.UUID, reportingdb.MarkEventProcessedParams, reportingdb.UpsertInventoryPositionParams) (bool, error) {
+func (f *fakeProjector) ConsumeInventoryPosition(_ context.Context, _ []uuid.UUID, _ reportingdb.MarkEventProcessedParams, ups ...reportingdb.UpsertInventoryPositionParams) (bool, error) {
+	f.invs = append(f.invs, ups...)
 	return true, nil
 }
 
@@ -97,5 +99,57 @@ func TestHandleCOAAccountUpsertsCache(t *testing.T) {
 	}
 	if fp.coa.AccountID != acct || fp.coa.AccountCode != "1101" || fp.coa.AccountType != "Asset" {
 		t.Fatalf("unexpected coa cache upsert: %+v", fp.coa)
+	}
+}
+
+func TestHandleInventoryReceiptsReleasesAndMultiLineIssues(t *testing.T) {
+	fp := &fakeProjector{}
+	c := &Consumer{repo: fp}
+	org := uuid.New()
+
+	// 1. procurement.goods.received increments on_hand and available
+	if err := c.handle(context.Background(), eventbus.Envelope{
+		EventID:        uuid.NewString(),
+		EventType:      "procurement.goods.received",
+		AggregateID:    uuid.NewString(),
+		OrganizationID: org.String(),
+		Data:           json.RawMessage(`{"warehouseCode":"WH-1","itemCode":"ITEM-A","receivedQty":"25.0000"}`),
+	}); err != nil {
+		t.Fatalf("procurement.goods.received failed: %v", err)
+	}
+	// 2. inventory.stock.released increments available only
+	if err := c.handle(context.Background(), eventbus.Envelope{
+		EventID:        uuid.NewString(),
+		EventType:      "inventory.stock.released",
+		AggregateID:    uuid.NewString(),
+		OrganizationID: org.String(),
+		Data:           json.RawMessage(`{"warehouseCode":"WH-1","itemCode":"ITEM-A","releasedQty":"5.0000"}`),
+	}); err != nil {
+		t.Fatalf("inventory.stock.released failed: %v", err)
+	}
+	// 3. inventory.goods.issued with lines array decrements on_hand per line
+	if err := c.handle(context.Background(), eventbus.Envelope{
+		EventID:        uuid.NewString(),
+		EventType:      "inventory.goods.issued",
+		AggregateID:    uuid.NewString(),
+		OrganizationID: org.String(),
+		Data:           json.RawMessage(`{"warehouseCode":"WH-1","lines":[{"itemCode":"ITEM-A","issuedQty":"4.0000"},{"itemCode":"ITEM-B","qty":"2.0000"}]}`),
+	}); err != nil {
+		t.Fatalf("inventory.goods.issued lines failed: %v", err)
+	}
+	if len(fp.invs) != 4 {
+		t.Fatalf("expected 4 inventory position upserts, got %d", len(fp.invs))
+	}
+	if platform.FormatNumeric(fp.invs[0].OnHandQty, 4) != "25.0000" || platform.FormatNumeric(fp.invs[0].AvailableQty, 4) != "25.0000" {
+		t.Fatalf("unexpected receipt delta: %+v", fp.invs[0])
+	}
+	if platform.FormatNumeric(fp.invs[1].OnHandQty, 4) != "0.0000" || platform.FormatNumeric(fp.invs[1].AvailableQty, 4) != "5.0000" {
+		t.Fatalf("unexpected release delta: %+v", fp.invs[1])
+	}
+	if fp.invs[2].ItemCode != "ITEM-A" || platform.FormatNumeric(fp.invs[2].OnHandQty, 4) != "-4.0000" {
+		t.Fatalf("unexpected issue line 1 delta: %+v", fp.invs[2])
+	}
+	if fp.invs[3].ItemCode != "ITEM-B" || platform.FormatNumeric(fp.invs[3].OnHandQty, 4) != "-2.0000" {
+		t.Fatalf("unexpected issue line 2 delta: %+v", fp.invs[3])
 	}
 }

@@ -187,8 +187,8 @@ func (s *Server) createCurrency(w http.ResponseWriter, r *http.Request) {
 	}
 	precision := int32(2)
 	if req.Precision != nil {
-		if *req.Precision < 0 {
-			httpx.WriteError(w, r, httpx.Unprocessable("INVALID_PRECISION", "precision must be non-negative"))
+		if *req.Precision < 0 || *req.Precision > 8 {
+			httpx.WriteError(w, r, httpx.Unprocessable("INVALID_PRECISION", "precision must be between 0 and 8"))
 			return
 		}
 		precision = *req.Precision
@@ -198,7 +198,7 @@ func (s *Server) createCurrency(w http.ResponseWriter, r *http.Request) {
 		isActive = *req.IsActive
 	}
 
-	correlationID, _ := uuid.Parse(httpx.Correlation(r.Context()))
+	correlationID := httpx.CorrelationUUID(r)
 	created, err := s.repo.CreateCurrency(r.Context(), scope, currencydb.CreateCurrencyParams{
 		OrganizationID: scope[0],
 		Code:           req.Code,
@@ -242,7 +242,7 @@ func (s *Server) getCurrency(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpx.WriteJSON(w, http.StatusOK, currencyResp{
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, currencyResp{
 		ID:          row.ID,
 		Code:        row.Code,
 		NumericCode: row.NumericCode,
@@ -279,8 +279,8 @@ func (s *Server) updateCurrency(w http.ResponseWriter, r *http.Request) {
 	}
 	precision := int32(2)
 	if req.Precision != nil {
-		if *req.Precision < 0 {
-			httpx.WriteError(w, r, httpx.Unprocessable("INVALID_PRECISION", "precision must be non-negative"))
+		if *req.Precision < 0 || *req.Precision > 8 {
+			httpx.WriteError(w, r, httpx.Unprocessable("INVALID_PRECISION", "precision must be between 0 and 8"))
 			return
 		}
 		precision = *req.Precision
@@ -440,7 +440,7 @@ func (s *Server) getRateType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpx.WriteJSON(w, http.StatusOK, rateTypeResp{
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, rateTypeResp{
 		ID:         row.ID,
 		Code:       row.Code,
 		Name:       row.Name,
@@ -595,7 +595,7 @@ func (s *Server) createRate(w http.ResponseWriter, r *http.Request) {
 		validTo = vt
 	}
 
-	correlationID, _ := uuid.Parse(httpx.Correlation(r.Context()))
+	correlationID := httpx.CorrelationUUID(r)
 	created, err := s.repo.CreateExchangeRate(r.Context(), scope, currencydb.CreateExchangeRateParams{
 		OrganizationID: scope[0],
 		FromCurrency:   req.FromCurrency,
@@ -641,7 +641,7 @@ func (s *Server) getRate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpx.WriteJSON(w, http.StatusOK, rateResp{
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, rateResp{
 		ID:           row.ID,
 		FromCurrency: row.FromCurrency,
 		ToCurrency:   row.ToCurrency,
@@ -700,7 +700,7 @@ func (s *Server) updateRate(w http.ResponseWriter, r *http.Request) {
 		validTo = vt
 	}
 
-	correlationID, _ := uuid.Parse(httpx.Correlation(r.Context()))
+	correlationID := httpx.CorrelationUUID(r)
 	nextVer, err := s.repo.UpdateExchangeRate(r.Context(), scope, currencydb.UpdateExchangeRateParams{
 		ID:         id,
 		RowVersion: rowVer,

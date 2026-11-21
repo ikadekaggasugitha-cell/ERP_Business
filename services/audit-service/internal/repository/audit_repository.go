@@ -57,25 +57,45 @@ func (r *AuditRepository) List(ctx context.Context, scope []uuid.UUID, limit, of
 	return out, err
 }
 
+// ListFilter defines optional predicates and pagination for listing audit logs.
+type ListFilter struct {
+	EntityType    string
+	Action        string
+	From          pgtype.Timestamptz
+	To            pgtype.Timestamptz
+	EntityID      *uuid.UUID
+	CorrelationID *uuid.UUID
+	Limit         int32
+	Offset        int32
+}
+
 // ListFiltered returns paginated audit entries plus the exact total count inside one RLS tx.
-func (r *AuditRepository) ListFiltered(ctx context.Context, scope []uuid.UUID, entityType, action string, limit, offset int32) ([]auditdb.ListAuditLogsFilteredRow, int64, error) {
+func (r *AuditRepository) ListFiltered(ctx context.Context, scope []uuid.UUID, filter ListFilter) ([]auditdb.ListAuditLogsFilteredRow, int64, error) {
 	var items []auditdb.ListAuditLogsFilteredRow
 	var total int64
 	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var err error
 		total, err = q.CountAuditLogsFiltered(ctx, auditdb.CountAuditLogsFilteredParams{
-			EntityType: entityType,
-			Action:     action,
+			EntityType:    filter.EntityType,
+			Action:        filter.Action,
+			FromTs:        filter.From,
+			ToTs:          filter.To,
+			EntityID:      filter.EntityID,
+			CorrelationID: filter.CorrelationID,
 		})
 		if err != nil {
 			return err
 		}
 		items, err = q.ListAuditLogsFiltered(ctx, auditdb.ListAuditLogsFilteredParams{
-			Limit:      limit,
-			Offset:     offset,
-			EntityType: entityType,
-			Action:     action,
+			Limit:         filter.Limit,
+			Offset:        filter.Offset,
+			EntityType:    filter.EntityType,
+			Action:        filter.Action,
+			FromTs:        filter.From,
+			ToTs:          filter.To,
+			EntityID:      filter.EntityID,
+			CorrelationID: filter.CorrelationID,
 		})
 		return err
 	})

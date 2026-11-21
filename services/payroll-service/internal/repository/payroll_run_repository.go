@@ -131,24 +131,49 @@ func (r *PayrollRunRepository) loadDetail(ctx context.Context, qt *payrolldb.Que
 
 	lineMap := make(map[uuid.UUID][]PayrollResultLineDTO)
 	for _, l := range lineRows {
+		amtStr := platform.FormatNumeric(l.Amount, 4)
+		if l.EncryptedAmount != nil && *l.EncryptedAmount != "" {
+			if pt, err := platform.DecryptField(r.piiKey, *l.EncryptedAmount); err == nil {
+				amtStr = pt
+			} else {
+				return out, fmt.Errorf("decrypt result_line amount: %w", err)
+			}
+		}
 		lineMap[l.PayrollResultID] = append(lineMap[l.PayrollResultID], PayrollResultLineDTO{
 			ID:            l.ID,
 			ComponentCode: l.ComponentCode,
-			Amount:        platform.FormatNumeric(l.Amount, 4),
+			Amount:        amtStr,
 		})
 	}
 	contribMap := make(map[uuid.UUID][]StatutoryContributionDTO)
 	for _, c := range contribRows {
+		empAmtStr := platform.FormatNumeric(c.EmployeeAmount, 4)
+		emprAmtStr := platform.FormatNumeric(c.EmployerAmount, 4)
+		if c.EncryptedEmployeeAmount != nil && *c.EncryptedEmployeeAmount != "" {
+			if pt, err := platform.DecryptField(r.piiKey, *c.EncryptedEmployeeAmount); err == nil {
+				empAmtStr = pt
+			} else {
+				return out, fmt.Errorf("decrypt statutory employee_amount: %w", err)
+			}
+		}
+		if c.EncryptedEmployerAmount != nil && *c.EncryptedEmployerAmount != "" {
+			if pt, err := platform.DecryptField(r.piiKey, *c.EncryptedEmployerAmount); err == nil {
+				emprAmtStr = pt
+			} else {
+				return out, fmt.Errorf("decrypt statutory employer_amount: %w", err)
+			}
+		}
 		contribMap[c.PayrollResultID] = append(contribMap[c.PayrollResultID], StatutoryContributionDTO{
 			ID:               c.ID,
 			ContributionType: c.ContributionType,
-			EmployeeAmount:   platform.FormatNumeric(c.EmployeeAmount, 4),
-			EmployerAmount:   platform.FormatNumeric(c.EmployerAmount, 4),
+			EmployeeAmount:   empAmtStr,
+			EmployerAmount:   emprAmtStr,
 		})
 	}
 	results := make([]PayrollResultDTO, 0, len(resRows))
 	for _, row := range resRows {
 		grossStr := platform.FormatNumeric(row.GrossAmount, 4)
+		dedStr := platform.FormatNumeric(row.DeductionAmount, 4)
 		taxStr := platform.FormatNumeric(row.TaxAmount, 4)
 		netStr := platform.FormatNumeric(row.NetAmount, 4)
 		if row.EncryptedGross != nil && *row.EncryptedGross != "" {
@@ -156,6 +181,13 @@ func (r *PayrollRunRepository) loadDetail(ctx context.Context, qt *payrolldb.Que
 				grossStr = pt
 			} else {
 				return out, fmt.Errorf("decrypt gross_amount: %w", err)
+			}
+		}
+		if row.EncryptedDeduction != nil && *row.EncryptedDeduction != "" {
+			if pt, err := platform.DecryptField(r.piiKey, *row.EncryptedDeduction); err == nil {
+				dedStr = pt
+			} else {
+				return out, fmt.Errorf("decrypt deduction_amount: %w", err)
 			}
 		}
 		if row.EncryptedTax != nil && *row.EncryptedTax != "" {
@@ -176,7 +208,7 @@ func (r *PayrollRunRepository) loadDetail(ctx context.Context, qt *payrolldb.Que
 			ID:                     row.ID,
 			EmployeeID:             row.EmployeeID,
 			GrossAmount:            grossStr,
-			DeductionAmount:        platform.FormatNumeric(row.DeductionAmount, 4),
+			DeductionAmount:        dedStr,
 			TaxAmount:              taxStr,
 			NetAmount:              netStr,
 			RowVersion:             row.RowVersion,
@@ -275,13 +307,22 @@ func (r *PayrollRunRepository) CalculateAndEmit(
 		grossSum := new(big.Rat)
 		taxSum := new(big.Rat)
 		netSum := new(big.Rat)
+		empBpjsSum := new(big.Rat)
+		emprBpjsSum := new(big.Rat)
 
 		for _, emp := range employees {
+			if cached, errCache := qt.GetEmployeeCache(ctx, payrolldb.GetEmployeeCacheParams{
+				OrganizationID: run.OrganizationID,
+				EmployeeID:     emp.EmployeeID,
+			}); errCache == nil && cached.Status != "" && cached.Status != "Active" {
+				return httpx.Unprocessable("EMPLOYEE_INACTIVE", "karyawan tidak aktif atau sudah diterminasi")
+			}
 			comp, err := calc.ComputeEmployee(emp)
 			if err != nil {
 				return httpx.Unprocessable("CALCULATION_ERROR", err.Error())
 			}
 			gStr := platform.FormatNumeric(comp.Gross, 4)
+			dStr := platform.FormatNumeric(comp.Deduction, 4)
 			tStr := platform.FormatNumeric(comp.TaxPPh21, 4)
 			nStr := platform.FormatNumeric(comp.Net, 4)
 			grossSum.Add(grossSum, platform.NumericToRat(comp.Gross))
@@ -292,19 +333,24 @@ func (r *PayrollRunRepository) CalculateAndEmit(
 			if err != nil {
 				return err
 			}
+			encD, err := platform.EncryptField(r.piiKey, dStr)
+			if err != nil {
+				return err
+			}
 			resRow, err := qt.CreatePayrollResult(ctx, payrolldb.CreatePayrollResultParams{
-				OrganizationID:  run.OrganizationID,
-				PayrollRunID:    run.ID,
-				EmployeeID:      emp.EmployeeID,
-				GrossAmount:     zeroNum,
-				DeductionAmount: comp.Deduction,
-				TaxAmount:       zeroNum,
-				NetAmount:       zeroNum,
-				EncryptedGross:  &encG,
-				EncryptedNet:    &encN,
-				EncryptedTax:    &encT,
-				PiiKeyVersion:   &piiVer,
-				CreatedBy:       updatedBy,
+				OrganizationID:     run.OrganizationID,
+				PayrollRunID:       run.ID,
+				EmployeeID:         emp.EmployeeID,
+				GrossAmount:        zeroNum,
+				DeductionAmount:    zeroNum,
+				TaxAmount:          zeroNum,
+				NetAmount:          zeroNum,
+				EncryptedGross:     &encG,
+				EncryptedDeduction: &encD,
+				EncryptedNet:       &encN,
+				EncryptedTax:       &encT,
+				PiiKeyVersion:      &piiVer,
+				CreatedBy:          updatedBy,
 			})
 			if err != nil {
 				return httpx.MapDBError(err, "duplikat employeeId pada payroll run")
@@ -317,6 +363,7 @@ func (r *PayrollRunRepository) CalculateAndEmit(
 				{code: "BASIC", amt: comp.Basic},
 				{code: "ALLOWANCE", amt: comp.Allowance},
 				{code: "BONUS", amt: comp.Bonus},
+				{code: "OTHER_DEDUCTIONS", amt: comp.OtherDeductions},
 				{code: "BPJS_KES_EMP", amt: comp.BPJSKesEmp},
 				{code: "BPJS_JHT_EMP", amt: comp.BPJSJHTEmp},
 				{code: "BPJS_JP_EMP", amt: comp.BPJSJPEmp},
@@ -326,11 +373,16 @@ func (r *PayrollRunRepository) CalculateAndEmit(
 				if rVal := platform.NumericToRat(lp.amt); rVal == nil || rVal.Sign() == 0 {
 					continue
 				}
+				encAmt, err := platform.EncryptField(r.piiKey, platform.FormatNumeric(lp.amt, 4))
+				if err != nil {
+					return err
+				}
 				if err := qt.CreatePayrollResultLine(ctx, payrolldb.CreatePayrollResultLineParams{
 					OrganizationID:  run.OrganizationID,
 					PayrollResultID: resRow.ID,
 					ComponentCode:   lp.code,
-					Amount:          lp.amt,
+					Amount:          zeroNum,
+					EncryptedAmount: &encAmt,
 					CreatedBy:       updatedBy,
 				}); err != nil {
 					return httpx.MapDBError(err, "")
@@ -348,13 +400,29 @@ func (r *PayrollRunRepository) CalculateAndEmit(
 				{typ: "BPJS-TK-JKK-JKM", emp: zeroNum, emr: comp.BPJSJKKJKMEmp},
 			}
 			for _, sp := range statPairs {
+				if rEmp := platform.NumericToRat(sp.emp); rEmp != nil {
+					empBpjsSum.Add(empBpjsSum, rEmp)
+				}
+				if rEmr := platform.NumericToRat(sp.emr); rEmr != nil {
+					emprBpjsSum.Add(emprBpjsSum, rEmr)
+				}
+				encEmp, err := platform.EncryptField(r.piiKey, platform.FormatNumeric(sp.emp, 4))
+				if err != nil {
+					return err
+				}
+				encEmr, err := platform.EncryptField(r.piiKey, platform.FormatNumeric(sp.emr, 4))
+				if err != nil {
+					return err
+				}
 				if err := qt.CreateStatutoryContribution(ctx, payrolldb.CreateStatutoryContributionParams{
-					OrganizationID:   run.OrganizationID,
-					PayrollResultID:  resRow.ID,
-					ContributionType: sp.typ,
-					EmployeeAmount:   sp.emp,
-					EmployerAmount:   sp.emr,
-					CreatedBy:        updatedBy,
+					OrganizationID:          run.OrganizationID,
+					PayrollResultID:         resRow.ID,
+					ContributionType:        sp.typ,
+					EmployeeAmount:          zeroNum,
+					EmployerAmount:          zeroNum,
+					EncryptedEmployeeAmount: &encEmp,
+					EncryptedEmployerAmount: &encEmr,
+					CreatedBy:               updatedBy,
 				}); err != nil {
 					return httpx.MapDBError(err, "")
 				}
@@ -378,20 +446,26 @@ func (r *PayrollRunRepository) CalculateAndEmit(
 		grossNum, _ := platform.RatToNumeric(grossSum, 4)
 		taxNum, _ := platform.RatToNumeric(taxSum, 4)
 		netNum, _ := platform.RatToNumeric(netSum, 4)
+		empBpjsNum, _ := platform.RatToNumeric(empBpjsSum, 4)
+		emprBpjsNum, _ := platform.RatToNumeric(emprBpjsSum, 4)
 		totGrossStr := platform.FormatNumeric(grossNum, 4)
 		totTaxStr := platform.FormatNumeric(taxNum, 4)
 		totNetStr := platform.FormatNumeric(netNum, 4)
+		totEmpBpjsStr := platform.FormatNumeric(empBpjsNum, 4)
+		totEmprBpjsStr := platform.FormatNumeric(emprBpjsNum, 4)
 
 		payload, err := json.Marshal(map[string]any{
-			"runNo":         run.RunNo,
-			"period":        fmt.Sprintf("%d-%d", run.PeriodYear, run.PeriodMonth),
-			"periodCode":    fmt.Sprintf("%04d-%02d", run.PeriodYear, run.PeriodMonth),
-			"status":        "Calculated",
-			"totalAmount":   totGrossStr,
-			"totalGross":    totGrossStr,
-			"totalTax":      totTaxStr,
-			"totalNet":      totNetStr,
-			"employeeCount": len(employees),
+			"runNo":             run.RunNo,
+			"period":            fmt.Sprintf("%d-%d", run.PeriodYear, run.PeriodMonth),
+			"periodCode":        fmt.Sprintf("%04d-%02d", run.PeriodYear, run.PeriodMonth),
+			"status":            "Calculated",
+			"totalAmount":       totGrossStr,
+			"totalGross":        totGrossStr,
+			"totalTax":          totTaxStr,
+			"totalNet":          totNetStr,
+			"totalEmployeeBpjs": totEmpBpjsStr,
+			"totalEmployerBpjs": totEmprBpjsStr,
+			"employeeCount":     len(employees),
 		})
 		if err != nil {
 			return err
@@ -429,6 +503,9 @@ func (r *PayrollRunRepository) ApproveAndEmit(ctx context.Context, scope []uuid.
 		if run.RowVersion != version {
 			return httpx.Conflict("VERSION_CONFLICT", "rowVersion tidak cocok")
 		}
+		if run.CreatedBy != uuid.Nil && updatedBy == run.CreatedBy && !httpx.HasRole(ctx, "SYSTEM_ADMIN") {
+			return &httpx.APIError{Status: 403, Code: "SOD_VIOLATION", Message: "pembuat payroll run tidak boleh menyetujui run sendiri"}
+		}
 		newVer, err := qt.ApprovePayrollRun(ctx, payrolldb.ApprovePayrollRunParams{
 			ID:         id,
 			RowVersion: version,
@@ -460,31 +537,44 @@ func (r *PayrollRunRepository) ApproveAndEmit(ctx context.Context, scope []uuid.
 	return out, err
 }
 
-func sumPayrollResultTotals(results []PayrollResultDTO) (grossStr, taxStr, netStr string, err error) {
+func sumPayrollResultTotals(results []PayrollResultDTO) (grossStr, taxStr, netStr, empBpjsStr, emprBpjsStr string, err error) {
 	grossSum := new(big.Rat)
 	taxSum := new(big.Rat)
 	netSum := new(big.Rat)
+	empBpjsSum := new(big.Rat)
+	emprBpjsSum := new(big.Rat)
 	for _, res := range results {
 		gNum, e := platform.ParseOptionalNumeric(res.GrossAmount)
 		if e != nil {
-			return "", "", "", fmt.Errorf("invalid grossAmount %q: %w", res.GrossAmount, e)
+			return "", "", "", "", "", fmt.Errorf("invalid grossAmount %q: %w", res.GrossAmount, e)
 		}
 		tNum, e := platform.ParseOptionalNumeric(res.TaxAmount)
 		if e != nil {
-			return "", "", "", fmt.Errorf("invalid taxAmount %q: %w", res.TaxAmount, e)
+			return "", "", "", "", "", fmt.Errorf("invalid taxAmount %q: %w", res.TaxAmount, e)
 		}
 		nNum, e := platform.ParseOptionalNumeric(res.NetAmount)
 		if e != nil {
-			return "", "", "", fmt.Errorf("invalid netAmount %q: %w", res.NetAmount, e)
+			return "", "", "", "", "", fmt.Errorf("invalid netAmount %q: %w", res.NetAmount, e)
 		}
 		grossSum.Add(grossSum, platform.NumericToRat(gNum))
 		taxSum.Add(taxSum, platform.NumericToRat(tNum))
 		netSum.Add(netSum, platform.NumericToRat(nNum))
+		for _, c := range res.StatutoryContributions {
+			if eNum, e := platform.ParseOptionalNumeric(c.EmployeeAmount); e == nil {
+				empBpjsSum.Add(empBpjsSum, platform.NumericToRat(eNum))
+			}
+			if rNum, e := platform.ParseOptionalNumeric(c.EmployerAmount); e == nil {
+				emprBpjsSum.Add(emprBpjsSum, platform.NumericToRat(rNum))
+			}
+		}
 	}
 	gOut, _ := platform.RatToNumeric(grossSum, 4)
 	tOut, _ := platform.RatToNumeric(taxSum, 4)
 	nOut, _ := platform.RatToNumeric(netSum, 4)
-	return platform.FormatNumeric(gOut, 4), platform.FormatNumeric(tOut, 4), platform.FormatNumeric(nOut, 4), nil
+	ebOut, _ := platform.RatToNumeric(empBpjsSum, 4)
+	rbOut, _ := platform.RatToNumeric(emprBpjsSum, 4)
+	return platform.FormatNumeric(gOut, 4), platform.FormatNumeric(tOut, 4), platform.FormatNumeric(nOut, 4),
+		platform.FormatNumeric(ebOut, 4), platform.FormatNumeric(rbOut, 4), nil
 }
 
 func (r *PayrollRunRepository) PostAndEmit(ctx context.Context, scope []uuid.UUID, id uuid.UUID, version int32, glJournalRef string, updatedBy, corrID uuid.UUID) (PayrollRunDetail, error) {
@@ -527,22 +617,24 @@ func (r *PayrollRunRepository) PostAndEmit(ctx context.Context, scope []uuid.UUI
 		if err != nil {
 			return err
 		}
-		totGrossStr, totTaxStr, totNetStr, err := sumPayrollResultTotals(out.Results)
+		totGrossStr, totTaxStr, totNetStr, totEmpBpjsStr, totEmprBpjsStr, err := sumPayrollResultTotals(out.Results)
 		if err != nil {
 			return err
 		}
 
 		postedPayload, err := json.Marshal(map[string]any{
-			"runNo":         run.RunNo,
-			"period":        fmt.Sprintf("%d-%d", run.PeriodYear, run.PeriodMonth),
-			"periodCode":    fmt.Sprintf("%04d-%02d", run.PeriodYear, run.PeriodMonth),
-			"status":        "Posted",
-			"glJournalRef":  glJournalRef,
-			"totalAmount":   totGrossStr,
-			"totalGross":    totGrossStr,
-			"totalTax":      totTaxStr,
-			"totalNet":      totNetStr,
-			"employeeCount": len(out.Results),
+			"runNo":             run.RunNo,
+			"period":            fmt.Sprintf("%d-%d", run.PeriodYear, run.PeriodMonth),
+			"periodCode":        fmt.Sprintf("%04d-%02d", run.PeriodYear, run.PeriodMonth),
+			"status":            "Posted",
+			"glJournalRef":      glJournalRef,
+			"totalAmount":       totGrossStr,
+			"totalGross":        totGrossStr,
+			"totalTax":          totTaxStr,
+			"totalNet":          totNetStr,
+			"totalEmployeeBpjs": totEmpBpjsStr,
+			"totalEmployerBpjs": totEmprBpjsStr,
+			"employeeCount":     len(out.Results),
 		})
 		if err != nil {
 			return err
@@ -600,6 +692,25 @@ func (r *PayrollRunRepository) DeleteDraft(ctx context.Context, scope []uuid.UUI
 			return httpx.Conflict("VERSION_CONFLICT", "payroll run gagal dihapus")
 		}
 		return nil
+	})
+}
+
+func (r *PayrollRunRepository) ConsumeEmployeeUpdated(ctx context.Context, orgID, eventID, employeeID uuid.UUID, eventType, employeeNo, status string) error {
+	return r.db.WithOrgScope(ctx, []uuid.UUID{orgID}, func(tx pgx.Tx) error {
+		qt := r.q.WithTx(tx)
+		n, err := qt.MarkEventProcessed(ctx, payrolldb.MarkEventProcessedParams{
+			EventID:   eventID,
+			EventType: eventType,
+		})
+		if err != nil || n == 0 {
+			return err
+		}
+		return qt.UpsertEmployeeCache(ctx, payrolldb.UpsertEmployeeCacheParams{
+			OrganizationID: orgID,
+			EmployeeID:     employeeID,
+			EmployeeNo:     employeeNo,
+			Status:         status,
+		})
 	})
 }
 

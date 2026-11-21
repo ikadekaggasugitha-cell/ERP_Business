@@ -1,14 +1,20 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/sinergiinvestasiproperti/erp/services/financialclose-service/internal/fcldb"
+	"github.com/sinergiinvestasiproperti/erp/services/financialclose-service/internal/repository"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
 )
 
 type Store interface {
@@ -18,9 +24,11 @@ type Store interface {
 	GetClosingRun(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (fcldb.FclClosingRun, []fcldb.FclClosingTask, error)
 	ListClosingRuns(ctx context.Context, scope []uuid.UUID, status *string, limit, offset int32) ([]fcldb.FclClosingRun, int64, error)
 	CompleteTask(ctx context.Context, scope []uuid.UUID, id uuid.UUID, rowVer int32, actor uuid.UUID) (int32, error)
+	RunFXRevaluationAndEmit(ctx context.Context, scope []uuid.UUID, runID uuid.UUID, positions []repository.FXPositionInput, corr uuid.UUID) (repository.FXRevaluationResult, error)
 	TransitionClosingRunAndEmit(ctx context.Context, scope []uuid.UUID, id uuid.UUID, rowVer int32, targetStatus string, actor, corr uuid.UUID) (int32, error)
 	UpsertPeriodStatus(ctx context.Context, scope []uuid.UUID, arg fcldb.UpsertPeriodStatusParams) (fcldb.UpsertPeriodStatusRow, error)
 	ListPeriodStatuses(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]fcldb.FclPeriodStatus, int64, error)
+	ListReopenings(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]fcldb.FclPeriodReopening, int64, error)
 	RequestReopening(ctx context.Context, scope []uuid.UUID, arg fcldb.CreatePeriodReopeningParams) (fcldb.CreatePeriodReopeningRow, error)
 	ApproveReopeningAndEmit(ctx context.Context, scope []uuid.UUID, id uuid.UUID, rowVer int32, approver, corr uuid.UUID) (int32, error)
 }
@@ -38,13 +46,40 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /closing-runs", s.listRuns)
 	mux.HandleFunc("POST /closing-runs", s.createRun)
 	mux.HandleFunc("GET /closing-runs/{id}", s.getRun)
+	mux.HandleFunc("POST /closing-runs/{id}/fx-revaluation", s.fxRevaluation)
 	mux.HandleFunc("POST /closing-runs/{id}/close", func(w http.ResponseWriter, r *http.Request) { s.transitionRun(w, r, "Closed") })
 	mux.HandleFunc("POST /closing-runs/{id}/lock", func(w http.ResponseWriter, r *http.Request) { s.transitionRun(w, r, "Locked") })
 	mux.HandleFunc("POST /closing-tasks/{id}/complete", s.completeTask)
 	mux.HandleFunc("GET /period-statuses", s.listPeriodStatuses)
 	mux.HandleFunc("PUT /period-statuses", s.upsertPeriodStatus)
+	mux.HandleFunc("GET /period-reopenings", s.listReopenings)
 	mux.HandleFunc("POST /period-reopenings", s.requestReopening)
 	mux.HandleFunc("POST /period-reopenings/{id}/approve", s.approveReopening)
+}
+
+func beginIdemOptional(w http.ResponseWriter, r *http.Request, idem *httpx.IdemStore, scope []uuid.UUID, dst any) (string, string, func(), bool) {
+	if dst == nil {
+		var empty map[string]any
+		dst = &empty
+	}
+	if r.Body == nil {
+		r.Body = io.NopCloser(strings.NewReader("{}"))
+	} else {
+		raw, err := io.ReadAll(io.LimitReader(r.Body, (1<<20)+1))
+		if err == nil && len(bytes.TrimSpace(raw)) == 0 {
+			r.Body = io.NopCloser(strings.NewReader("{}"))
+		} else {
+			r.Body = io.NopCloser(bytes.NewReader(raw))
+		}
+	}
+	return httpx.BeginIdempotent(w, r, idem, scope, dst)
+}
+
+func fmtTS(ts pgtype.Timestamptz) any {
+	if !ts.Valid {
+		return nil
+	}
+	return ts.Time.UTC().Format(time.RFC3339)
 }
 
 func requireRead(w http.ResponseWriter, r *http.Request) ([]uuid.UUID, bool) {
@@ -78,6 +113,72 @@ func requireWrite(w http.ResponseWriter, r *http.Request) ([]uuid.UUID, uuid.UUI
 	return scope, user, true
 }
 
+func templateDTO(t fcldb.FclClosingChecklistTemplate) map[string]any {
+	return map[string]any{
+		"id":                       t.ID,
+		"organizationId":           t.OrganizationID,
+		"code":                     t.Code,
+		"name":                     t.Name,
+		"financialOrganizationRef": t.FinancialOrganizationRef,
+		"isSystem":                 t.OrganizationID == platform.SystemOrgID,
+		"rowVersion":               t.RowVersion,
+	}
+}
+
+func runDTO(r fcldb.FclClosingRun) map[string]any {
+	return map[string]any{
+		"id":                       r.ID,
+		"organizationId":           r.OrganizationID,
+		"financialOrganizationRef": r.FinancialOrganizationRef,
+		"fiscalPeriodRef":          r.FiscalPeriodRef,
+		"runType":                  r.RunType,
+		"status":                   r.Status,
+		"closedAt":                 fmtTS(r.ClosedAt),
+		"closedBy":                 r.ClosedBy,
+		"rowVersion":               r.RowVersion,
+	}
+}
+
+func taskDTO(t fcldb.FclClosingTask) map[string]any {
+	return map[string]any{
+		"id":             t.ID,
+		"organizationId": t.OrganizationID,
+		"closingRunId":   t.ClosingRunID,
+		"taskName":       t.TaskName,
+		"isMandatory":    t.IsMandatory,
+		"assigneeRef":    t.AssigneeRef,
+		"status":         t.Status,
+		"completedAt":    fmtTS(t.CompletedAt),
+		"rowVersion":     t.RowVersion,
+	}
+}
+
+func periodStatusDTO(p fcldb.FclPeriodStatus) map[string]any {
+	return map[string]any{
+		"id":                       p.ID,
+		"organizationId":           p.OrganizationID,
+		"financialOrganizationRef": p.FinancialOrganizationRef,
+		"fiscalPeriodRef":          p.FiscalPeriodRef,
+		"module":                   p.Module,
+		"status":                   p.Status,
+		"rowVersion":               p.RowVersion,
+	}
+}
+
+func reopeningDTO(rp fcldb.FclPeriodReopening) map[string]any {
+	return map[string]any{
+		"id":                       rp.ID,
+		"organizationId":           rp.OrganizationID,
+		"financialOrganizationRef": rp.FinancialOrganizationRef,
+		"fiscalPeriodRef":          rp.FiscalPeriodRef,
+		"requestedBy":              rp.RequestedBy,
+		"approvedBy":               rp.ApprovedBy,
+		"reason":                   rp.Reason,
+		"reopenedAt":               fmtTS(rp.ReopenedAt),
+		"rowVersion":               rp.RowVersion,
+	}
+}
+
 func (s *Server) listTemplates(w http.ResponseWriter, r *http.Request) {
 	scope, ok := requireRead(w, r)
 	if !ok {
@@ -89,7 +190,11 @@ func (s *Server) listTemplates(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	out := make([]map[string]any, 0, len(rows))
+	for _, t := range rows {
+		out = append(out, templateDTO(t))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: out, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
 }
 
 func (s *Server) createTemplate(w http.ResponseWriter, r *http.Request) {
@@ -153,7 +258,11 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	out := make([]map[string]any, 0, len(rows))
+	for _, run := range rows {
+		out = append(out, runDTO(run))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: out, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
 }
 
 func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
@@ -212,7 +321,41 @@ func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, run.RowVersion, map[string]any{"run": run, "tasks": tasks})
+	taskDTOs := make([]map[string]any, 0, len(tasks))
+	for _, t := range tasks {
+		taskDTOs = append(taskDTOs, taskDTO(t))
+	}
+	httpx.WriteIDResponse(w, http.StatusOK, run.RowVersion, map[string]any{"run": runDTO(run), "tasks": taskDTOs})
+}
+
+func (s *Server) fxRevaluation(w http.ResponseWriter, r *http.Request) {
+	scope, _, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var req struct {
+		Positions []repository.FXPositionInput `json:"positions"`
+	}
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
+		return
+	}
+	defer release()
+	if len(req.Positions) == 0 {
+		httpx.WriteError(w, r, httpx.BadRequest("at least one FX position is required"))
+		return
+	}
+	res, err := s.repo.RunFXRevaluationAndEmit(r.Context(), scope, id, req.Positions, httpx.CorrelationUUID(r))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, 0, res)
 }
 
 func (s *Server) completeTask(w http.ResponseWriter, r *http.Request) {
@@ -230,12 +373,17 @@ func (s *Server) completeTask(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	idemKey, reqHash, release, done := beginIdemOptional(w, r, s.idem, scope, nil)
+	if done {
+		return
+	}
+	defer release()
 	next, err := s.repo.CompleteTask(r.Context(), scope, id, rowVer, user)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"id": id, "status": "Completed", "rowVersion": next})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, next, map[string]any{"id": id, "status": "Completed", "rowVersion": next})
 }
 
 func (s *Server) transitionRun(w http.ResponseWriter, r *http.Request, target string) {
@@ -253,12 +401,17 @@ func (s *Server) transitionRun(w http.ResponseWriter, r *http.Request, target st
 		httpx.WriteError(w, r, err)
 		return
 	}
+	idemKey, reqHash, release, done := beginIdemOptional(w, r, s.idem, scope, nil)
+	if done {
+		return
+	}
+	defer release()
 	next, err := s.repo.TransitionClosingRunAndEmit(r.Context(), scope, id, rowVer, target, user, httpx.CorrelationUUID(r))
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"id": id, "status": target, "rowVersion": next})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, next, map[string]any{"id": id, "status": target, "rowVersion": next})
 }
 
 func (s *Server) listPeriodStatuses(w http.ResponseWriter, r *http.Request) {
@@ -272,7 +425,11 @@ func (s *Server) listPeriodStatuses(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	out := make([]map[string]any, 0, len(rows))
+	for _, p := range rows {
+		out = append(out, periodStatusDTO(p))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: out, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
 }
 
 func (s *Server) upsertPeriodStatus(w http.ResponseWriter, r *http.Request) {
@@ -309,6 +466,24 @@ func (s *Server) upsertPeriodStatus(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, map[string]any{"id": row.ID, "status": row.Status, "rowVersion": row.RowVersion})
 }
 
+func (s *Server) listReopenings(w http.ResponseWriter, r *http.Request) {
+	scope, ok := requireRead(w, r)
+	if !ok {
+		return
+	}
+	page, size, limit, offset := httpx.PaginateParams(r)
+	rows, total, err := s.repo.ListReopenings(r.Context(), scope, limit, offset)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, rp := range rows {
+		out = append(out, reopeningDTO(rp))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: out, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+}
+
 func (s *Server) requestReopening(w http.ResponseWriter, r *http.Request) {
 	scope, user, ok := requireWrite(w, r)
 	if !ok {
@@ -319,10 +494,11 @@ func (s *Server) requestReopening(w http.ResponseWriter, r *http.Request) {
 		FiscalPeriodRef          uuid.UUID `json:"fiscalPeriodRef"`
 		Reason                   string    `json:"reason"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
 		return
 	}
+	defer release()
 	if req.FinancialOrganizationRef == uuid.Nil || req.FiscalPeriodRef == uuid.Nil || strings.TrimSpace(req.Reason) == "" {
 		httpx.WriteError(w, r, httpx.BadRequest("financialOrganizationRef, fiscalPeriodRef, and reason are required"))
 		return
@@ -335,7 +511,7 @@ func (s *Server) requestReopening(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID, "rowVersion": created.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, created.RowVersion, map[string]any{"id": created.ID, "rowVersion": created.RowVersion})
 }
 
 func (s *Server) approveReopening(w http.ResponseWriter, r *http.Request) {
@@ -353,10 +529,15 @@ func (s *Server) approveReopening(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	idemKey, reqHash, release, done := beginIdemOptional(w, r, s.idem, scope, nil)
+	if done {
+		return
+	}
+	defer release()
 	next, err := s.repo.ApproveReopeningAndEmit(r.Context(), scope, id, rowVer, user, httpx.CorrelationUUID(r))
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"id": id, "status": "Reopened", "rowVersion": next})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, next, map[string]any{"id": id, "status": "Reopened", "rowVersion": next})
 }

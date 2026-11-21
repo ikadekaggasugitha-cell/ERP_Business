@@ -244,6 +244,15 @@ func TestManufacturingBOMWorkOrderReleaseCompleteAndRBAC(t *testing.T) {
 	if len(store.outbox) != 2 || store.outbox[0].EventType != "manufacturing.workorder.released" || store.outbox[1].EventType != "manufacturing.workorder.completed" {
 		t.Fatalf("unexpected outbox events: %+v", store.outbox)
 	}
+	var compEv map[string]any
+	_ = json.Unmarshal(store.outbox[1].Payload, &compEv)
+	if compEv["unitCost"] == "" || compEv["totalCost"] == "" {
+		t.Fatalf("expected non-empty unitCost/totalCost in completed event, got %+v", compEv)
+	}
+	bomLinesEv, _ := compEv["bomLines"].([]any)
+	if len(bomLinesEv) != 1 {
+		t.Fatalf("expected 1 scaled BOM line in completed event, got %+v", compEv["bomLines"])
+	}
 
 	// 4. Delete Planned WO
 	rec = doMfgReq(t, handler, http.MethodPost, "/work-orders", orgID, userID, rwPerms, map[string]string{"Idempotency-Key": "k-wo2"}, map[string]any{

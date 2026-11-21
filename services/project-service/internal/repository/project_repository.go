@@ -35,7 +35,7 @@ func (r *ProjectRepository) withOrgTx(ctx context.Context, scope []uuid.UUID, fn
 	if len(scope) == 0 {
 		return errors.New("org scope must not be empty")
 	}
-	return r.db.WithOrgScope(ctx, scope, fn)
+	return r.db.WithOrgScope(ctx, platform.ScopeWithSystemOrg(scope), fn)
 }
 
 func emit(ctx context.Context, q *prjdb.Queries, aggType, eventType string, id, org, corr uuid.UUID, payload map[string]any) error {
@@ -86,8 +86,15 @@ func (r *ProjectRepository) ListProjects(ctx context.Context, scope []uuid.UUID,
 func (r *ProjectRepository) UpdateProject(ctx context.Context, scope []uuid.UUID, arg prjdb.UpdateProjectParams) (int32, error) {
 	var next int32
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
-		var e error
-		next, e = r.q.WithTx(tx).UpdateProject(ctx, arg)
+		q := r.q.WithTx(tx)
+		cur, e := q.GetProject(ctx, arg.ID)
+		if e != nil {
+			return httpx.NotFound("project not found")
+		}
+		if cur.OrganizationID == platform.SystemOrgID {
+			return httpx.Forbidden("system project template is read-only")
+		}
+		next, e = q.UpdateProject(ctx, arg)
 		return e
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -99,8 +106,15 @@ func (r *ProjectRepository) UpdateProject(ctx context.Context, scope []uuid.UUID
 func (r *ProjectRepository) TransitionProject(ctx context.Context, scope []uuid.UUID, id, actor uuid.UUID, version int32, fromStatus, toStatus string) (int32, error) {
 	var next int32
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
-		var e error
-		next, e = r.q.WithTx(tx).TransitionProjectStatus(ctx, prjdb.TransitionProjectStatusParams{
+		q := r.q.WithTx(tx)
+		cur, e := q.GetProject(ctx, id)
+		if e != nil {
+			return httpx.NotFound("project not found")
+		}
+		if cur.OrganizationID == platform.SystemOrgID {
+			return httpx.Forbidden("system project template is read-only")
+		}
+		next, e = q.TransitionProjectStatus(ctx, prjdb.TransitionProjectStatusParams{
 			ID: id, Status: toStatus, UpdatedBy: &actor, RowVersion: version, Status_2: fromStatus,
 		})
 		return e
@@ -114,8 +128,15 @@ func (r *ProjectRepository) TransitionProject(ctx context.Context, scope []uuid.
 func (r *ProjectRepository) DeleteProject(ctx context.Context, scope []uuid.UUID, id, actor uuid.UUID, version int32) error {
 	var n int64
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
-		var e error
-		n, e = r.q.WithTx(tx).SoftDeleteProject(ctx, prjdb.SoftDeleteProjectParams{ID: id, UpdatedBy: &actor, RowVersion: version})
+		q := r.q.WithTx(tx)
+		cur, e := q.GetProject(ctx, id)
+		if e != nil {
+			return httpx.NotFound("project not found")
+		}
+		if cur.OrganizationID == platform.SystemOrgID {
+			return httpx.Forbidden("system project template cannot be deleted")
+		}
+		n, e = q.SoftDeleteProject(ctx, prjdb.SoftDeleteProjectParams{ID: id, UpdatedBy: &actor, RowVersion: version})
 		return e
 	})
 	if err != nil {
@@ -142,6 +163,9 @@ func (r *ProjectRepository) CreateWBSElement(ctx context.Context, scope []uuid.U
 			if parent.ProjectID != arg.ProjectID {
 				return httpx.Unprocessable("PARENT_PROJECT_MISMATCH", "parent WBS element belongs to another project")
 			}
+			arg.LevelNo = parent.LevelNo + 1
+		} else {
+			arg.LevelNo = 1
 		}
 		var e error
 		out, e = q.CreateWBSElement(ctx, arg)
@@ -168,13 +192,17 @@ func (r *ProjectRepository) UpdateWBSElement(ctx context.Context, scope []uuid.U
 		if e != nil {
 			return httpx.NotFound("WBS element not found")
 		}
+		if cur.OrganizationID == platform.SystemOrgID {
+			return httpx.Forbidden("system WBS template is read-only")
+		}
 		if arg.ParentID != nil {
 			if *arg.ParentID == arg.ID {
 				return httpx.Unprocessable("CYCLE_DETECTED", "WBS element cannot be its own parent")
 			}
 			visited := map[uuid.UUID]struct{}{arg.ID: {}}
 			cursor := arg.ParentID
-			for cursor != nil {
+			var directParentLevel int32
+			for step := 0; cursor != nil; step++ {
 				if _, seen := visited[*cursor]; seen {
 					return httpx.Unprocessable("CYCLE_DETECTED", "WBS hierarchy cycle detected")
 				}
@@ -186,8 +214,14 @@ func (r *ProjectRepository) UpdateWBSElement(ctx context.Context, scope []uuid.U
 				if p.ProjectID != cur.ProjectID {
 					return httpx.Unprocessable("PARENT_PROJECT_MISMATCH", "parent WBS element belongs to another project")
 				}
+				if step == 0 {
+					directParentLevel = p.LevelNo
+				}
 				cursor = p.ParentID
 			}
+			arg.LevelNo = directParentLevel + 1
+		} else {
+			arg.LevelNo = 1
 		}
 		next, e = q.UpdateWBSElement(ctx, arg)
 		return e
@@ -201,6 +235,13 @@ func (r *ProjectRepository) UpdateWBSElement(ctx context.Context, scope []uuid.U
 func (r *ProjectRepository) DeleteWBSElement(ctx context.Context, scope []uuid.UUID, id, actor uuid.UUID, version int32) error {
 	return r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
+		cur, e := q.GetWBSElement(ctx, id)
+		if e != nil {
+			return httpx.NotFound("WBS element not found")
+		}
+		if cur.OrganizationID == platform.SystemOrgID {
+			return httpx.Forbidden("system WBS template cannot be deleted")
+		}
 		children, e := q.CountWBSChildren(ctx, &id)
 		if e != nil {
 			return e
@@ -222,8 +263,15 @@ func (r *ProjectRepository) DeleteWBSElement(ctx context.Context, scope []uuid.U
 func (r *ProjectRepository) CreateBudget(ctx context.Context, scope []uuid.UUID, arg prjdb.CreateProjectBudgetParams) (prjdb.CreateProjectBudgetRow, error) {
 	var out prjdb.CreateProjectBudgetRow
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
-		var e error
-		out, e = r.q.WithTx(tx).CreateProjectBudget(ctx, arg)
+		q := r.q.WithTx(tx)
+		wbs, e := q.GetWBSElement(ctx, arg.WbsElementID)
+		if e != nil {
+			return httpx.NotFound("WBS element not found")
+		}
+		if wbs.ProjectID != arg.ProjectID {
+			return httpx.Unprocessable("WBS_PROJECT_MISMATCH", "WBS element does not belong to this project")
+		}
+		out, e = q.CreateProjectBudget(ctx, arg)
 		return e
 	})
 	return out, httpx.MapDBError(err, "failed to create project budget")
@@ -255,8 +303,15 @@ func (r *ProjectRepository) ApproveBudget(ctx context.Context, scope []uuid.UUID
 func (r *ProjectRepository) CreateCost(ctx context.Context, scope []uuid.UUID, arg prjdb.CreateProjectCostParams) (prjdb.CreateProjectCostRow, error) {
 	var out prjdb.CreateProjectCostRow
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
-		var e error
-		out, e = r.q.WithTx(tx).CreateProjectCost(ctx, arg)
+		q := r.q.WithTx(tx)
+		wbs, e := q.GetWBSElement(ctx, arg.WbsElementID)
+		if e != nil {
+			return httpx.NotFound("WBS element not found")
+		}
+		if wbs.ProjectID != arg.ProjectID {
+			return httpx.Unprocessable("WBS_PROJECT_MISMATCH", "WBS element does not belong to this project")
+		}
+		out, e = q.CreateProjectCost(ctx, arg)
 		return e
 	})
 	return out, httpx.MapDBError(err, "failed to record project cost")
@@ -392,9 +447,31 @@ func (r *ProjectRepository) ListChangeOrders(ctx context.Context, scope []uuid.U
 func (r *ProjectRepository) DecideChangeOrder(ctx context.Context, scope []uuid.UUID, id, actor uuid.UUID, version int32, status string) (int32, error) {
 	var next int32
 	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
-		var e error
-		next, e = r.q.WithTx(tx).DecideChangeOrder(ctx, prjdb.DecideChangeOrderParams{ID: id, Status: status, UpdatedBy: &actor, RowVersion: version})
-		return e
+		q := r.q.WithTx(tx)
+		co, e := q.GetChangeOrder(ctx, id)
+		if e != nil {
+			return httpx.NotFound("change order not found")
+		}
+		next, e = q.DecideChangeOrder(ctx, prjdb.DecideChangeOrderParams{ID: id, Status: status, UpdatedBy: &actor, RowVersion: version})
+		if e != nil {
+			return e
+		}
+		if status == "Approved" {
+			if co.ScheduleImpactDays != 0 {
+				if se := q.ShiftProjectEndDate(ctx, prjdb.ShiftProjectEndDateParams{
+					ID: co.ProjectID, Days: co.ScheduleImpactDays, UpdatedBy: &actor,
+				}); se != nil {
+					return se
+				}
+			}
+			return emit(ctx, q, "ChangeOrder", "project.change_order.approved", id, co.OrganizationID, uuid.New(), map[string]any{
+				"changeOrderId":      id.String(),
+				"projectId":          co.ProjectID.String(),
+				"budgetImpactAmount": platform.FormatNumeric(co.BudgetImpactAmount, 4),
+				"scheduleImpactDays": co.ScheduleImpactDays,
+			})
+		}
+		return nil
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, httpx.Conflict("INVALID_STATE", "change order must be Draft with matching rowVersion")

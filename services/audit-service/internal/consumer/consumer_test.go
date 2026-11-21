@@ -53,6 +53,7 @@ func TestHandleRoutesPoisonAndPersistsValidEvents(t *testing.T) {
 	orgID := uuid.New()
 	aggID := uuid.New()
 	corrID := uuid.New()
+	actorID := uuid.New()
 	err = c.Handle(context.Background(), eventbus.Envelope{
 		EventID:        evID.String(),
 		EventType:      "gl.journal.posted",
@@ -60,13 +61,16 @@ func TestHandleRoutesPoisonAndPersistsValidEvents(t *testing.T) {
 		AggregateID:    aggID.String(),
 		CorrelationID:  corrID.String(),
 		OrganizationID: orgID.String(),
-		Data:           []byte(`{"journalNumber":"JV-1"}`),
+		Data:           []byte(`{"journalNumber":"JV-1","actorId":"` + actorID.String() + `"}`),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !rec.called || rec.proc.EventID != evID || rec.entry.Action != "gl.journal.posted" {
 		t.Fatalf("unexpected recorded args: proc=%+v entry=%+v", rec.proc, rec.entry)
+	}
+	if rec.entry.ActorID == nil || *rec.entry.ActorID != actorID {
+		t.Fatalf("expected ActorID=%s, got %v", actorID, rec.entry.ActorID)
 	}
 }
 

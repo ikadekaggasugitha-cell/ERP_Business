@@ -35,7 +35,7 @@ func (r *ConsolidationRepository) withOrgTx(ctx context.Context, scope []uuid.UU
 	if len(scope) == 0 {
 		return errors.New("org scope must not be empty")
 	}
-	return r.db.WithOrgScope(ctx, scope, fn)
+	return r.db.WithOrgScope(ctx, platform.ScopeWithSystemOrg(scope), fn)
 }
 
 func emit(ctx context.Context, q *consdb.Queries, aggType, eventType string, id, org, corr uuid.UUID, payload map[string]any) error {
@@ -58,6 +58,19 @@ func (r *ConsolidationRepository) CreateGroup(ctx context.Context, scope []uuid.
 	return out, httpx.MapDBError(err, "consolidation group code already exists")
 }
 
+func (r *ConsolidationRepository) GetGroup(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (consdb.ConsConsolidationGroup, error) {
+	var out consdb.ConsConsolidationGroup
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		var e error
+		out, e = r.q.WithTx(tx).GetConsolidationGroup(ctx, id)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("consolidation group not found")
+		}
+		return e
+	})
+	return out, err
+}
+
 func (r *ConsolidationRepository) ListGroups(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]consdb.ConsConsolidationGroup, int64, error) {
 	var rows []consdb.ConsConsolidationGroup
 	var total int64
@@ -71,6 +84,54 @@ func (r *ConsolidationRepository) ListGroups(ctx context.Context, scope []uuid.U
 		return e
 	})
 	return rows, total, err
+}
+
+func (r *ConsolidationRepository) UpdateGroup(ctx context.Context, scope []uuid.UUID, arg consdb.UpdateConsolidationGroupParams) (int32, error) {
+	var next int32
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		cur, e := q.GetConsolidationGroup(ctx, arg.ID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("consolidation group not found")
+		}
+		if e != nil {
+			return e
+		}
+		if cur.OrganizationID == platform.SystemOrgID {
+			return httpx.Forbidden("system reference data cannot be modified")
+		}
+		next, e = q.UpdateConsolidationGroup(ctx, arg)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.Conflict("STALE_ROW_VERSION", "rowVersion mismatch")
+		}
+		return e
+	})
+	return next, httpx.MapDBError(err, "")
+}
+
+func (r *ConsolidationRepository) DeleteGroup(ctx context.Context, scope []uuid.UUID, arg consdb.DeleteConsolidationGroupParams) error {
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		cur, e := q.GetConsolidationGroup(ctx, arg.ID)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return httpx.NotFound("consolidation group not found")
+		}
+		if e != nil {
+			return e
+		}
+		if cur.OrganizationID == platform.SystemOrgID {
+			return httpx.Forbidden("system reference data cannot be modified")
+		}
+		n, e := q.DeleteConsolidationGroup(ctx, arg)
+		if e != nil {
+			return e
+		}
+		if n == 0 {
+			return httpx.Conflict("STALE_ROW_VERSION", "rowVersion mismatch")
+		}
+		return nil
+	})
+	return httpx.MapDBError(err, "")
 }
 
 func (r *ConsolidationRepository) AddMember(ctx context.Context, scope []uuid.UUID, arg consdb.CreateConsolidationMemberParams) (consdb.CreateConsolidationMemberRow, error) {
@@ -91,6 +152,20 @@ func (r *ConsolidationRepository) ListMembers(ctx context.Context, scope []uuid.
 		return e
 	})
 	return rows, err
+}
+
+func (r *ConsolidationRepository) DeleteMember(ctx context.Context, scope []uuid.UUID, arg consdb.DeleteConsolidationMemberParams) error {
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		n, e := r.q.WithTx(tx).DeleteConsolidationMember(ctx, arg)
+		if e != nil {
+			return e
+		}
+		if n == 0 {
+			return httpx.Conflict("STALE_ROW_VERSION", "member not found or rowVersion mismatch")
+		}
+		return nil
+	})
+	return httpx.MapDBError(err, "")
 }
 
 func (r *ConsolidationRepository) CreateRule(ctx context.Context, scope []uuid.UUID, arg consdb.CreateEliminationRuleParams) (consdb.CreateEliminationRuleRow, error) {
@@ -242,7 +317,7 @@ func (r *ConsolidationRepository) FinalizeRunAndEmit(ctx context.Context, scope 
 		if run.Status == "Finalized" {
 			return httpx.Conflict("INVALID_STATE", "consolidation run is already finalized")
 		}
-		// Verify double-entry balance across eliminations + adjustments before finalization.
+		// Verify non-empty double-entry balance across eliminations + adjustments before finalization.
 		elims, e := q.ListEliminationEntriesByRun(ctx, runID)
 		if e != nil {
 			return e
@@ -250,6 +325,9 @@ func (r *ConsolidationRepository) FinalizeRunAndEmit(ctx context.Context, scope 
 		adjs, e := q.ListConsolidationAdjustmentsByRun(ctx, runID)
 		if e != nil {
 			return e
+		}
+		if len(elims)+len(adjs) == 0 {
+			return httpx.Unprocessable("EMPTY_CONSOLIDATION_RUN", "consolidation run must contain at least one elimination or adjustment entry")
 		}
 		dr, cr := new(big.Rat), new(big.Rat)
 		for _, el := range elims {
@@ -260,8 +338,8 @@ func (r *ConsolidationRepository) FinalizeRunAndEmit(ctx context.Context, scope 
 			dr.Add(dr, platform.NumericToRat(ad.DebitAmount))
 			cr.Add(cr, platform.NumericToRat(ad.CreditAmount))
 		}
-		if dr.Cmp(cr) != 0 {
-			return httpx.Unprocessable("CONSOLIDATION_UNBALANCED", "elimination and adjustment debits must equal credits")
+		if dr.Sign() <= 0 || dr.Cmp(cr) != 0 {
+			return httpx.Unprocessable("CONSOLIDATION_UNBALANCED", "elimination and adjustment debits must equal credits (> 0)")
 		}
 		next, e = q.TransitionConsolidationRun(ctx, consdb.TransitionConsolidationRunParams{
 			ID: runID, RowVersion: rowVer, Status: "Finalized", UpdatedBy: &actor,

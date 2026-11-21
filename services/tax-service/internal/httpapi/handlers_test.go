@@ -80,6 +80,7 @@ func TestTaxAutoComputationAndEfakturReport(t *testing.T) {
 		t.Fatalf("expected computed 11%% VAT 110000.0000, got %s", created.TaxAmount)
 	}
 
+	// Missing tax.approve returns 403
 	req = httptest.NewRequest(http.MethodPost, "/tax-invoices/"+created.ID+"/report", strings.NewReader(`{"ntte":"NTTE-9988"}`))
 	req.Header.Set("X-Organization-Id", orgID.String())
 	req.Header.Set("X-User-Id", userID.String())
@@ -87,8 +88,63 @@ func TestTaxAutoComputationAndEfakturReport(t *testing.T) {
 	req.Header.Set("If-Match", `"1"`)
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 without tax.approve, got %d", rec.Code)
+	}
+
+	// Maker-checker SoD blocks self-reporting
+	store.txn.CreatedBy = userID
+	req = httptest.NewRequest(http.MethodPost, "/tax-invoices/"+created.ID+"/report", strings.NewReader(`{"ntte":"NTTE-9988"}`))
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-User-Id", userID.String())
+	req.Header.Set("X-Permissions", "tax:write,tax.approve")
+	req.Header.Set("If-Match", `"1"`)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for maker-checker SoD self-report, got %d", rec.Code)
+	}
+
+	// Empty efakturNo is rejected with 400
+	store.txn.CreatedBy = uuid.New()
+	savedEfaktur := store.txn.EfakturNo
+	store.txn.EfakturNo = nil
+	req = httptest.NewRequest(http.MethodPost, "/tax-invoices/"+created.ID+"/report", strings.NewReader(`{"ntte":"NTTE-9988"}`))
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-User-Id", userID.String())
+	req.Header.Set("X-Permissions", "tax:write,tax.approve")
+	req.Header.Set("If-Match", `"1"`)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on empty efakturNo, got %d", rec.Code)
+	}
+	store.txn.EfakturNo = savedEfaktur
+
+	// Valid report by different approver succeeds
+	req = httptest.NewRequest(http.MethodPost, "/tax-invoices/"+created.ID+"/report", strings.NewReader(`{"ntte":"NTTE-9988"}`))
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-User-Id", userID.String())
+	req.Header.Set("X-Permissions", "tax:write,tax.approve")
+	req.Header.Set("If-Match", `"1"`)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || store.outbox.EventType != "tax.efaktur.reported" {
 		t.Fatalf("report failed: %d outbox=%s body=%s", rec.Code, store.outbox.EventType, rec.Body.String())
+	}
+
+	// Re-reporting an already Reported tax invoice returns 409
+	reported := "Reported"
+	store.txn.EfakturStatus = &reported
+	req = httptest.NewRequest(http.MethodPost, "/tax-invoices/"+created.ID+"/report", strings.NewReader(`{"ntte":"NTTE-9988"}`))
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-User-Id", userID.String())
+	req.Header.Set("X-Permissions", "tax:write,tax.approve")
+	req.Header.Set("If-Match", `"2"`)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 on re-reporting Reported invoice, got %d", rec.Code)
 	}
 }
 

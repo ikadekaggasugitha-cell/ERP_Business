@@ -195,8 +195,10 @@ func (q *Queries) EnsureSystemTaxCode(ctx context.Context, arg EnsureSystemTaxCo
 const getDefaultVATTaxCode = `-- name: GetDefaultVATTaxCode :one
 SELECT id, code, rate, tax_type
 FROM tax.tax_code
-WHERE organization_id = $1 AND tax_type = 'VAT' AND deleted_at IS NULL
-ORDER BY created_at ASC
+WHERE organization_id IN ($1, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND tax_type = 'VAT'
+  AND deleted_at IS NULL
+ORDER BY (organization_id = $1) DESC, created_at ASC
 LIMIT 1
 `
 
@@ -247,7 +249,11 @@ func (q *Queries) GetTaxCode(ctx context.Context, id uuid.UUID) (TaxTaxCode, err
 const getTaxCodeByCode = `-- name: GetTaxCodeByCode :one
 SELECT id, code, rate, tax_type
 FROM tax.tax_code
-WHERE organization_id = $1 AND code = $2 AND deleted_at IS NULL
+WHERE organization_id IN ($1, '00000000-0000-0000-0000-000000000000'::uuid)
+  AND code = $2
+  AND deleted_at IS NULL
+ORDER BY (organization_id = $1) DESC
+LIMIT 1
 `
 
 type GetTaxCodeByCodeParams struct {
@@ -532,7 +538,11 @@ UPDATE tax.tax_transaction
 SET efaktur_no = COALESCE(NULLIF($4::text, ''), efaktur_no),
     efaktur_status = 'Reported',
     updated_by = $3
-WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+WHERE id = $1
+  AND row_version = $2
+  AND deleted_at IS NULL
+  AND COALESCE(efaktur_status, 'Draft') <> 'Reported'
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 RETURNING row_version
 `
 
