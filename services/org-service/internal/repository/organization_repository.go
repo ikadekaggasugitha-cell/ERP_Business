@@ -52,6 +52,59 @@ func (r *OrganizationRepository) ListOrganizationTypesWithCount(ctx context.Cont
 	return rows, total, err
 }
 
+func (r *OrganizationRepository) GetOrganizationTypeByID(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (orgdb.GetOrganizationTypeByIDRow, error) {
+	var out orgdb.GetOrganizationTypeByIDRow
+	err := r.db.WithOrgReadScope(ctx, scope, func(tx pgx.Tx) error {
+		var e error
+		out, e = r.q.WithTx(tx).GetOrganizationTypeByID(ctx, id)
+		return e
+	})
+	return out, err
+}
+
+func (r *OrganizationRepository) ListAttributes(ctx context.Context, scope []uuid.UUID, orgRefID uuid.UUID) (map[string]any, error) {
+	out := make(map[string]any)
+	err := r.db.WithOrgReadScope(ctx, scope, func(tx pgx.Tx) error {
+		rows, e := r.q.WithTx(tx).ListOrganizationAttributes(ctx, orgRefID)
+		if e != nil {
+			return e
+		}
+		for _, row := range rows {
+			var v any
+			if err := json.Unmarshal(row.AttrValue, &v); err == nil {
+				out[row.AttrKey] = v
+			}
+		}
+		return nil
+	})
+	return out, err
+}
+
+func (r *OrganizationRepository) UpsertAttributes(ctx context.Context, scope []uuid.UUID, orgID, orgRefID uuid.UUID, attrs map[string]any, actor uuid.UUID) error {
+	if len(attrs) == 0 {
+		return nil
+	}
+	return r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		for k, v := range attrs {
+			raw, err := json.Marshal(v)
+			if err != nil {
+				return err
+			}
+			if err := q.UpsertOrganizationAttribute(ctx, orgdb.UpsertOrganizationAttributeParams{
+				OrganizationID:    orgID,
+				OrganizationRefID: orgRefID,
+				AttrKey:           k,
+				AttrValue:         raw,
+				CreatedBy:         actor,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (r *OrganizationRepository) CreateAndEmit(ctx context.Context, scope []uuid.UUID, arg orgdb.CreateOrganizationParams, ev orgdb.InsertOutboxParams) (orgdb.CreateOrganizationRow, error) {
 	var created orgdb.CreateOrganizationRow
 	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {

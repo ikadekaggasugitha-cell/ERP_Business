@@ -236,6 +236,34 @@ func (q *Queries) GetAppUser(ctx context.Context, id uuid.UUID) (UsrAppUser, err
 	return i, err
 }
 
+const getAppUserByUsername = `-- name: GetAppUserByUsername :one
+SELECT id, organization_id, username, email, full_name, status, default_organization_id,
+       created_at, created_by, updated_at, updated_by, deleted_at, row_version
+FROM usr.app_user
+WHERE LOWER(username) = LOWER($1) AND deleted_at IS NULL
+`
+
+func (q *Queries) GetAppUserByUsername(ctx context.Context, lower string) (UsrAppUser, error) {
+	row := q.db.QueryRow(ctx, getAppUserByUsername, lower)
+	var i UsrAppUser
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Username,
+		&i.Email,
+		&i.FullName,
+		&i.Status,
+		&i.DefaultOrganizationID,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+		&i.DeletedAt,
+		&i.RowVersion,
+	)
+	return i, err
+}
+
 const insertOutbox = `-- name: InsertOutbox :exec
 INSERT INTO usr.outbox (aggregate_type, aggregate_id, event_type, payload, organization_id, correlation_id)
 VALUES ($1, $2, $3, $4, $5, $6)

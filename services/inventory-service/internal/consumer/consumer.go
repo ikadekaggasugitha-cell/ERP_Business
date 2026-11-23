@@ -26,6 +26,7 @@ var Topics = []string{
 	eventbus.TopicFor("procurement.goods.received"),
 	eventbus.TopicFor("manufacturing.workorder.completed"),
 	eventbus.TopicFor("maintenance.workorder.parts_requested"),
+	eventbus.TopicFor("org.unit.upserted"),
 }
 
 var sysActor = uuid.MustParse("00000000-0000-0000-0000-0000000000c1")
@@ -34,6 +35,7 @@ var sysActor = uuid.MustParse("00000000-0000-0000-0000-0000000000c1")
 type EventStore interface {
 	FulfillSalesOrder(ctx context.Context, org, corr, actor uuid.UUID, moveDate pgtype.Date, ref string, warehouseID *uuid.UUID, lines []repository.StockLineRequest, mark inventorydb.MarkEventProcessedParams, evOK, evFail inventorydb.InsertOutboxParams) (bool, error)
 	ReceiveProcurementGoods(ctx context.Context, org, corr, actor uuid.UUID, moveDate pgtype.Date, ref string, warehouseID *uuid.UUID, lines []repository.StockLineRequest, mark inventorydb.MarkEventProcessedParams) (bool, error)
+	CreateWarehouse(ctx context.Context, scope []uuid.UUID, arg inventorydb.CreateWarehouseParams) (inventorydb.CreateWarehouseRow, error)
 }
 
 type soLinePayload struct {
@@ -93,9 +95,64 @@ func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 		return x.handleWorkOrderCompleted(ctx, env)
 	case "maintenance.workorder.parts_requested":
 		return x.handleMaintenancePartsRequested(ctx, env)
+	case "org.unit.upserted":
+		return x.handleOrgUnitUpserted(ctx, env)
 	default:
 		return nil
 	}
+}
+
+func (x *Consumer) handleOrgUnitUpserted(ctx context.Context, env eventbus.Envelope) error {
+	org, err := uuid.Parse(env.OrganizationID)
+	if err != nil {
+		return &eventbus.ErrPoison{Err: fmt.Errorf("invalid organizationId %q: %w", env.OrganizationID, err)}
+	}
+	var p struct {
+		Code                   string `json:"code"`
+		Name                   string `json:"name"`
+		TypeCode               string `json:"typeCode"`
+		AutoProvisionWarehouse bool   `json:"autoProvisionWarehouse"`
+	}
+	if len(env.Data) > 0 {
+		if err := json.Unmarshal(env.Data, &p); err != nil {
+			return &eventbus.ErrPoison{Err: fmt.Errorf("invalid org.unit.upserted payload: %w", err)}
+		}
+	}
+	if !p.AutoProvisionWarehouse {
+		return nil
+	}
+	switch strings.ToUpper(strings.TrimSpace(p.TypeCode)) {
+	case "WAREHOUSE", "PROJECT_SITE", "BRANCH", "PLACE":
+	default:
+		return nil
+	}
+	code := strings.TrimSpace(p.Code)
+	name := strings.TrimSpace(p.Name)
+	if code == "" || name == "" {
+		return nil
+	}
+	whCode := "WH-" + code
+	if strings.HasPrefix(strings.ToUpper(code), "WH-") {
+		whCode = code
+	}
+	if len(whCode) > 50 {
+		whCode = whCode[:50]
+	}
+	orgRef, err := uuid.Parse(env.AggregateID)
+	if err != nil {
+		orgRef = org
+	}
+	_, err = x.repo.CreateWarehouse(ctx, []uuid.UUID{org}, inventorydb.CreateWarehouseParams{
+		OrganizationID:    org,
+		Code:              whCode,
+		Name:              name,
+		OrganizationRefID: orgRef,
+		CreatedBy:         sysActor,
+	})
+	if err != nil && platform.ClassifyPGError(err) == platform.PGUnique {
+		return nil
+	}
+	return err
 }
 
 func (x *Consumer) handleSalesOrderConfirmed(ctx context.Context, env eventbus.Envelope) error {

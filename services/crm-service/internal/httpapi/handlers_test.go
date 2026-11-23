@@ -29,8 +29,8 @@ func (f *fakeCRMStore) ListLeads(context.Context, []uuid.UUID, *string, int32, i
 func (f *fakeCRMStore) UpdateLead(context.Context, []uuid.UUID, crmdb.UpdateLeadParams) (int32, error) {
 	return 2, nil
 }
-func (f *fakeCRMStore) TransitionLead(context.Context, []uuid.UUID, uuid.UUID, uuid.UUID, int32, string, string, *uuid.UUID) (int32, error) {
-	return 2, nil
+func (f *fakeCRMStore) TransitionLead(context.Context, []uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, int32, string, string, *uuid.UUID) (int32, *uuid.UUID, error) {
+	return 2, nil, nil
 }
 func (f *fakeCRMStore) LoseLead(context.Context, []uuid.UUID, uuid.UUID, uuid.UUID, int32) (int32, error) {
 	return 2, nil

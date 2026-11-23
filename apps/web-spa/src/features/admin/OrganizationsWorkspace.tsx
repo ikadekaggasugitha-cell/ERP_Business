@@ -619,6 +619,50 @@ function OrganizationsWorkspaceInner({ orgId, canWrite }: OrganizationsWorkspace
           >
             <Input id="org-eff-to" type="date" {...orgForm.register('effectiveTo')} />
           </FormField>
+
+          {!editingOrg && (
+            <>
+              <div className="sm:col-span-2 border-t border-[var(--border-subtle)] pt-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                  {isId ? 'Metadata Lokasi Fisik (Site / Place — Opsional)' : 'Physical Site / Place Metadata (Optional)'}
+                </p>
+              </div>
+              <FormField label={isId ? 'Alamat' : 'Address'} htmlFor="org-address">
+                <Input id="org-address" placeholder="Jl. Sudirman No. 1" {...orgForm.register('address')} />
+              </FormField>
+              <FormField label={isId ? 'Kota' : 'City'} htmlFor="org-city">
+                <Input id="org-city" placeholder="Jakarta Selatan" {...orgForm.register('city')} />
+              </FormField>
+              <FormField label={isId ? 'Provinsi' : 'Province'} htmlFor="org-province">
+                <Input id="org-province" placeholder="DKI Jakarta" {...orgForm.register('province')} />
+              </FormField>
+              <FormField label="PIC / Penanggung Jawab" htmlFor="org-pic-name">
+                <Input id="org-pic-name" placeholder="Nama PIC lokasi" {...orgForm.register('picName')} />
+              </FormField>
+              <FormField label={isId ? 'Telepon PIC' : 'PIC Phone'} htmlFor="org-pic-phone">
+                <Input id="org-pic-phone" placeholder="+62 812..." {...orgForm.register('picPhone')} />
+              </FormField>
+
+              <div className="sm:col-span-2 flex flex-col gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)]/40 p-3 text-xs">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" className="h-4 w-4 rounded" {...orgForm.register('autoProvisionWarehouse')} />
+                  <span>
+                    {isId
+                      ? 'Otomatis buat Gudang (Warehouse) di Inventory untuk Site/Place/Cabang ini'
+                      : 'Auto-provision Inventory Warehouse for this Site/Place/Branch'}
+                  </span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" className="h-4 w-4 rounded" {...orgForm.register('autoProvisionCostCenter')} />
+                  <span>
+                    {isId
+                      ? 'Otomatis buat Cost Center di Dimension untuk Divisi/Proyek ini'
+                      : 'Auto-provision Dimension Cost Center for this Division/Project'}
+                  </span>
+                </label>
+              </div>
+            </>
+          )}
         </form>
       </AppDialog>
 

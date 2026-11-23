@@ -37,6 +37,44 @@ func (r *UserRepository) CreateAndEmit(ctx context.Context, scope []uuid.UUID, a
 	return created, err
 }
 
+func (r *UserRepository) ProvisionAndEmit(ctx context.Context, scope []uuid.UUID, arg userdb.CreateAppUserParams, assignments []userdb.CreateUserOrgAssignmentParams, ev userdb.InsertOutboxParams) (userdb.CreateAppUserRow, []userdb.CreateUserOrgAssignmentRow, error) {
+	var created userdb.CreateAppUserRow
+	outAssignments := make([]userdb.CreateUserOrgAssignmentRow, 0, len(assignments))
+	err := r.db.WithTenantWriteScope(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		var e error
+		if created, e = q.CreateAppUser(ctx, arg); e != nil {
+			return e
+		}
+		for _, a := range assignments {
+			a.UserID = created.ID
+			row, ae := q.CreateUserOrgAssignment(ctx, a)
+			if ae != nil {
+				return ae
+			}
+			outAssignments = append(outAssignments, row)
+		}
+		ev.AggregateID = created.ID
+		return q.InsertOutbox(ctx, ev)
+	})
+	return created, outAssignments, err
+}
+
+func (r *UserRepository) GetByUsernameWithRoles(ctx context.Context, scope []uuid.UUID, username string) (userdb.UsrAppUser, []userdb.ListUserOrgAssignmentsRow, error) {
+	var u userdb.UsrAppUser
+	var roles []userdb.ListUserOrgAssignmentsRow
+	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		var e error
+		if u, e = q.GetAppUserByUsername(ctx, username); e != nil {
+			return e
+		}
+		roles, e = q.ListUserOrgAssignments(ctx, u.ID)
+		return e
+	})
+	return u, roles, err
+}
+
 func (r *UserRepository) GetWithRoles(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (userdb.UsrAppUser, []userdb.ListUserOrgAssignmentsRow, error) {
 	var u userdb.UsrAppUser
 	var roles []userdb.ListUserOrgAssignmentsRow

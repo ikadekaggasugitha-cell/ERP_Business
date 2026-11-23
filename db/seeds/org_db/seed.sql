@@ -8,8 +8,11 @@ INSERT INTO org.organization_type (organization_id, code, name, level_hint, is_a
   (:'org_id', 'SUB_HOLDING',   'Sub-Holding Group',     2, true, :'actor'),
   (:'org_id', 'COMPANY',       'Operating Company',     3, true, :'actor'),
   (:'org_id', 'BUSINESS_UNIT', 'Business Unit',         4, true, :'actor'),
+  (:'org_id', 'DIVISION',      'Division',              4, true, :'actor'),
+  (:'org_id', 'DEPARTMENT',    'Department',            5, true, :'actor'),
   (:'org_id', 'BRANCH',        'Branch Office',         5, true, :'actor'),
   (:'org_id', 'PROJECT_SITE',  'Project Site',          6, true, :'actor'),
+  (:'org_id', 'PLACE',         'Site / Place / Outlet', 6, true, :'actor'),
   (:'org_id', 'WAREHOUSE',     'Warehouse / Facility',  7, true, :'actor')
 ON CONFLICT (organization_id, code) DO NOTHING;
 

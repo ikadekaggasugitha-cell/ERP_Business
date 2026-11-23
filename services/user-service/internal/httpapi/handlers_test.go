@@ -20,6 +20,27 @@ func (f *fakeUserStore) CreateAndEmit(_ context.Context, _ []uuid.UUID, _ userdb
 	return userdb.CreateAppUserRow{ID: uuid.MustParse("10000000-0000-0000-0000-000000000011"), Status: "Active", RowVersion: 1}, nil
 }
 
+func (f *fakeUserStore) ProvisionAndEmit(_ context.Context, _ []uuid.UUID, _ userdb.CreateAppUserParams, assigns []userdb.CreateUserOrgAssignmentParams, _ userdb.InsertOutboxParams) (userdb.CreateAppUserRow, []userdb.CreateUserOrgAssignmentRow, error) {
+	rows := make([]userdb.CreateUserOrgAssignmentRow, len(assigns))
+	for i := range assigns {
+		rows[i] = userdb.CreateUserOrgAssignmentRow{ID: uuid.New(), RowVersion: 1}
+	}
+	return userdb.CreateAppUserRow{ID: uuid.MustParse("10000000-0000-0000-0000-000000000011"), Status: "Active", RowVersion: 1}, rows, nil
+}
+
+func (f *fakeUserStore) GetByUsernameWithRoles(_ context.Context, scope []uuid.UUID, username string) (userdb.UsrAppUser, []userdb.ListUserOrgAssignmentsRow, error) {
+	uid := uuid.MustParse("10000000-0000-0000-0000-000000000011")
+	return userdb.UsrAppUser{
+		ID:             uid,
+		OrganizationID: scope[0],
+		Username:       username,
+		Email:          username + "@ex.co",
+		FullName:       "Dynamic User",
+		Status:         "Active",
+		RowVersion:     1,
+	}, []userdb.ListUserOrgAssignmentsRow{{ID: uuid.New(), UserID: uid, OrganizationRefID: scope[0], RoleID: uuid.New(), RowVersion: 1}}, nil
+}
+
 func (f *fakeUserStore) GetWithRoles(_ context.Context, scope []uuid.UUID, id uuid.UUID) (userdb.UsrAppUser, []userdb.ListUserOrgAssignmentsRow, error) {
 	return userdb.UsrAppUser{
 		ID:             id,

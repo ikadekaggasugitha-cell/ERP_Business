@@ -35,6 +35,10 @@ func (f *fakeEventStore) ReceiveProcurementGoods(_ context.Context, _, _, _ uuid
 	return true, nil
 }
 
+func (f *fakeEventStore) CreateWarehouse(_ context.Context, _ []uuid.UUID, _ inventorydb.CreateWarehouseParams) (inventorydb.CreateWarehouseRow, error) {
+	return inventorydb.CreateWarehouseRow{ID: uuid.New(), RowVersion: 1}, nil
+}
+
 func TestInventoryConsumerHandlersAndPoison(t *testing.T) {
 	store := &fakeEventStore{}
 	c := &Consumer{repo: store}

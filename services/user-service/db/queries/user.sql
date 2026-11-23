@@ -14,6 +14,12 @@ SELECT id, organization_id, username, email, full_name, status, default_organiza
 FROM usr.app_user
 WHERE id = $1 AND deleted_at IS NULL;
 
+-- name: GetAppUserByUsername :one
+SELECT id, organization_id, username, email, full_name, status, default_organization_id,
+       created_at, created_by, updated_at, updated_by, deleted_at, row_version
+FROM usr.app_user
+WHERE LOWER(username) = LOWER($1) AND deleted_at IS NULL;
+
 -- name: ListAppUsers :many
 SELECT id, organization_id, username, email, full_name, status, default_organization_id, row_version
 FROM usr.app_user

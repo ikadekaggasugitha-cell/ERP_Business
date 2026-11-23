@@ -22,9 +22,12 @@ import (
 type Store interface {
 	CreateOrganizationType(ctx context.Context, scope []uuid.UUID, arg orgdb.CreateOrganizationTypeParams) (orgdb.CreateOrganizationTypeRow, error)
 	ListOrganizationTypesWithCount(ctx context.Context, scope []uuid.UUID, arg orgdb.ListOrganizationTypesParams) ([]orgdb.ListOrganizationTypesRow, int64, error)
+	GetOrganizationTypeByID(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (orgdb.GetOrganizationTypeByIDRow, error)
 	CreateAndEmit(ctx context.Context, scope []uuid.UUID, arg orgdb.CreateOrganizationParams, ev orgdb.InsertOutboxParams) (orgdb.CreateOrganizationRow, error)
 	GetWithHierarchy(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (orgdb.OrgOrganization, []orgdb.ListOrganizationDescendantsRow, error)
 	ListWithCount(ctx context.Context, scope []uuid.UUID, arg orgdb.ListOrganizationsParams) ([]orgdb.ListOrganizationsRow, int64, error)
+	ListAttributes(ctx context.Context, scope []uuid.UUID, orgRefID uuid.UUID) (map[string]any, error)
+	UpsertAttributes(ctx context.Context, scope []uuid.UUID, orgID, orgRefID uuid.UUID, attrs map[string]any, actor uuid.UUID) error
 	UpdateAndEmit(ctx context.Context, scope []uuid.UUID, arg orgdb.UpdateOrganizationParams, ev orgdb.InsertOutboxParams) (orgdb.UpdateOrganizationRow, error)
 	ActivateAndEmit(ctx context.Context, scope []uuid.UUID, arg orgdb.ActivateOrganizationParams, ev orgdb.InsertOutboxParams) (int32, error)
 	DeleteOrganization(ctx context.Context, scope []uuid.UUID, arg orgdb.DeleteOrganizationParams) (int64, error)
@@ -51,6 +54,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /organizations/{id}", s.deleteOrg)
 	mux.HandleFunc("GET /organizations/{id}/hierarchy", s.hierarchy)
 	mux.HandleFunc("GET /organizations/{id}/descendants", s.descendants)
+	mux.HandleFunc("GET /organizations/{id}/attributes", s.getAttributes)
+	mux.HandleFunc("PUT /organizations/{id}/attributes", s.putAttributes)
 
 	mux.HandleFunc("GET /org-units", s.list)
 	mux.HandleFunc("GET /org-units/{id}", s.get)
@@ -64,12 +69,34 @@ type typeReq struct {
 }
 
 type orgReq struct {
-	Code               string `json:"code"`
-	Name               string `json:"name"`
-	OrganizationTypeID string `json:"organizationTypeId"`
-	ParentID           string `json:"parentId"`
-	EffectiveFrom      string `json:"effectiveFrom"`
-	EffectiveTo        string `json:"effectiveTo"`
+	Code                    string         `json:"code"`
+	Name                    string         `json:"name"`
+	OrganizationTypeID      string         `json:"organizationTypeId"`
+	ParentID                string         `json:"parentId"`
+	EffectiveFrom           string         `json:"effectiveFrom"`
+	EffectiveTo             string         `json:"effectiveTo"`
+	Attributes              map[string]any `json:"attributes,omitempty"`
+	AutoProvisionWarehouse  bool           `json:"autoProvisionWarehouse,omitempty"`
+	AutoProvisionCostCenter bool           `json:"autoProvisionCostCenter,omitempty"`
+}
+
+func canTierCreateOrgType(callerTier int, typeCode string) bool {
+	if callerTier <= httpx.AdminTierHolding {
+		return true
+	}
+	tc := strings.ToUpper(strings.TrimSpace(typeCode))
+	if callerTier == httpx.AdminTierSubsidiary {
+		return tc != "HOLDING" && tc != "SUB_HOLDING"
+	}
+	if callerTier == httpx.AdminTierBranch {
+		switch tc {
+		case "HOLDING", "SUB_HOLDING", "COMPANY", "BRANCH":
+			return false
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) createType(w http.ResponseWriter, r *http.Request) {
@@ -224,9 +251,18 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		}
 		parentID = &p
 	}
-	// Tiered Admin Guard: Subsidiary/Branch admins cannot create root Holding organizations
-	// and can only create child organizations under a parent within their own org scope.
+	var typeCode string
+	if orgType, terr := s.repo.GetOrganizationTypeByID(r.Context(), scope, typeID); terr == nil {
+		typeCode = strings.ToUpper(strings.TrimSpace(orgType.Code))
+	}
+	// Tiered Admin Guard: Subsidiary/Branch admins cannot create root Holding organizations,
+	// cannot create node types above their tier, and can only attach under a parent in their scope.
 	if len(httpx.Roles(r.Context())) > 0 && httpx.CallerAdminTier(r.Context()) >= httpx.AdminTierSubsidiary {
+		callerTier := httpx.CallerAdminTier(r.Context())
+		if typeCode != "" && !canTierCreateOrgType(callerTier, typeCode) {
+			httpx.WriteError(w, r, httpx.Forbidden("admin tier tidak diizinkan membuat tipe organisasi "+typeCode))
+			return
+		}
 		if parentID == nil {
 			httpx.WriteError(w, r, httpx.Forbidden("hanya Head Office / Holding Admin yang dapat membuat organisasi induk (root)"))
 			return
@@ -244,7 +280,18 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	payload, _ := json.Marshal(map[string]any{"code": code, "name": name, "parentId": parentID})
+	payloadMap := map[string]any{
+		"code":                    code,
+		"name":                    name,
+		"typeCode":                typeCode,
+		"parentId":                parentID,
+		"autoProvisionWarehouse":  req.AutoProvisionWarehouse,
+		"autoProvisionCostCenter": req.AutoProvisionCostCenter,
+	}
+	if len(req.Attributes) > 0 {
+		payloadMap["attributes"] = req.Attributes
+	}
+	payload, _ := json.Marshal(payloadMap)
 	ev := orgdb.InsertOutboxParams{
 		AggregateType:  "Organization",
 		EventType:      "org.unit.upserted",
@@ -270,12 +317,22 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, httpx.MapDBError(err, "kode organisasi sudah dipakai"))
 		return
 	}
+	if len(req.Attributes) > 0 {
+		if aerr := s.repo.UpsertAttributes(r.Context(), scope, scope[0], created.ID, req.Attributes, actor); aerr != nil {
+			httpx.WriteError(w, r, httpx.MapDBError(aerr, ""))
+			return
+		}
+	}
 	httpx.SaveIDResponse(w, s.idem, scope, key, hash, http.StatusCreated, created.RowVersion, map[string]any{
-		"id":         created.ID,
-		"code":       code,
-		"name":       name,
-		"status":     created.Status,
-		"rowVersion": created.RowVersion,
+		"id":                      created.ID,
+		"code":                    code,
+		"name":                    name,
+		"typeCode":                typeCode,
+		"status":                  created.Status,
+		"attributes":              req.Attributes,
+		"autoProvisionWarehouse":  req.AutoProvisionWarehouse,
+		"autoProvisionCostCenter": req.AutoProvisionCostCenter,
+		"rowVersion":              created.RowVersion,
 	})
 }
 
@@ -691,6 +748,76 @@ func (s *Server) descendants(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"organizationId": org.ID,
 		"descendantIds":  ids,
+	})
+}
+
+func (s *Server) getAttributes(w http.ResponseWriter, r *http.Request) {
+	if err := httpx.RequirePermission(r, "org:read"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	attrs, err := s.repo.ListAttributes(r.Context(), scope, id)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	if attrs == nil {
+		attrs = map[string]any{}
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"organizationId": id,
+		"attributes":     attrs,
+	})
+}
+
+func (s *Server) putAttributes(w http.ResponseWriter, r *http.Request) {
+	if err := httpx.RequirePermission(r, "org:write"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	actor, err := httpx.RequireUser(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var req struct {
+		Attributes map[string]any `json:"attributes"`
+	}
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if len(req.Attributes) == 0 {
+		httpx.WriteError(w, r, httpx.BadRequest("attributes wajib diisi"))
+		return
+	}
+	if err := s.repo.UpsertAttributes(r.Context(), scope, scope[0], id, req.Attributes, actor); err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"organizationId": id,
+		"attributes":     req.Attributes,
 	})
 }
 

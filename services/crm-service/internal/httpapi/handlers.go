@@ -514,12 +514,16 @@ func (s *Server) transitionLead(from, to string) http.HandlerFunc {
 			httpx.WriteError(w, r, err)
 			return
 		}
-		next, err := s.store.TransitionLead(r.Context(), scope, id, user, ver, from, to, custRef)
+		next, oppID, err := s.store.TransitionLead(r.Context(), scope, id, scope[0], user, httpx.CorrelationUUID(r), ver, from, to, custRef)
 		if err != nil {
 			httpx.WriteError(w, r, err)
 			return
 		}
-		httpx.WriteIDResponse(w, http.StatusOK, next, map[string]any{"id": id, "status": to, "rowVersion": next})
+		resp := map[string]any{"id": id, "status": to, "rowVersion": next}
+		if oppID != nil {
+			resp["opportunityId"] = *oppID
+		}
+		httpx.WriteIDResponse(w, http.StatusOK, next, resp)
 	}
 }
 

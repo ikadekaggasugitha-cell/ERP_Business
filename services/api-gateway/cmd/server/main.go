@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"slices"
@@ -609,25 +610,44 @@ func handleLogin(secret []byte, devAuthMode bool) http.HandlerFunc {
 			userID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("erp-user:"+req.Username)).String()
 		}
 
-		roles, orgScope, defaultActiveOrg, fullName := resolveDevPersona(req.Username, activeOrg)
-		if req.OrganizationID == "" && req.OrgCode == "" {
-			activeOrg = defaultActiveOrg
-		} else if !slices.Contains(orgScope, activeOrg.ID) {
-			// Prevent a subsidiary/branch persona from selecting an org outside its hierarchy at login.
-			if slices.Contains(roles, "SYSTEM_ADMIN") {
-				orgScope = append([]string{activeOrg.ID}, orgScope...)
-			} else {
+		var (
+			roles      []string
+			orgScope   []string
+			fullName   string
+			email      string
+			visibleOrg []orgSummary
+		)
+		if dyn, ok := resolveDynamicUser(r.Context(), req.Username, secret, req.OrganizationID); ok {
+			userID = dyn.UserID
+			fullName = dyn.FullName
+			email = dyn.Email
+			roles = dyn.Roles
+			orgScope = dyn.OrgScope
+			activeOrg = dyn.ActiveOrg
+			visibleOrg = dyn.Organizations
+		} else {
+			var defaultActiveOrg orgSummary
+			roles, orgScope, defaultActiveOrg, fullName = resolveDevPersona(req.Username, activeOrg)
+			if req.OrganizationID == "" && req.OrgCode == "" {
 				activeOrg = defaultActiveOrg
+			} else if !slices.Contains(orgScope, activeOrg.ID) {
+				// Prevent a subsidiary/branch persona from selecting an org outside its hierarchy at login.
+				if slices.Contains(roles, "SYSTEM_ADMIN") {
+					orgScope = append([]string{activeOrg.ID}, orgScope...)
+				} else {
+					activeOrg = defaultActiveOrg
+				}
 			}
+			email = req.Username
+			if !strings.Contains(email, "@") {
+				email += "@sinergi.example.com"
+			}
+			visibleOrg = filterOrgsForScope(orgScope, roles)
 		}
 		perms := permissionsForRoles(roles)
 		adminTier := httpx.AdminTierForRoles(roles)
 
 		now := time.Now().UTC()
-		email := req.Username
-		if !strings.Contains(email, "@") {
-			email += "@sinergi.example.com"
-		}
 
 		accessClaims := auth.Claims{
 			Subject:     userID,
@@ -683,9 +703,179 @@ func handleLogin(secret []byte, devAuthMode bool) http.HandlerFunc {
 				Permissions: perms,
 			},
 			"activeOrg":     activeOrg,
-			"organizations": filterOrgsForScope(orgScope, roles),
+			"organizations": visibleOrg,
 		})
 	}
+}
+
+type dynamicUserSession struct {
+	UserID        string
+	FullName      string
+	Email         string
+	Roles         []string
+	OrgScope      []string
+	ActiveOrg     orgSummary
+	Organizations []orgSummary
+}
+
+var internalHTTPClient = &http.Client{Timeout: 1500 * time.Millisecond}
+
+func doInternalGET(ctx context.Context, rawURL string, scopeHeader string, secret []byte, dst any) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("X-Organization-Id", scopeHeader)
+	req.Header.Set("X-Org-Scope", scopeHeader)
+	req.Header.Set("X-User-Id", defaultUID)
+	req.Header.Set("X-Roles", "SYSTEM_ADMIN")
+	req.Header.Set("X-Admin-Tier", "0")
+	req.Header.Set("X-Permissions", "user:read,security:read,org:read")
+	httpx.SignGatewayRequest(req, secret)
+	resp, err := internalHTTPClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	return json.NewDecoder(resp.Body).Decode(dst) == nil
+}
+
+// resolveDynamicUser looks up a newly provisioned user from user-service, resolves role codes
+// from security-service, and expands org subtrees via org-service so admin-created users can log in immediately.
+func resolveDynamicUser(ctx context.Context, username string, secret []byte, requestedOrgID string) (dynamicUserSession, bool) {
+	userSvcURL := strings.TrimRight(strings.TrimSpace(os.Getenv("USER_SERVICE_URL")), "/")
+	if userSvcURL == "" {
+		return dynamicUserSession{}, false
+	}
+	lookupScope := strings.Join([]string{defaultOrgID, branchOrgID, subLogOrgID, brcJktOrgID}, ",")
+	if _, err := uuid.Parse(strings.TrimSpace(requestedOrgID)); err == nil && requestedOrgID != systemOrgID {
+		lookupScope = requestedOrgID + "," + lookupScope
+	}
+	var uResp struct {
+		ID                    string  `json:"id"`
+		OrganizationID        string  `json:"organizationId"`
+		Username              string  `json:"username"`
+		Email                 string  `json:"email"`
+		FullName              string  `json:"fullName"`
+		Status                string  `json:"status"`
+		DefaultOrganizationID *string `json:"defaultOrganizationId"`
+		Roles                 []struct {
+			OrganizationRefID string `json:"organizationRefId"`
+			RoleID            string `json:"roleId"`
+		} `json:"roles"`
+	}
+	if !doInternalGET(ctx, userSvcURL+"/users/lookup?username="+url.QueryEscape(username), lookupScope, secret, &uResp) {
+		return dynamicUserSession{}, false
+	}
+	if uResp.ID == "" || !strings.EqualFold(uResp.Status, "Active") {
+		return dynamicUserSession{}, false
+	}
+
+	// Resolve role UUIDs -> role codes via security-service.
+	roleCodeByID := map[string]string{}
+	if secURL := strings.TrimRight(strings.TrimSpace(os.Getenv("SECURITY_SERVICE_URL")), "/"); secURL != "" {
+		var rList struct {
+			Data []struct {
+				ID   string `json:"id"`
+				Code string `json:"code"`
+			} `json:"data"`
+		}
+		if doInternalGET(ctx, secURL+"/roles?size=100", lookupScope+","+systemOrgID, secret, &rList) {
+			for _, r := range rList.Data {
+				roleCodeByID[r.ID] = r.Code
+			}
+		}
+	}
+
+	var roles []string
+	var assignedOrgs []string
+	for _, a := range uResp.Roles {
+		if a.OrganizationRefID != "" && !slices.Contains(assignedOrgs, a.OrganizationRefID) {
+			assignedOrgs = append(assignedOrgs, a.OrganizationRefID)
+		}
+		if code, ok := roleCodeByID[a.RoleID]; ok && code != "" && !slices.Contains(roles, code) {
+			roles = append(roles, code)
+		}
+	}
+	if len(roles) == 0 {
+		roles = []string{"VIEWER"}
+	}
+	if len(assignedOrgs) == 0 {
+		if uResp.DefaultOrganizationID != nil && *uResp.DefaultOrganizationID != "" {
+			assignedOrgs = append(assignedOrgs, *uResp.DefaultOrganizationID)
+		} else if uResp.OrganizationID != "" {
+			assignedOrgs = append(assignedOrgs, uResp.OrganizationID)
+		}
+	}
+
+	// Expand subtrees via org-service for tiered admins (HOLDING_ADMIN / SUBSIDIARY_ADMIN / BRANCH_ADMIN).
+	orgScope := slices.Clone(assignedOrgs)
+	orgSvcURL := strings.TrimRight(strings.TrimSpace(os.Getenv("ORG_SERVICE_URL")), "/")
+	if orgSvcURL != "" && httpx.AdminTierForRoles(roles) <= httpx.AdminTierBranch {
+		for _, oid := range assignedOrgs {
+			var descResp struct {
+				DescendantIDs []string `json:"descendantIds"`
+			}
+			if doInternalGET(ctx, orgSvcURL+"/organizations/"+oid+"/descendants", lookupScope, secret, &descResp) {
+				for _, did := range descResp.DescendantIDs {
+					if did != "" && did != systemOrgID && !slices.Contains(orgScope, did) {
+						orgScope = append(orgScope, did)
+					}
+				}
+			}
+		}
+	}
+
+	// Build visible organization summaries from org-service (fallback to devOrganizations).
+	var visibleOrgs []orgSummary
+	if orgSvcURL != "" && len(orgScope) > 0 {
+		var oList struct {
+			Data []struct {
+				ID       string  `json:"id"`
+				Code     string  `json:"code"`
+				Name     string  `json:"name"`
+				ParentID *string `json:"parentId"`
+			} `json:"data"`
+		}
+		if doInternalGET(ctx, orgSvcURL+"/organizations?size=100", strings.Join(orgScope, ","), secret, &oList) {
+			for _, o := range oList.Data {
+				if slices.Contains(orgScope, o.ID) {
+					visibleOrgs = append(visibleOrgs, orgSummary{
+						ID: o.ID, Code: o.Code, Name: o.Name, Type: "COMPANY", ParentID: o.ParentID, FunctionalCurrency: "IDR",
+					})
+				}
+			}
+		}
+	}
+	if len(visibleOrgs) == 0 {
+		visibleOrgs = filterOrgsForScope(orgScope, roles)
+	}
+
+	activeID := ""
+	if uResp.DefaultOrganizationID != nil && slices.Contains(orgScope, *uResp.DefaultOrganizationID) {
+		activeID = *uResp.DefaultOrganizationID
+	} else if len(orgScope) > 0 {
+		activeID = orgScope[0]
+	}
+	activeOrg := resolveOrg(activeID, "")
+	for _, o := range visibleOrgs {
+		if o.ID == activeID {
+			activeOrg = o
+			break
+		}
+	}
+	return dynamicUserSession{
+		UserID:        uResp.ID,
+		FullName:      uResp.FullName,
+		Email:         uResp.Email,
+		Roles:         roles,
+		OrgScope:      orgScope,
+		ActiveOrg:     activeOrg,
+		Organizations: visibleOrgs,
+	}, true
 }
 
 func resolveDevPersona(username string, requested orgSummary) (roles []string, orgScope []string, defaultOrg orgSummary, fullName string) {

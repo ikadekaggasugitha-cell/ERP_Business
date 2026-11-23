@@ -63,6 +63,8 @@ export interface SecurityRole {
   code: string;
   name: string;
   isSystem: boolean;
+  adminTier?: number;
+  defaultScopeType?: string;
   rowVersion: number;
 }
 
@@ -113,6 +115,13 @@ export const orgFormSchema = z.object({
     .refine((v) => v === '' || isoDateRegex.test(v), 'Use YYYY-MM-DD')
     .optional()
     .or(z.literal('')),
+  address: z.string().trim().max(300).optional().or(z.literal('')),
+  city: z.string().trim().max(120).optional().or(z.literal('')),
+  province: z.string().trim().max(120).optional().or(z.literal('')),
+  picName: z.string().trim().max(150).optional().or(z.literal('')),
+  picPhone: z.string().trim().max(50).optional().or(z.literal('')),
+  autoProvisionWarehouse: z.boolean().optional(),
+  autoProvisionCostCenter: z.boolean().optional(),
 });
 export type OrgFormValues = z.infer<typeof orgFormSchema>;
 
@@ -278,8 +287,15 @@ export function useCreateOrgTypeMutation() {
 export function useCreateOrgMutation(resource: 'organizations' | 'org-units') {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (values: OrgFormValues) =>
-      apiClient<OrgRecord>(`/${resource}`, {
+    mutationFn: (values: OrgFormValues) => {
+      const attributes: Record<string, string> = {};
+      if (values.address?.trim()) attributes.address = values.address.trim();
+      if (values.city?.trim()) attributes.city = values.city.trim();
+      if (values.province?.trim()) attributes.province = values.province.trim();
+      if (values.picName?.trim()) attributes.picName = values.picName.trim();
+      if (values.picPhone?.trim()) attributes.picPhone = values.picPhone.trim();
+
+      return apiClient<OrgRecord>(`/${resource}`, {
         method: 'POST',
         idempotencyKey: crypto.randomUUID(),
         body: JSON.stringify({
@@ -289,8 +305,12 @@ export function useCreateOrgMutation(resource: 'organizations' | 'org-units') {
           parentId: cleanOptional(values.parentId),
           effectiveFrom: cleanOptional(values.effectiveFrom),
           effectiveTo: cleanOptional(values.effectiveTo),
+          attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
+          autoProvisionWarehouse: Boolean(values.autoProvisionWarehouse),
+          autoProvisionCostCenter: Boolean(values.autoProvisionCostCenter),
         }),
-      }),
+      });
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: adminKeys.orgAll });
     },
@@ -387,6 +407,41 @@ export function useUserRolesQuery(orgId: string | undefined, userId: string | nu
   });
 }
 
+export interface ProvisionAssignmentInput {
+  organizationRefId: string;
+  roleId: string;
+  roleCode?: string;
+}
+
+export interface ProvisionUserValues extends UserFormValues {
+  assignments: ProvisionAssignmentInput[];
+}
+
+export function useProvisionUserMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (values: ProvisionUserValues) =>
+      apiClient<AdminUser>('/users/provision', {
+        method: 'POST',
+        idempotencyKey: crypto.randomUUID(),
+        body: JSON.stringify({
+          username: values.username.trim(),
+          email: values.email.trim(),
+          fullName: values.fullName.trim(),
+          defaultOrganizationId: cleanOptional(values.defaultOrganizationId),
+          assignments: values.assignments.map((a) => ({
+            organizationRefId: cleanOptional(a.organizationRefId),
+            roleId: a.roleId,
+            roleCode: a.roleCode,
+          })),
+        }),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: adminKeys.userAll });
+    },
+  });
+}
+
 export function useCreateUserMutation() {
   const qc = useQueryClient();
   return useMutation({
@@ -452,12 +507,21 @@ export function useDisableUserMutation() {
 export function useAssignUserRoleMutation(userId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ roleId, organizationRefId }: { roleId: string; organizationRefId?: string }) =>
+    mutationFn: ({
+      roleId,
+      roleCode,
+      organizationRefId,
+    }: {
+      roleId: string;
+      roleCode?: string;
+      organizationRefId?: string;
+    }) =>
       apiClient<UserRoleAssignment>(`/users/${userId}/roles`, {
         method: 'POST',
         idempotencyKey: crypto.randomUUID(),
         body: JSON.stringify({
           roleId,
+          roleCode,
           organizationRefId: cleanOptional(organizationRefId),
         }),
       }),

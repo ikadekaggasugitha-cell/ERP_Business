@@ -260,6 +260,37 @@ func (q *Queries) GetOrganization(ctx context.Context, id uuid.UUID) (OrgOrganiz
 	return i, err
 }
 
+const getOrganizationTypeByID = `-- name: GetOrganizationTypeByID :one
+SELECT id, organization_id, code, name, level_hint, is_active, row_version
+FROM org.organization_type
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+type GetOrganizationTypeByIDRow struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+	Code           string    `json:"code"`
+	Name           string    `json:"name"`
+	LevelHint      *int32    `json:"level_hint"`
+	IsActive       bool      `json:"is_active"`
+	RowVersion     int32     `json:"row_version"`
+}
+
+func (q *Queries) GetOrganizationTypeByID(ctx context.Context, id uuid.UUID) (GetOrganizationTypeByIDRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationTypeByID, id)
+	var i GetOrganizationTypeByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Code,
+		&i.Name,
+		&i.LevelHint,
+		&i.IsActive,
+		&i.RowVersion,
+	)
+	return i, err
+}
+
 const insertAncestorClosures = `-- name: InsertAncestorClosures :exec
 INSERT INTO org.organization_closure (organization_id, ancestor_id, descendant_id, depth, created_by)
 SELECT $1, c.ancestor_id, $2, c.depth + 1, $3
@@ -326,6 +357,38 @@ type InsertSelfClosureParams struct {
 func (q *Queries) InsertSelfClosure(ctx context.Context, arg InsertSelfClosureParams) error {
 	_, err := q.db.Exec(ctx, insertSelfClosure, arg.OrganizationID, arg.AncestorID, arg.CreatedBy)
 	return err
+}
+
+const listOrganizationAttributes = `-- name: ListOrganizationAttributes :many
+SELECT attr_key, attr_value
+FROM org.organization_attribute
+WHERE organization_ref_id = $1 AND deleted_at IS NULL
+ORDER BY attr_key
+`
+
+type ListOrganizationAttributesRow struct {
+	AttrKey   string `json:"attr_key"`
+	AttrValue []byte `json:"attr_value"`
+}
+
+func (q *Queries) ListOrganizationAttributes(ctx context.Context, organizationRefID uuid.UUID) ([]ListOrganizationAttributesRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationAttributes, organizationRefID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationAttributesRow
+	for rows.Next() {
+		var i ListOrganizationAttributesRow
+		if err := rows.Scan(&i.AttrKey, &i.AttrValue); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listOrganizationDescendants = `-- name: ListOrganizationDescendants :many
@@ -558,4 +621,35 @@ func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganization
 	var i UpdateOrganizationRow
 	err := row.Scan(&i.Status, &i.RowVersion)
 	return i, err
+}
+
+const upsertOrganizationAttribute = `-- name: UpsertOrganizationAttribute :exec
+INSERT INTO org.organization_attribute (
+    organization_id, organization_ref_id, attr_key, attr_value, created_by
+) VALUES (
+    $1, $2, $3, $4, $5
+)
+ON CONFLICT (organization_ref_id, attr_key) DO UPDATE
+SET attr_value = EXCLUDED.attr_value,
+    updated_by = EXCLUDED.created_by,
+    deleted_at = NULL
+`
+
+type UpsertOrganizationAttributeParams struct {
+	OrganizationID    uuid.UUID `json:"organization_id"`
+	OrganizationRefID uuid.UUID `json:"organization_ref_id"`
+	AttrKey           string    `json:"attr_key"`
+	AttrValue         []byte    `json:"attr_value"`
+	CreatedBy         uuid.UUID `json:"created_by"`
+}
+
+func (q *Queries) UpsertOrganizationAttribute(ctx context.Context, arg UpsertOrganizationAttributeParams) error {
+	_, err := q.db.Exec(ctx, upsertOrganizationAttribute,
+		arg.OrganizationID,
+		arg.OrganizationRefID,
+		arg.AttrKey,
+		arg.AttrValue,
+		arg.CreatedBy,
+	)
+	return err
 }

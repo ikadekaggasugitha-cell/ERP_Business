@@ -15,6 +15,28 @@ SELECT count(*)::bigint
 FROM org.organization_type
 WHERE deleted_at IS NULL;
 
+-- name: GetOrganizationTypeByID :one
+SELECT id, organization_id, code, name, level_hint, is_active, row_version
+FROM org.organization_type
+WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: UpsertOrganizationAttribute :exec
+INSERT INTO org.organization_attribute (
+    organization_id, organization_ref_id, attr_key, attr_value, created_by
+) VALUES (
+    $1, $2, $3, $4, $5
+)
+ON CONFLICT (organization_ref_id, attr_key) DO UPDATE
+SET attr_value = EXCLUDED.attr_value,
+    updated_by = EXCLUDED.created_by,
+    deleted_at = NULL;
+
+-- name: ListOrganizationAttributes :many
+SELECT attr_key, attr_value
+FROM org.organization_attribute
+WHERE organization_ref_id = $1 AND deleted_at IS NULL
+ORDER BY attr_key;
+
 -- name: CreateOrganization :one
 INSERT INTO org.organization (
     organization_id, code, name, organization_type_id, parent_id, path,

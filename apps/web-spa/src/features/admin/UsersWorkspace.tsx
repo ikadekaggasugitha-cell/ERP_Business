@@ -25,6 +25,7 @@ import {
   useCreateUserMutation,
   useDisableUserMutation,
   useOrganizationsQuery,
+  useProvisionUserMutation,
   useRevokeUserRoleMutation,
   useRolesQuery,
   useUpdateUserMutation,
@@ -32,6 +33,7 @@ import {
   useUsersQuery,
   userFormSchema,
   type AdminUser,
+  type ProvisionAssignmentInput,
   type UserFormValues,
 } from './admin-api';
 
@@ -55,6 +57,8 @@ interface UsersWorkspaceInnerProps {
 
 function UsersWorkspaceInner({ orgId, canWrite }: UsersWorkspaceInnerProps) {
   const isId = useUiStore((s) => s.locale) === 'id';
+  const currentUser = useAuthStore((s) => s.user);
+  const callerTier = currentUser?.adminTier ?? 99;
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,6 +70,7 @@ function UsersWorkspaceInner({ orgId, canWrite }: UsersWorkspaceInnerProps) {
 
   const [assignRoleId, setAssignRoleId] = useState('');
   const [assignOrgId, setAssignOrgId] = useState('');
+  const [provisionRows, setProvisionRows] = useState<ProvisionAssignmentInput[]>([]);
 
   const usersQuery = useUsersQuery(orgId, statusFilter, page, 25);
   const rolesQuery = useRolesQuery(orgId, 1, 100);
@@ -73,6 +78,7 @@ function UsersWorkspaceInner({ orgId, canWrite }: UsersWorkspaceInnerProps) {
   const userRolesQuery = useUserRolesQuery(orgId, rolesDrawerUser?.id ?? null);
 
   const createUser = useCreateUserMutation();
+  const provisionUser = useProvisionUserMutation();
   const updateUser = useUpdateUserMutation();
   const disableUser = useDisableUserMutation();
   const assignRole = useAssignUserRoleMutation(rolesDrawerUser?.id ?? '');
@@ -81,6 +87,14 @@ function UsersWorkspaceInner({ orgId, canWrite }: UsersWorkspaceInnerProps) {
   const users = useMemo(() => usersQuery.data?.items ?? [], [usersQuery.data]);
   const meta = usersQuery.data?.page;
   const roles = useMemo(() => rolesQuery.data?.items ?? [], [rolesQuery.data]);
+  const delegatableRoles = useMemo(
+    () =>
+      roles.filter((r) => {
+        const tier = r.adminTier ?? 99;
+        return callerTier === 0 || tier > callerTier;
+      }),
+    [roles, callerTier],
+  );
   const organizations = useMemo(() => orgsQuery.data?.items ?? [], [orgsQuery.data]);
   const assignedRoles = useMemo(() => userRolesQuery.data ?? [], [userRolesQuery.data]);
 
@@ -142,15 +156,21 @@ function UsersWorkspaceInner({ orgId, canWrite }: UsersWorkspaceInnerProps) {
         fullName: '',
         defaultOrganizationId: orgId ?? '',
       });
+      const defaultRole = delegatableRoles[0];
+      setProvisionRows(
+        defaultRole && orgId
+          ? [{ organizationRefId: orgId, roleId: defaultRole.id, roleCode: defaultRole.code }]
+          : [],
+      );
     }
-  }, [editingUser, orgId, userDialogOpen, userForm]);
+  }, [delegatableRoles, editingUser, orgId, userDialogOpen, userForm]);
 
   useEffect(() => {
     if (rolesDrawerUser) {
-      setAssignRoleId(roles[0]?.id ?? '');
+      setAssignRoleId(delegatableRoles[0]?.id ?? roles[0]?.id ?? '');
       setAssignOrgId(rolesDrawerUser.defaultOrganizationId ?? orgId ?? '');
     }
-  }, [orgId, roles, rolesDrawerUser]);
+  }, [delegatableRoles, orgId, roles, rolesDrawerUser]);
 
   const handleSaveUser = async (values: UserFormValues) => {
     try {
@@ -161,6 +181,19 @@ function UsersWorkspaceInner({ orgId, canWrite }: UsersWorkspaceInnerProps) {
           values,
         });
         toast.success(isId ? 'Pengguna diperbarui.' : 'User updated.');
+      } else if (provisionRows.length > 0) {
+        const validAssigns = provisionRows
+          .filter((row) => row.roleId && row.organizationRefId)
+          .map((row) => ({
+            ...row,
+            roleCode: roles.find((r) => r.id === row.roleId)?.code ?? row.roleCode,
+          }));
+        await provisionUser.mutateAsync({ ...values, assignments: validAssigns });
+        toast.success(
+          isId
+            ? 'Pengguna beserta penugasan divisi/site & peran berhasil dibuat.'
+            : 'User provisioned with division/site & role assignments.',
+        );
       } else {
         await createUser.mutateAsync(values);
         toast.success(isId ? 'Pengguna dibuat.' : 'User created.');
@@ -187,9 +220,11 @@ function UsersWorkspaceInner({ orgId, canWrite }: UsersWorkspaceInnerProps) {
 
   const handleAssignRole = async () => {
     if (!rolesDrawerUser || !assignRoleId) return;
+    const matchedRole = roles.find((r) => r.id === assignRoleId);
     try {
       await assignRole.mutateAsync({
         roleId: assignRoleId,
+        roleCode: matchedRole?.code,
         organizationRefId: assignOrgId,
       });
       toast.success(isId ? 'Peran ditambahkan ke pengguna.' : 'Role assigned to user.');
@@ -433,7 +468,7 @@ function UsersWorkspaceInner({ orgId, canWrite }: UsersWorkspaceInnerProps) {
           </FormField>
 
           <FormField
-            label="Default Organization"
+            label={isId ? 'Default Divisi / Site' : 'Default Organization / Division'}
             error={userForm.formState.errors.defaultOrganizationId?.message}
           >
             <Controller
@@ -448,11 +483,86 @@ function UsersWorkspaceInner({ orgId, canWrite }: UsersWorkspaceInnerProps) {
                     value: o.id,
                     label: `${o.code} — ${o.name}`,
                   }))}
-                  placeholder="Select default organization..."
+                  placeholder={isId ? 'Pilih divisi atau site utama...' : 'Select default organization...'}
                 />
               )}
             />
           </FormField>
+
+          {!editingUser && (
+            <div className="space-y-2 border-t border-[var(--border-subtle)] pt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                  {isId ? 'Penugasan Divisi / Site & Peran' : 'Division / Site & Role Assignments'}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const fallbackRole = delegatableRoles[0];
+                    setProvisionRows((prev) => [
+                      ...prev,
+                      {
+                        organizationRefId: orgId ?? organizations[0]?.id ?? '',
+                        roleId: fallbackRole?.id ?? '',
+                        roleCode: fallbackRole?.code,
+                      },
+                    ]);
+                  }}
+                >
+                  + {isId ? 'Tambah Divisi/Site' : 'Add Assignment'}
+                </Button>
+              </div>
+              {provisionRows.map((row, idx) => (
+                <div key={idx} className="grid grid-cols-1 gap-2 sm:grid-cols-12 items-center">
+                  <div className="sm:col-span-6">
+                    <Combobox
+                      value={row.organizationRefId}
+                      onValueChange={(val) =>
+                        setProvisionRows((prev) =>
+                          prev.map((item, i) => (i === idx ? { ...item, organizationRefId: val } : item)),
+                        )
+                      }
+                      options={organizations.map((o) => ({
+                        value: o.id,
+                        label: `${o.code} — ${o.name}`,
+                      }))}
+                      placeholder={isId ? 'Pilih Divisi / Site...' : 'Select Division / Site...'}
+                    />
+                  </div>
+                  <div className="sm:col-span-5">
+                    <Select
+                      value={row.roleId}
+                      onValueChange={(val) => {
+                        const r = delegatableRoles.find((x) => x.id === val);
+                        setProvisionRows((prev) =>
+                          prev.map((item, i) =>
+                            i === idx ? { ...item, roleId: val, roleCode: r?.code } : item,
+                          ),
+                        );
+                      }}
+                      options={delegatableRoles.map((r) => ({
+                        value: r.id,
+                        label: `${r.code} — ${r.name}`,
+                      }))}
+                      placeholder={isId ? 'Pilih Peran...' : 'Select Role...'}
+                    />
+                  </div>
+                  <div className="sm:col-span-1 flex justify-end">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setProvisionRows((prev) => prev.filter((_, i) => i !== idx))}
+                    >
+                      ×
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </form>
       </AppDialog>
 

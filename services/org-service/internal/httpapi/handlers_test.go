@@ -18,6 +18,28 @@ import (
 
 type fakeOrgStore struct {
 	hasChildren bool
+	typeCode    string
+	attrs       map[string]any
+}
+
+func (f *fakeOrgStore) GetOrganizationTypeByID(_ context.Context, scope []uuid.UUID, id uuid.UUID) (orgdb.GetOrganizationTypeByIDRow, error) {
+	code := f.typeCode
+	if code == "" {
+		code = "DIVISION"
+	}
+	return orgdb.GetOrganizationTypeByIDRow{ID: id, OrganizationID: scope[0], Code: code, Name: code, IsActive: true, RowVersion: 1}, nil
+}
+
+func (f *fakeOrgStore) ListAttributes(_ context.Context, _ []uuid.UUID, _ uuid.UUID) (map[string]any, error) {
+	if f.attrs == nil {
+		return map[string]any{}, nil
+	}
+	return f.attrs, nil
+}
+
+func (f *fakeOrgStore) UpsertAttributes(_ context.Context, _ []uuid.UUID, _, _ uuid.UUID, attrs map[string]any, _ uuid.UUID) error {
+	f.attrs = attrs
+	return nil
 }
 
 func (f *fakeOrgStore) CreateOrganizationType(_ context.Context, _ []uuid.UUID, _ orgdb.CreateOrganizationTypeParams) (orgdb.CreateOrganizationTypeRow, error) {
