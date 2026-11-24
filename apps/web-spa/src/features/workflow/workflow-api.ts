@@ -68,7 +68,7 @@ export type CreateDefinitionValues = z.infer<typeof createDefinitionSchema>;
 export const createInstanceSchema = z.object({
   definitionId: z.string().trim().min(1, 'Workflow definition is required'),
   documentRef: z.string().trim().min(1, 'Document reference is required').max(120),
-  assigneeId: z.string().trim().max(64).optional().or(z.literal('')),
+  assigneeId: z.string().trim().min(1, 'Assignee user ID is required (must differ from requester)').max(64),
 });
 
 export type CreateInstanceValues = z.infer<typeof createInstanceSchema>;
@@ -271,7 +271,7 @@ export function useCreateWorkflowInstanceMutation() {
         body: JSON.stringify({
           definitionId: values.definitionId.trim(),
           documentRef: values.documentRef.trim(),
-          assigneeId: values.assigneeId?.trim() ? values.assigneeId.trim() : undefined,
+          assigneeId: values.assigneeId.trim(),
         }),
       }),
     onSuccess: () => {

@@ -626,5 +626,91 @@ func TestTieredAdminHierarchyPersonasAndOrgIsolation(t *testing.T) {
 	}
 }
 
+func TestRefreshRotationLogoutRevocationAndOpenAPI(t *testing.T) {
+	router, err := proxy.NewRouter()
+	if err != nil {
+		t.Fatalf("NewRouter: %v", err)
+	}
+	secret := []byte("test-gateway-secret-refresh-revoke")
+	mux := newGatewayMux(router, sse.NewHub(), secret, true, false)
+
+	// 1. Login returns access token + refreshToken
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin.ho","password":"dev"}`))
+	loginRec := httptest.NewRecorder()
+	mux.ServeHTTP(loginRec, loginReq)
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login got %d: %s", loginRec.Code, loginRec.Body.String())
+	}
+	var loginResp struct {
+		Token        string `json:"token"`
+		RefreshToken string `json:"refreshToken"`
+	}
+	if err := json.Unmarshal(loginRec.Body.Bytes(), &loginResp); err != nil {
+		t.Fatalf("unmarshal login: %v", err)
+	}
+	if loginResp.Token == "" || loginResp.RefreshToken == "" {
+		t.Fatalf("expected token and refreshToken, got %+v", loginResp)
+	}
+
+	// 2. Refresh rotates refresh token and returns fresh access token
+	refReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewBufferString(`{"refreshToken":"`+loginResp.RefreshToken+`"}`))
+	refRec := httptest.NewRecorder()
+	mux.ServeHTTP(refRec, refReq)
+	if refRec.Code != http.StatusOK {
+		t.Fatalf("refresh got %d: %s", refRec.Code, refRec.Body.String())
+	}
+	var refResp struct {
+		Token        string `json:"token"`
+		RefreshToken string `json:"refreshToken"`
+	}
+	if err := json.Unmarshal(refRec.Body.Bytes(), &refResp); err != nil {
+		t.Fatalf("unmarshal refresh: %v", err)
+	}
+	if refResp.Token == "" || refResp.RefreshToken == "" || refResp.RefreshToken == loginResp.RefreshToken {
+		t.Fatalf("expected rotated refreshToken, got %+v", refResp)
+	}
+
+	// 3. Replaying old refreshToken fails with 401 REFRESH_TOKEN_REUSED
+	replayReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewBufferString(`{"refreshToken":"`+loginResp.RefreshToken+`"}`))
+	replayRec := httptest.NewRecorder()
+	mux.ServeHTTP(replayRec, replayReq)
+	if replayRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 on refresh token replay, got %d", replayRec.Code)
+	}
+
+	// 4. Logout revokes active access JWT (jti); subsequent /auth/me fails with 401
+	meBefore := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	meBefore.Header.Set("Authorization", "Bearer "+refResp.Token)
+	meBeforeRec := httptest.NewRecorder()
+	mux.ServeHTTP(meBeforeRec, meBefore)
+	if meBeforeRec.Code != http.StatusOK {
+		t.Fatalf("/auth/me before logout got %d, want 200", meBeforeRec.Code)
+	}
+
+	logoutReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	logoutReq.Header.Set("Authorization", "Bearer "+refResp.Token)
+	logoutRec := httptest.NewRecorder()
+	mux.ServeHTTP(logoutRec, logoutReq)
+	if logoutRec.Code != http.StatusNoContent {
+		t.Fatalf("logout got %d, want 204", logoutRec.Code)
+	}
+
+	meAfter := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	meAfter.Header.Set("Authorization", "Bearer "+refResp.Token)
+	meAfterRec := httptest.NewRecorder()
+	mux.ServeHTTP(meAfterRec, meAfter)
+	if meAfterRec.Code != http.StatusUnauthorized {
+		t.Fatalf("/auth/me after logout got %d, want 401 (revoked jti)", meAfterRec.Code)
+	}
+
+	// 5. GET /openapi.yaml serves canonical OpenAPI 3.1 spec
+	specReq := httptest.NewRequest(http.MethodGet, "/openapi.yaml", nil)
+	specRec := httptest.NewRecorder()
+	mux.ServeHTTP(specRec, specReq)
+	if specRec.Code != http.StatusOK || !bytes.Contains(specRec.Body.Bytes(), []byte("openapi: 3.1.0")) {
+		t.Fatalf("GET /openapi.yaml got %d body=%q", specRec.Code, specRec.Body.String())
+	}
+}
+
 
 

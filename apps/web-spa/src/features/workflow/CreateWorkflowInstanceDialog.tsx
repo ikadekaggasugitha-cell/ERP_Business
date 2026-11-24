@@ -126,13 +126,14 @@ export function CreateWorkflowInstanceDialog({
         </FormField>
 
         <FormField
-          label="Assignee User ID (Optional)"
+          label="Assignee User ID"
           htmlFor="wf-assignee-id"
           error={errors.assigneeId?.message}
+          required
         >
           <Input
             id="wf-assignee-id"
-            placeholder="UUID (defaults to system/actor)"
+            placeholder="Approver User UUID (must differ from requester)"
             disabled={createInstance.isPending}
             {...register('assigneeId')}
           />

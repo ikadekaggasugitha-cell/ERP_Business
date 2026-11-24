@@ -1,0 +1,99 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: erp-platform
+    env: production
+
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+scrape_configs:
+  - job_name: erp-api-gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - api-gateway:8000
+        labels:
+          service: api-gateway
+          component: gateway
+
+  - job_name: erp-microservices
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - gl-service:8080
+          - ap-service:8080
+          - audit-service:8080
+          - ar-service:8080
+          - coa-service:8080
+          - tax-service:8080
+          - treasury-cashbank-service:8080
+          - user-service:8080
+          - security-service:8080
+          - masterdata-service:8080
+          - org-service:8080
+          - workflow-service:8080
+          - procurement-service:8080
+          - inventory-service:8080
+          - manufacturing-service:8080
+          - sales-service:8080
+          - hr-service:8080
+          - payroll-service:8080
+          - reporting-service:8080
+          - currency-service:8080
+          - fixedasset-service:8080
+          - dimension-service:8080
+          - budget-service:8080
+          - financialclose-service:8080
+          - consolidation-service:8080
+          - project-service:8080
+          - asset-service:8080
+          - maintenance-service:8080
+          - crm-service:8080
+          - localization-service:8080
+        labels:
+          component: microservice
+
+  - job_name: erp-microservices-local-hostports
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:8000
+          - host.docker.internal:8081
+          - host.docker.internal:8082
+          - host.docker.internal:8083
+          - host.docker.internal:8084
+          - host.docker.internal:8085
+          - host.docker.internal:8086
+          - host.docker.internal:8087
+          - host.docker.internal:8088
+          - host.docker.internal:8089
+          - host.docker.internal:8090
+          - host.docker.internal:8091
+          - host.docker.internal:8092
+          - host.docker.internal:8093
+          - host.docker.internal:8094
+          - host.docker.internal:8095
+          - host.docker.internal:8096
+          - host.docker.internal:8097
+          - host.docker.internal:8098
+          - host.docker.internal:8099
+          - host.docker.internal:8100
+          - host.docker.internal:8101
+          - host.docker.internal:8102
+          - host.docker.internal:8103
+          - host.docker.internal:8104
+          - host.docker.internal:8105
+          - host.docker.internal:8106
+          - host.docker.internal:8107
+          - host.docker.internal:8108
+          - host.docker.internal:8109
+          - host.docker.internal:8110
+        labels:
+          environment: local-compose
+
+  - job_name: otel-collector
+    static_configs:
+      - targets:
+          - otel-collector:8889

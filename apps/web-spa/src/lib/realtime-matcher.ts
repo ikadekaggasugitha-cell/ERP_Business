@@ -182,6 +182,82 @@ export function resolveInvalidatedQueryKeys(eventKey: string): string[][] {
     invalidated.add('audit-events');
   }
 
+  if (/^(?:erp\.)?fixedasset\./.test(key)) {
+    invalidated.add('fixed-assets');
+    invalidated.add('asset-categories');
+    invalidated.add('journals');
+    invalidated.add('dashboard-metrics');
+    invalidated.add('audit-events');
+  }
+
+  if (/^(?:erp\.)?dimension\./.test(key)) {
+    invalidated.add('cost-centers');
+    invalidated.add('profit-centers');
+    invalidated.add('allocation-rules');
+    invalidated.add('audit-events');
+  }
+
+  if (/^(?:erp\.)?budget\./.test(key)) {
+    invalidated.add('budgets');
+    invalidated.add('budget-policies');
+    invalidated.add('budget-commitments');
+    invalidated.add('dashboard-metrics');
+    invalidated.add('audit-events');
+  }
+
+  if (/^(?:erp\.)?financialclose\./.test(key)) {
+    invalidated.add('closing-runs');
+    invalidated.add('closing-templates');
+    invalidated.add('period-statuses');
+    invalidated.add('period-reopenings');
+    invalidated.add('fiscal-periods');
+    invalidated.add('audit-events');
+  }
+
+  if (/^(?:erp\.)?consolidation\./.test(key)) {
+    invalidated.add('consolidation-groups');
+    invalidated.add('elimination-rules');
+    invalidated.add('consolidation-runs');
+    invalidated.add('audit-events');
+  }
+
+  if (/^(?:erp\.)?project\./.test(key)) {
+    invalidated.add('projects');
+    invalidated.add('project-billings');
+    invalidated.add('ar-invoices');
+    invalidated.add('audit-events');
+  }
+
+  if (/^(?:erp\.)?asset\./.test(key)) {
+    invalidated.add('operational-assets');
+    invalidated.add('asset-movements');
+    invalidated.add('asset-verifications');
+    invalidated.add('audit-events');
+  }
+
+  if (/^(?:erp\.)?maintenance\./.test(key)) {
+    invalidated.add('maintenance-schedules');
+    invalidated.add('maintenance-work-orders');
+    invalidated.add('inventory-items');
+    invalidated.add('audit-events');
+  }
+
+  if (/^(?:erp\.)?crm\./.test(key)) {
+    invalidated.add('crm-leads');
+    invalidated.add('crm-opportunities');
+    invalidated.add('crm-segments');
+    invalidated.add('crm-support-cases');
+    invalidated.add('sales-orders');
+    invalidated.add('audit-events');
+  }
+
+  if (/^(?:erp\.)?localization\./.test(key)) {
+    invalidated.add('localization-languages');
+    invalidated.add('localization-translations');
+    invalidated.add('localization-formats');
+    invalidated.add('audit-events');
+  }
+
   if (invalidated.size === 0) {
     invalidated.add('dashboard-metrics');
     invalidated.add('audit-events');
@@ -243,4 +319,26 @@ export const KNOWN_SSE_EVENT_TYPES = [
   'currency.exchange_rate.updated',
   'erp.audit.event.recorded.v1',
   'audit.event.recorded',
+  'erp.dimension.cost_center.upserted.v1',
+  'erp.dimension.profit_center.upserted.v1',
+  'erp.dimension.allocation_rule.upserted.v1',
+  'erp.dimension.allocation_rule.executed.v1',
+  'erp.localization.language.updated.v1',
+  'erp.localization.bundle.updated.v1',
+  'erp.localization.locale_format.updated.v1',
+  'erp.fixedasset.asset.acquired.v1',
+  'erp.fixedasset.depreciation.posted.v1',
+  'erp.fixedasset.asset.disposed.v1',
+  'erp.budget.approved.v1',
+  'erp.budget.commitment.created.v1',
+  'erp.financialclose.period.closed.v1',
+  'erp.financialclose.period.locked.v1',
+  'erp.financialclose.period.reopened.v1',
+  'erp.consolidation.run.finalized.v1',
+  'erp.project.billing.approved.v1',
+  'erp.asset.movement.completed.v1',
+  'erp.asset.verification.recorded.v1',
+  'erp.maintenance.workorder.parts_requested.v1',
+  'erp.maintenance.workorder.completed.v1',
+  'erp.crm.opportunity.won.v1',
 ];

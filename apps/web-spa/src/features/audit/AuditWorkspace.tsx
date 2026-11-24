@@ -78,6 +78,8 @@ function AuditWorkspaceInner({
     size: filters.size,
     entityType: filters.entityType,
     action: filters.action,
+    from: filters.dateFrom || undefined,
+    to: filters.dateTo || undefined,
   });
 
   const events = useMemo(() => eventsQuery.data?.items ?? [], [eventsQuery.data]);

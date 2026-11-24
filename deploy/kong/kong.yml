@@ -1,0 +1,184 @@
+_format_version: "3.0"
+_transform: true
+
+upstreams:
+  - name: erp-api-gateway-upstream
+    algorithm: round-robin
+    healthchecks:
+      active:
+        http_path: /readyz
+        healthy:
+          interval: 10
+          successes: 2
+        unhealthy:
+          interval: 5
+          http_failures: 3
+          timeouts: 3
+    targets:
+      - target: api-gateway.erp-platform.svc.cluster.local:8000
+        weight: 100
+
+  - name: erp-web-spa-upstream
+    algorithm: round-robin
+    healthchecks:
+      active:
+        http_path: /
+        healthy:
+          interval: 15
+          successes: 2
+        unhealthy:
+          interval: 5
+          http_failures: 3
+    targets:
+      - target: web-spa.erp-platform.svc.cluster.local:8080
+        weight: 100
+
+services:
+  - name: erp-api-gateway
+    host: erp-api-gateway-upstream
+    port: 8000
+    protocol: http
+    connect_timeout: 5000
+    read_timeout: 60000
+    write_timeout: 60000
+    retries: 2
+    routes:
+      - name: erp-api-v1-rest
+        paths:
+          - /api/v1
+        strip_path: false
+        preserve_host: true
+        protocols:
+          - https
+        methods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+      - name: erp-openapi-spec
+        paths:
+          - /openapi.yaml
+        strip_path: false
+        protocols:
+          - https
+        methods:
+          - GET
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - https://app.erp.example
+            - https://admin.erp.example
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+            - Idempotency-Key
+            - If-Match
+            - X-Organization-Id
+            - X-Correlation-Id
+            - traceparent
+            - tracestate
+          exposed_headers:
+            - ETag
+            - X-Correlation-Id
+            - Idempotency-Replayed
+            - traceparent
+          credentials: true
+          max_age: 3600
+      - name: rate-limiting
+        config:
+          minute: 600
+          hour: 20000
+          policy: redis
+          redis_host: redis.erp-platform.svc.cluster.local
+          redis_port: 6379
+          fault_tolerant: true
+          hide_client_headers: false
+      - name: request-size-limiting
+        config:
+          allowed_payload_size: 2
+          size_unit: megabytes
+      - name: response-transformer
+        config:
+          add:
+            headers:
+              - "Strict-Transport-Security: max-age=63072000; includeSubDomains; preload"
+              - "X-Content-Type-Options: nosniff"
+              - "X-Frame-Options: DENY"
+              - "Referrer-Policy: strict-origin-when-cross-origin"
+              - "Permissions-Policy: camera=(), microphone=(), geolocation=()"
+
+  - name: erp-api-gateway-sse
+    host: erp-api-gateway-upstream
+    port: 8000
+    protocol: http
+    connect_timeout: 5000
+    read_timeout: 3600000
+    write_timeout: 3600000
+    retries: 0
+    routes:
+      - name: erp-api-v1-sse
+        paths:
+          - /api/v1/stream/events
+        strip_path: false
+        preserve_host: true
+        response_buffering: false
+        protocols:
+          - https
+        methods:
+          - GET
+          - OPTIONS
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - https://app.erp.example
+            - https://admin.erp.example
+          methods:
+            - GET
+            - OPTIONS
+          headers:
+            - Authorization
+            - Last-Event-ID
+            - X-Organization-Id
+            - X-Correlation-Id
+          credentials: true
+      - name: response-transformer
+        config:
+          add:
+            headers:
+              - "Cache-Control: no-cache, no-transform"
+              - "X-Accel-Buffering: no"
+
+  - name: erp-web-spa
+    host: erp-web-spa-upstream
+    port: 8080
+    protocol: http
+    connect_timeout: 5000
+    read_timeout: 30000
+    write_timeout: 30000
+    routes:
+      - name: erp-frontend-root
+        paths:
+          - /
+        strip_path: false
+        protocols:
+          - https
+    plugins:
+      - name: response-transformer
+        config:
+          add:
+            headers:
+              - "Strict-Transport-Security: max-age=63072000; includeSubDomains; preload"
+              - "X-Content-Type-Options: nosniff"
+              - "X-Frame-Options: DENY"
+              - "Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.erp.example; img-src 'self' data:; style-src 'self' 'unsafe-inline'"

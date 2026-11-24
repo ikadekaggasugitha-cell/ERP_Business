@@ -1,0 +1,49 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: erp-prod
+
+resources:
+  - ../../base
+
+labels:
+  - pairs:
+      app.kubernetes.io/environment: production
+    includeSelectors: false
+
+patches:
+  - target:
+      kind: Namespace
+      name: erp-platform
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: erp-prod
+  - target:
+      kind: Deployment
+      name: api-gateway
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      kind: Deployment
+      name: gl-service
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      kind: Deployment
+      name: reporting-service
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      kind: Deployment
+      name: audit-service
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3

@@ -1,0 +1,109 @@
+---
+# CloudNativePG PostgreSQL 16 HA Cluster (30 ERP service databases)
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: erp-postgres
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/part-of: erp-platform
+    app.kubernetes.io/component: database
+spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+  primaryUpdateStrategy: unsupervised
+  storage:
+    size: 200Gi
+    storageClass: standard-rwo
+  walStorage:
+    size: 50Gi
+    storageClass: standard-rwo
+  postgresql:
+    parameters:
+      max_connections: "500"
+      shared_buffers: "2GB"
+      effective_cache_size: "6GB"
+      work_mem: "16MB"
+      maintenance_work_mem: "256MB"
+      wal_level: "logical"
+      max_slot_wal_keep_size: "10GB"
+      log_min_duration_statement: "500"
+      idle_in_transaction_session_timeout: "60000"
+      statement_timeout: "30000"
+  monitoring:
+    enablePodMonitor: true
+  bootstrap:
+    initdb:
+      database: erp_bootstrap
+      owner: erp_migrator
+      secret:
+        name: erp-db-migrator-secret
+  backup:
+    retentionPolicy: "30d"
+    barmanObjectStore:
+      destinationPath: "s3://erp-pg-backups/erp-postgres"
+      wal:
+        compression: gzip
+        maxParallel: 4
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+---
+# CloudNativePG PgBouncer Transaction Pooler (ADR-015: supports 10,000+ client conns)
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: erp-postgres-pooler-rw
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/part-of: erp-platform
+    app.kubernetes.io/component: database
+spec:
+  cluster:
+    name: erp-postgres
+  instances: 3
+  type: rw
+  pgbouncer:
+    poolMode: transaction
+    parameters:
+      max_client_conn: "10000"
+      default_pool_size: "25"
+      min_pool_size: "5"
+      reserve_pool_size: "10"
+      server_idle_timeout: "300"
+      query_wait_timeout: "30"
+  template:
+    spec:
+      containers:
+        - name: pgbouncer
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+---
+# CloudNativePG Read-Only Pooler for reporting/analytics workloads
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: erp-postgres-pooler-ro
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/part-of: erp-platform
+    app.kubernetes.io/component: database
+spec:
+  cluster:
+    name: erp-postgres
+  instances: 2
+  type: ro
+  pgbouncer:
+    poolMode: transaction
+    parameters:
+      max_client_conn: "5000"
+      default_pool_size: "20"

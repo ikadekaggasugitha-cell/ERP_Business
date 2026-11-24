@@ -7,20 +7,113 @@ import type { AuthSessionResponse, Organization, User } from '../types';
 export const DEFAULT_HOLDING_ORG: Organization = {
   id: '11111111-1111-1111-1111-111111111111',
   code: 'HLD-01',
-  name: 'PT Sinergi Investasi Properti (Holding)',
+  name: 'PT Sinergi Investasi Properti (Head Office / Holding)',
   type: 'HOLDING',
   parentId: null,
   functionalCurrency: 'IDR',
 };
 
-export const DEFAULT_BRANCH_ORG: Organization = {
+export const DEFAULT_SUB_PRO_ORG: Organization = {
   id: '22222222-2222-2222-2222-222222222222',
-  code: 'BRC-JKT',
-  name: 'PT Sinergi Properti Jakarta (Branch)',
-  type: 'BRANCH',
+  code: 'SUB-PRO',
+  name: 'PT Sinergi Properti Jakarta (Anak Perusahaan)',
+  type: 'COMPANY',
   parentId: '11111111-1111-1111-1111-111111111111',
   functionalCurrency: 'IDR',
 };
+
+export const DEFAULT_SUB_LOG_ORG: Organization = {
+  id: '33333333-3333-3333-3333-333333333333',
+  code: 'SUB-LOG',
+  name: 'PT Sinergi Logistik Nusantara (Anak Perusahaan)',
+  type: 'COMPANY',
+  parentId: '11111111-1111-1111-1111-111111111111',
+  functionalCurrency: 'IDR',
+};
+
+export const DEFAULT_BRANCH_ORG: Organization = {
+  id: '44444444-4444-4444-4444-444444444444',
+  code: 'BRC-JKT',
+  name: 'Cabang Jakarta Selatan (Branch)',
+  type: 'BRANCH',
+  parentId: '22222222-2222-2222-2222-222222222222',
+  functionalCurrency: 'IDR',
+};
+
+export const DEFAULT_DIVISIONS: Organization[] = [
+  {
+    id: '11111111-0000-4000-8000-000000000001',
+    code: 'DIV-FIN',
+    name: 'Divisi Finance & Accounting',
+    type: 'DIVISION',
+    parentId: '11111111-1111-1111-1111-111111111111',
+    functionalCurrency: 'IDR',
+  },
+  {
+    id: '11111111-0000-4000-8000-000000000002',
+    code: 'DIV-TAX',
+    name: 'Divisi Tax & Treasury',
+    type: 'DIVISION',
+    parentId: '11111111-1111-1111-1111-111111111111',
+    functionalCurrency: 'IDR',
+  },
+  {
+    id: '11111111-0000-4000-8000-000000000003',
+    code: 'DIV-PRC',
+    name: 'Divisi Procurement & Purchasing',
+    type: 'DIVISION',
+    parentId: '22222222-2222-2222-2222-222222222222',
+    functionalCurrency: 'IDR',
+  },
+  {
+    id: '11111111-0000-4000-8000-000000000004',
+    code: 'DIV-LOG',
+    name: 'Divisi Warehouse & Logistics',
+    type: 'DIVISION',
+    parentId: '33333333-3333-3333-3333-333333333333',
+    functionalCurrency: 'IDR',
+  },
+  {
+    id: '11111111-0000-4000-8000-000000000005',
+    code: 'DIV-SLS',
+    name: 'Divisi Sales & CRM',
+    type: 'DIVISION',
+    parentId: '22222222-2222-2222-2222-222222222222',
+    functionalCurrency: 'IDR',
+  },
+  {
+    id: '11111111-0000-4000-8000-000000000006',
+    code: 'DIV-OPS',
+    name: 'Divisi Operations, Project & Maintenance',
+    type: 'DIVISION',
+    parentId: '22222222-2222-2222-2222-222222222222',
+    functionalCurrency: 'IDR',
+  },
+  {
+    id: '11111111-0000-4000-8000-000000000007',
+    code: 'DIV-HR',
+    name: 'Divisi HR & Payroll',
+    type: 'DIVISION',
+    parentId: '11111111-1111-1111-1111-111111111111',
+    functionalCurrency: 'IDR',
+  },
+  {
+    id: '11111111-0000-4000-8000-000000000008',
+    code: 'DIV-AUD',
+    name: 'Divisi IT & Internal Audit',
+    type: 'DIVISION',
+    parentId: '11111111-1111-1111-1111-111111111111',
+    functionalCurrency: 'IDR',
+  },
+];
+
+export const DEFAULT_ORGANIZATIONS: Organization[] = [
+  DEFAULT_HOLDING_ORG,
+  DEFAULT_SUB_PRO_ORG,
+  DEFAULT_SUB_LOG_ORG,
+  DEFAULT_BRANCH_ORG,
+  ...DEFAULT_DIVISIONS,
+];
 
 const ACTIVE_ORG_STORAGE_KEY = 'erp_active_org_id';
 
@@ -80,7 +173,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: null,
   activeOrg: null,
-  organizations: [DEFAULT_HOLDING_ORG, DEFAULT_BRANCH_ORG],
+  organizations: DEFAULT_ORGANIZATIONS,
   isAuthenticated: false,
   isHydrating: false,
   hasHydrated: false,

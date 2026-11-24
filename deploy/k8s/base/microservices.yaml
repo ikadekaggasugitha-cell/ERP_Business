@@ -1,0 +1,4340 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gl-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: gl-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gl-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gl-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gl-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-gl-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/gl_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gl-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: gl-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: gl-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gl-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gl-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gl-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gl-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ap-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: ap-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ap-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ap-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ap-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-ap-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/ap_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ap-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: ap-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: ap-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ap-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ap-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ap-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ap-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audit-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: audit-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: audit-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: audit-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: audit-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-audit-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/audit_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: audit-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: audit-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: audit-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: audit-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: audit-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: audit-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: audit-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ar-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: ar-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ar-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ar-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ar-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-ar-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/ar_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ar-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: ar-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: ar-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ar-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ar-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ar-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ar-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coa-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: coa-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: coa-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: coa-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: coa-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-coa-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/coa_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coa-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: coa-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: coa-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: coa-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: coa-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: coa-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: coa-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tax-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: tax-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tax-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tax-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: tax-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-tax-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/tax_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tax-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: tax-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: tax-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: tax-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: tax-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: tax-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tax-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: treasury-cashbank-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: treasury-cashbank-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: treasury-cashbank-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: treasury-cashbank-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: treasury-cashbank-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-treasury-cashbank-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/treasury_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: treasury-cashbank-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: treasury-cashbank-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: treasury-cashbank-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: treasury-cashbank-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: treasury-cashbank-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: treasury-cashbank-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: treasury-cashbank-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: user-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: user-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: user-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: user-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-user-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/user_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: user-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: user-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: user-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: user-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: user-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: user-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: security-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: security-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: security-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: security-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-security-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/security_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: security-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: security-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: security-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: security-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: security-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: security-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: security-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: masterdata-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: masterdata-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: masterdata-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: masterdata-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: masterdata-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-masterdata-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/masterdata_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: masterdata-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: masterdata-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: masterdata-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: masterdata-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: masterdata-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: masterdata-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: masterdata-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: org-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: org-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: org-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: org-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: org-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-org-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/org_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: org-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: org-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: org-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: org-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: org-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: org-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: org-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workflow-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: workflow-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: workflow-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: workflow-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: workflow-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-workflow-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/workflow_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: workflow-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: workflow-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: workflow-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: workflow-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: workflow-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: workflow-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: workflow-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: procurement-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: procurement-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: procurement-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: procurement-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: procurement-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-procurement-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/procurement_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: procurement-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: procurement-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: procurement-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: procurement-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: procurement-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: procurement-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: procurement-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: inventory-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: inventory-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: inventory-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: inventory-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-inventory-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/inventory_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: inventory-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: inventory-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: inventory-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: inventory-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: inventory-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: inventory-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manufacturing-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: manufacturing-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: manufacturing-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: manufacturing-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: manufacturing-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-manufacturing-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/manufacturing_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: manufacturing-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: manufacturing-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: manufacturing-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: manufacturing-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: manufacturing-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: manufacturing-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: manufacturing-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sales-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: sales-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sales-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sales-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sales-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-sales-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/sales_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sales-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: sales-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: sales-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: sales-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sales-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sales-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sales-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hr-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: hr-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hr-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hr-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: hr-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-hr-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/hr_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+            - name: PII_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: erp-pii-secrets
+                  key: PII_ENCRYPTION_KEY
+            - name: PII_ENCRYPTION_KEY_PREVIOUS
+              valueFrom:
+                secretKeyRef:
+                  name: erp-pii-secrets
+                  key: PII_ENCRYPTION_KEY_PREVIOUS
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hr-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: hr-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: hr-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hr-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hr-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: hr-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hr-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payroll-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: payroll-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payroll-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: payroll-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: payroll-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-payroll-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/payroll_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+            - name: PII_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: erp-pii-secrets
+                  key: PII_ENCRYPTION_KEY
+            - name: PII_ENCRYPTION_KEY_PREVIOUS
+              valueFrom:
+                secretKeyRef:
+                  name: erp-pii-secrets
+                  key: PII_ENCRYPTION_KEY_PREVIOUS
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payroll-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: payroll-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: payroll-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: payroll-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: payroll-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: payroll-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payroll-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reporting-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: reporting-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: reporting-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: reporting-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: reporting-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-reporting-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/reporting_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reporting-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: reporting-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: reporting-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: reporting-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: reporting-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: reporting-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: reporting-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: currency-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: currency-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: currency-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: currency-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: currency-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-currency-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/currency_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: currency-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: currency-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: currency-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: currency-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: currency-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: currency-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: currency-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fixedasset-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: fixedasset-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fixedasset-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fixedasset-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: fixedasset-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-fixedasset-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/fixedasset_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fixedasset-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: fixedasset-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: fixedasset-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fixedasset-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fixedasset-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: fixedasset-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fixedasset-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dimension-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: dimension-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dimension-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dimension-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: dimension-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-dimension-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/dimension_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dimension-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: dimension-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: dimension-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: dimension-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: dimension-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: dimension-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dimension-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: budget-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: budget-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: budget-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: budget-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: budget-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-budget-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/budget_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: budget-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: budget-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: budget-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: budget-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: budget-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: budget-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: budget-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: financialclose-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: financialclose-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: financialclose-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: financialclose-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: financialclose-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-financialclose-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/financialclose_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: financialclose-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: financialclose-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: financialclose-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: financialclose-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: financialclose-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: financialclose-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: financialclose-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consolidation-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: consolidation-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: consolidation-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: consolidation-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: consolidation-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-consolidation-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/consolidation_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: consolidation-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: consolidation-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: consolidation-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: consolidation-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: consolidation-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: consolidation-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: consolidation-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: project-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: project-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: project-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: project-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: project-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-project-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/project_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: project-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: project-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: project-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: project-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: project-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: project-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: project-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: asset-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: asset-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: asset-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: asset-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: asset-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-asset-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/asset_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: asset-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: asset-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: asset-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: asset-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: asset-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: asset-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: asset-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maintenance-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: maintenance-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: maintenance-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: maintenance-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: maintenance-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-maintenance-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/maintenance_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: maintenance-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: maintenance-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: maintenance-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: maintenance-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: maintenance-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: maintenance-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: maintenance-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crm-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: crm-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: crm-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: crm-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: crm-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-crm-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/crm_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: crm-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: crm-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: crm-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: crm-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: crm-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: crm-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: crm-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: localization-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: localization-service
+    app.kubernetes.io/component: microservice
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: localization-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: localization-service
+        app.kubernetes.io/component: microservice
+        app.kubernetes.io/part-of: erp-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: localization-service
+          image: ghcr.io/sinergiinvestasiproperti/erp-localization-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: REQUIRE_RBAC
+              value: "true"
+            - name: DATABASE_MAX_OPEN_CONNS
+              value: "5"
+            - name: ERP_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_USER
+            - name: ERP_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: erp-db-app-secret
+                  key: ERP_APP_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/localization_db?sslmode=require"
+            - name: KAFKA_BROKERS
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4318"
+            - name: GATEWAY_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-platform-secrets
+                  key: GATEWAY_HMAC_SECRET
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: localization-service
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: localization-service
+    app.kubernetes.io/component: microservice
+spec:
+  selector:
+    app.kubernetes.io/name: localization-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: localization-service
+  namespace: erp-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: localization-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: localization-service
+  namespace: erp-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: localization-service

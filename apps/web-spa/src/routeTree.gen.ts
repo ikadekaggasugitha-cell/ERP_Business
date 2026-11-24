@@ -14,17 +14,27 @@ import { Route as PublicRouteImport } from './routes/_public'
 import { Route as AuthIndexRouteImport } from './routes/_auth/index'
 import { Route as AuthApRouteImport } from './routes/_auth/ap'
 import { Route as AuthArRouteImport } from './routes/_auth/ar'
+import { Route as AuthAssetsRouteImport } from './routes/_auth/assets'
 import { Route as AuthAuditRouteImport } from './routes/_auth/audit'
+import { Route as AuthBudgetsRouteImport } from './routes/_auth/budgets'
 import { Route as AuthCoaRouteImport } from './routes/_auth/coa'
+import { Route as AuthConsolidationRouteImport } from './routes/_auth/consolidation'
+import { Route as AuthCrmRouteImport } from './routes/_auth/crm'
 import { Route as AuthCurrencyRouteImport } from './routes/_auth/currency'
+import { Route as AuthDimensionsRouteImport } from './routes/_auth/dimensions'
+import { Route as AuthFinancialCloseRouteImport } from './routes/_auth/financial-close'
+import { Route as AuthFixedAssetsRouteImport } from './routes/_auth/fixed-assets'
 import { Route as AuthHrRouteImport } from './routes/_auth/hr'
 import { Route as AuthInventoryRouteImport } from './routes/_auth/inventory'
 import { Route as AuthJournalsRouteImport } from './routes/_auth/journals'
+import { Route as AuthLocalizationRouteImport } from './routes/_auth/localization'
+import { Route as AuthMaintenanceRouteImport } from './routes/_auth/maintenance'
 import { Route as AuthManufacturingRouteImport } from './routes/_auth/manufacturing'
 import { Route as AuthMasterdataRouteImport } from './routes/_auth/masterdata'
 import { Route as AuthOrganizationsRouteImport } from './routes/_auth/organizations'
 import { Route as AuthPayrollRouteImport } from './routes/_auth/payroll'
 import { Route as AuthProcurementRouteImport } from './routes/_auth/procurement'
+import { Route as AuthProjectsRouteImport } from './routes/_auth/projects'
 import { Route as AuthReportsRouteImport } from './routes/_auth/reports'
 import { Route as AuthSalesRouteImport } from './routes/_auth/sales'
 import { Route as AuthSecurityRouteImport } from './routes/_auth/security'
@@ -33,7 +43,10 @@ import { Route as AuthTaxRouteImport } from './routes/_auth/tax'
 import { Route as AuthTreasuryRouteImport } from './routes/_auth/treasury'
 import { Route as AuthUsersRouteImport } from './routes/_auth/users'
 import { Route as AuthWorkflowRouteImport } from './routes/_auth/workflow'
+import { Route as PublicDeleteAccountRouteImport } from './routes/_public/delete-account'
 import { Route as PublicLoginRouteImport } from './routes/_public/login'
+import { Route as PublicPrivacyRouteImport } from './routes/_public/privacy'
+import { Route as PublicTermsRouteImport } from './routes/_public/terms'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/_auth',
@@ -58,9 +71,19 @@ const AuthArRoute = AuthArRouteImport.update({
   path: '/ar',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthAssetsRoute = AuthAssetsRouteImport.update({
+  id: '/assets',
+  path: '/assets',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthAuditRoute = AuthAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthBudgetsRoute = AuthBudgetsRouteImport.update({
+  id: '/budgets',
+  path: '/budgets',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthCoaRoute = AuthCoaRouteImport.update({
@@ -68,9 +91,34 @@ const AuthCoaRoute = AuthCoaRouteImport.update({
   path: '/coa',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthConsolidationRoute = AuthConsolidationRouteImport.update({
+  id: '/consolidation',
+  path: '/consolidation',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthCrmRoute = AuthCrmRouteImport.update({
+  id: '/crm',
+  path: '/crm',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthCurrencyRoute = AuthCurrencyRouteImport.update({
   id: '/currency',
   path: '/currency',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthDimensionsRoute = AuthDimensionsRouteImport.update({
+  id: '/dimensions',
+  path: '/dimensions',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthFinancialCloseRoute = AuthFinancialCloseRouteImport.update({
+  id: '/financial-close',
+  path: '/financial-close',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthFixedAssetsRoute = AuthFixedAssetsRouteImport.update({
+  id: '/fixed-assets',
+  path: '/fixed-assets',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthHrRoute = AuthHrRouteImport.update({
@@ -86,6 +134,16 @@ const AuthInventoryRoute = AuthInventoryRouteImport.update({
 const AuthJournalsRoute = AuthJournalsRouteImport.update({
   id: '/journals',
   path: '/journals',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthLocalizationRoute = AuthLocalizationRouteImport.update({
+  id: '/localization',
+  path: '/localization',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthMaintenanceRoute = AuthMaintenanceRouteImport.update({
+  id: '/maintenance',
+  path: '/maintenance',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthManufacturingRoute = AuthManufacturingRouteImport.update({
@@ -111,6 +169,11 @@ const AuthPayrollRoute = AuthPayrollRouteImport.update({
 const AuthProcurementRoute = AuthProcurementRouteImport.update({
   id: '/procurement',
   path: '/procurement',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthProjectsRoute = AuthProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthReportsRoute = AuthReportsRouteImport.update({
@@ -153,9 +216,24 @@ const AuthWorkflowRoute = AuthWorkflowRouteImport.update({
   path: '/workflow',
   getParentRoute: () => AuthRoute,
 } as any)
+const PublicDeleteAccountRoute = PublicDeleteAccountRouteImport.update({
+  id: '/delete-account',
+  path: '/delete-account',
+  getParentRoute: () => PublicRoute,
+} as any)
 const PublicLoginRoute = PublicLoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => PublicRoute,
+} as any)
+const PublicPrivacyRoute = PublicPrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => PublicRoute,
+} as any)
+const PublicTermsRoute = PublicTermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => PublicRoute,
 } as any)
 
@@ -163,17 +241,27 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthIndexRoute
   '/ap': typeof AuthApRoute
   '/ar': typeof AuthArRoute
+  '/assets': typeof AuthAssetsRoute
   '/audit': typeof AuthAuditRoute
+  '/budgets': typeof AuthBudgetsRoute
   '/coa': typeof AuthCoaRoute
+  '/consolidation': typeof AuthConsolidationRoute
+  '/crm': typeof AuthCrmRoute
   '/currency': typeof AuthCurrencyRoute
+  '/dimensions': typeof AuthDimensionsRoute
+  '/financial-close': typeof AuthFinancialCloseRoute
+  '/fixed-assets': typeof AuthFixedAssetsRoute
   '/hr': typeof AuthHrRoute
   '/inventory': typeof AuthInventoryRoute
   '/journals': typeof AuthJournalsRoute
+  '/localization': typeof AuthLocalizationRoute
+  '/maintenance': typeof AuthMaintenanceRoute
   '/manufacturing': typeof AuthManufacturingRoute
   '/masterdata': typeof AuthMasterdataRoute
   '/organizations': typeof AuthOrganizationsRoute
   '/payroll': typeof AuthPayrollRoute
   '/procurement': typeof AuthProcurementRoute
+  '/projects': typeof AuthProjectsRoute
   '/reports': typeof AuthReportsRoute
   '/sales': typeof AuthSalesRoute
   '/security': typeof AuthSecurityRoute
@@ -182,23 +270,36 @@ export interface FileRoutesByFullPath {
   '/treasury': typeof AuthTreasuryRoute
   '/users': typeof AuthUsersRoute
   '/workflow': typeof AuthWorkflowRoute
+  '/delete-account': typeof PublicDeleteAccountRoute
   '/login': typeof PublicLoginRoute
+  '/privacy': typeof PublicPrivacyRoute
+  '/terms': typeof PublicTermsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof AuthIndexRoute
   '/ap': typeof AuthApRoute
   '/ar': typeof AuthArRoute
+  '/assets': typeof AuthAssetsRoute
   '/audit': typeof AuthAuditRoute
+  '/budgets': typeof AuthBudgetsRoute
   '/coa': typeof AuthCoaRoute
+  '/consolidation': typeof AuthConsolidationRoute
+  '/crm': typeof AuthCrmRoute
   '/currency': typeof AuthCurrencyRoute
+  '/dimensions': typeof AuthDimensionsRoute
+  '/financial-close': typeof AuthFinancialCloseRoute
+  '/fixed-assets': typeof AuthFixedAssetsRoute
   '/hr': typeof AuthHrRoute
   '/inventory': typeof AuthInventoryRoute
   '/journals': typeof AuthJournalsRoute
+  '/localization': typeof AuthLocalizationRoute
+  '/maintenance': typeof AuthMaintenanceRoute
   '/manufacturing': typeof AuthManufacturingRoute
   '/masterdata': typeof AuthMasterdataRoute
   '/organizations': typeof AuthOrganizationsRoute
   '/payroll': typeof AuthPayrollRoute
   '/procurement': typeof AuthProcurementRoute
+  '/projects': typeof AuthProjectsRoute
   '/reports': typeof AuthReportsRoute
   '/sales': typeof AuthSalesRoute
   '/security': typeof AuthSecurityRoute
@@ -207,7 +308,10 @@ export interface FileRoutesByTo {
   '/treasury': typeof AuthTreasuryRoute
   '/users': typeof AuthUsersRoute
   '/workflow': typeof AuthWorkflowRoute
+  '/delete-account': typeof PublicDeleteAccountRoute
   '/login': typeof PublicLoginRoute
+  '/privacy': typeof PublicPrivacyRoute
+  '/terms': typeof PublicTermsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -215,17 +319,27 @@ export interface FileRoutesById {
   '/_public': typeof PublicRouteWithChildren
   '/_auth/ap': typeof AuthApRoute
   '/_auth/ar': typeof AuthArRoute
+  '/_auth/assets': typeof AuthAssetsRoute
   '/_auth/audit': typeof AuthAuditRoute
+  '/_auth/budgets': typeof AuthBudgetsRoute
   '/_auth/coa': typeof AuthCoaRoute
+  '/_auth/consolidation': typeof AuthConsolidationRoute
+  '/_auth/crm': typeof AuthCrmRoute
   '/_auth/currency': typeof AuthCurrencyRoute
+  '/_auth/dimensions': typeof AuthDimensionsRoute
+  '/_auth/financial-close': typeof AuthFinancialCloseRoute
+  '/_auth/fixed-assets': typeof AuthFixedAssetsRoute
   '/_auth/hr': typeof AuthHrRoute
   '/_auth/inventory': typeof AuthInventoryRoute
   '/_auth/journals': typeof AuthJournalsRoute
+  '/_auth/localization': typeof AuthLocalizationRoute
+  '/_auth/maintenance': typeof AuthMaintenanceRoute
   '/_auth/manufacturing': typeof AuthManufacturingRoute
   '/_auth/masterdata': typeof AuthMasterdataRoute
   '/_auth/organizations': typeof AuthOrganizationsRoute
   '/_auth/payroll': typeof AuthPayrollRoute
   '/_auth/procurement': typeof AuthProcurementRoute
+  '/_auth/projects': typeof AuthProjectsRoute
   '/_auth/reports': typeof AuthReportsRoute
   '/_auth/sales': typeof AuthSalesRoute
   '/_auth/security': typeof AuthSecurityRoute
@@ -234,7 +348,10 @@ export interface FileRoutesById {
   '/_auth/treasury': typeof AuthTreasuryRoute
   '/_auth/users': typeof AuthUsersRoute
   '/_auth/workflow': typeof AuthWorkflowRoute
+  '/_public/delete-account': typeof PublicDeleteAccountRoute
   '/_public/login': typeof PublicLoginRoute
+  '/_public/privacy': typeof PublicPrivacyRoute
+  '/_public/terms': typeof PublicTermsRoute
   '/_auth/': typeof AuthIndexRoute
 }
 export interface FileRouteTypes {
@@ -243,17 +360,27 @@ export interface FileRouteTypes {
     | '/'
     | '/ap'
     | '/ar'
+    | '/assets'
     | '/audit'
+    | '/budgets'
     | '/coa'
+    | '/consolidation'
+    | '/crm'
     | '/currency'
+    | '/dimensions'
+    | '/financial-close'
+    | '/fixed-assets'
     | '/hr'
     | '/inventory'
     | '/journals'
+    | '/localization'
+    | '/maintenance'
     | '/manufacturing'
     | '/masterdata'
     | '/organizations'
     | '/payroll'
     | '/procurement'
+    | '/projects'
     | '/reports'
     | '/sales'
     | '/security'
@@ -262,23 +389,36 @@ export interface FileRouteTypes {
     | '/treasury'
     | '/users'
     | '/workflow'
+    | '/delete-account'
     | '/login'
+    | '/privacy'
+    | '/terms'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/ap'
     | '/ar'
+    | '/assets'
     | '/audit'
+    | '/budgets'
     | '/coa'
+    | '/consolidation'
+    | '/crm'
     | '/currency'
+    | '/dimensions'
+    | '/financial-close'
+    | '/fixed-assets'
     | '/hr'
     | '/inventory'
     | '/journals'
+    | '/localization'
+    | '/maintenance'
     | '/manufacturing'
     | '/masterdata'
     | '/organizations'
     | '/payroll'
     | '/procurement'
+    | '/projects'
     | '/reports'
     | '/sales'
     | '/security'
@@ -287,24 +427,37 @@ export interface FileRouteTypes {
     | '/treasury'
     | '/users'
     | '/workflow'
+    | '/delete-account'
     | '/login'
+    | '/privacy'
+    | '/terms'
   id:
     | '__root__'
     | '/_auth'
     | '/_public'
     | '/_auth/ap'
     | '/_auth/ar'
+    | '/_auth/assets'
     | '/_auth/audit'
+    | '/_auth/budgets'
     | '/_auth/coa'
+    | '/_auth/consolidation'
+    | '/_auth/crm'
     | '/_auth/currency'
+    | '/_auth/dimensions'
+    | '/_auth/financial-close'
+    | '/_auth/fixed-assets'
     | '/_auth/hr'
     | '/_auth/inventory'
     | '/_auth/journals'
+    | '/_auth/localization'
+    | '/_auth/maintenance'
     | '/_auth/manufacturing'
     | '/_auth/masterdata'
     | '/_auth/organizations'
     | '/_auth/payroll'
     | '/_auth/procurement'
+    | '/_auth/projects'
     | '/_auth/reports'
     | '/_auth/sales'
     | '/_auth/security'
@@ -313,7 +466,10 @@ export interface FileRouteTypes {
     | '/_auth/treasury'
     | '/_auth/users'
     | '/_auth/workflow'
+    | '/_public/delete-account'
     | '/_public/login'
+    | '/_public/privacy'
+    | '/_public/terms'
     | '/_auth/'
   fileRoutesById: FileRoutesById
 }
@@ -359,11 +515,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthArRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/assets': {
+      id: '/_auth/assets'
+      path: '/assets'
+      fullPath: '/assets'
+      preLoaderRoute: typeof AuthAssetsRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/audit': {
       id: '/_auth/audit'
       path: '/audit'
       fullPath: '/audit'
       preLoaderRoute: typeof AuthAuditRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/budgets': {
+      id: '/_auth/budgets'
+      path: '/budgets'
+      fullPath: '/budgets'
+      preLoaderRoute: typeof AuthBudgetsRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/coa': {
@@ -373,11 +543,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCoaRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/consolidation': {
+      id: '/_auth/consolidation'
+      path: '/consolidation'
+      fullPath: '/consolidation'
+      preLoaderRoute: typeof AuthConsolidationRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/crm': {
+      id: '/_auth/crm'
+      path: '/crm'
+      fullPath: '/crm'
+      preLoaderRoute: typeof AuthCrmRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/currency': {
       id: '/_auth/currency'
       path: '/currency'
       fullPath: '/currency'
       preLoaderRoute: typeof AuthCurrencyRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/dimensions': {
+      id: '/_auth/dimensions'
+      path: '/dimensions'
+      fullPath: '/dimensions'
+      preLoaderRoute: typeof AuthDimensionsRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/financial-close': {
+      id: '/_auth/financial-close'
+      path: '/financial-close'
+      fullPath: '/financial-close'
+      preLoaderRoute: typeof AuthFinancialCloseRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/fixed-assets': {
+      id: '/_auth/fixed-assets'
+      path: '/fixed-assets'
+      fullPath: '/fixed-assets'
+      preLoaderRoute: typeof AuthFixedAssetsRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/hr': {
@@ -399,6 +604,20 @@ declare module '@tanstack/react-router' {
       path: '/journals'
       fullPath: '/journals'
       preLoaderRoute: typeof AuthJournalsRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/localization': {
+      id: '/_auth/localization'
+      path: '/localization'
+      fullPath: '/localization'
+      preLoaderRoute: typeof AuthLocalizationRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/maintenance': {
+      id: '/_auth/maintenance'
+      path: '/maintenance'
+      fullPath: '/maintenance'
+      preLoaderRoute: typeof AuthMaintenanceRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/manufacturing': {
@@ -434,6 +653,13 @@ declare module '@tanstack/react-router' {
       path: '/procurement'
       fullPath: '/procurement'
       preLoaderRoute: typeof AuthProcurementRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/projects': {
+      id: '/_auth/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof AuthProjectsRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/reports': {
@@ -492,11 +718,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthWorkflowRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_public/delete-account': {
+      id: '/_public/delete-account'
+      path: '/delete-account'
+      fullPath: '/delete-account'
+      preLoaderRoute: typeof PublicDeleteAccountRouteImport
+      parentRoute: typeof PublicRoute
+    }
     '/_public/login': {
       id: '/_public/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof PublicLoginRouteImport
+      parentRoute: typeof PublicRoute
+    }
+    '/_public/privacy': {
+      id: '/_public/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PublicPrivacyRouteImport
+      parentRoute: typeof PublicRoute
+    }
+    '/_public/terms': {
+      id: '/_public/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof PublicTermsRouteImport
       parentRoute: typeof PublicRoute
     }
   }
@@ -505,17 +752,27 @@ declare module '@tanstack/react-router' {
 interface AuthRouteChildren {
   AuthApRoute: typeof AuthApRoute
   AuthArRoute: typeof AuthArRoute
+  AuthAssetsRoute: typeof AuthAssetsRoute
   AuthAuditRoute: typeof AuthAuditRoute
+  AuthBudgetsRoute: typeof AuthBudgetsRoute
   AuthCoaRoute: typeof AuthCoaRoute
+  AuthConsolidationRoute: typeof AuthConsolidationRoute
+  AuthCrmRoute: typeof AuthCrmRoute
   AuthCurrencyRoute: typeof AuthCurrencyRoute
+  AuthDimensionsRoute: typeof AuthDimensionsRoute
+  AuthFinancialCloseRoute: typeof AuthFinancialCloseRoute
+  AuthFixedAssetsRoute: typeof AuthFixedAssetsRoute
   AuthHrRoute: typeof AuthHrRoute
   AuthInventoryRoute: typeof AuthInventoryRoute
   AuthJournalsRoute: typeof AuthJournalsRoute
+  AuthLocalizationRoute: typeof AuthLocalizationRoute
+  AuthMaintenanceRoute: typeof AuthMaintenanceRoute
   AuthManufacturingRoute: typeof AuthManufacturingRoute
   AuthMasterdataRoute: typeof AuthMasterdataRoute
   AuthOrganizationsRoute: typeof AuthOrganizationsRoute
   AuthPayrollRoute: typeof AuthPayrollRoute
   AuthProcurementRoute: typeof AuthProcurementRoute
+  AuthProjectsRoute: typeof AuthProjectsRoute
   AuthReportsRoute: typeof AuthReportsRoute
   AuthSalesRoute: typeof AuthSalesRoute
   AuthSecurityRoute: typeof AuthSecurityRoute
@@ -530,17 +787,27 @@ interface AuthRouteChildren {
 const AuthRouteChildren: AuthRouteChildren = {
   AuthApRoute: AuthApRoute,
   AuthArRoute: AuthArRoute,
+  AuthAssetsRoute: AuthAssetsRoute,
   AuthAuditRoute: AuthAuditRoute,
+  AuthBudgetsRoute: AuthBudgetsRoute,
   AuthCoaRoute: AuthCoaRoute,
+  AuthConsolidationRoute: AuthConsolidationRoute,
+  AuthCrmRoute: AuthCrmRoute,
   AuthCurrencyRoute: AuthCurrencyRoute,
+  AuthDimensionsRoute: AuthDimensionsRoute,
+  AuthFinancialCloseRoute: AuthFinancialCloseRoute,
+  AuthFixedAssetsRoute: AuthFixedAssetsRoute,
   AuthHrRoute: AuthHrRoute,
   AuthInventoryRoute: AuthInventoryRoute,
   AuthJournalsRoute: AuthJournalsRoute,
+  AuthLocalizationRoute: AuthLocalizationRoute,
+  AuthMaintenanceRoute: AuthMaintenanceRoute,
   AuthManufacturingRoute: AuthManufacturingRoute,
   AuthMasterdataRoute: AuthMasterdataRoute,
   AuthOrganizationsRoute: AuthOrganizationsRoute,
   AuthPayrollRoute: AuthPayrollRoute,
   AuthProcurementRoute: AuthProcurementRoute,
+  AuthProjectsRoute: AuthProjectsRoute,
   AuthReportsRoute: AuthReportsRoute,
   AuthSalesRoute: AuthSalesRoute,
   AuthSecurityRoute: AuthSecurityRoute,
@@ -555,11 +822,17 @@ const AuthRouteChildren: AuthRouteChildren = {
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 interface PublicRouteChildren {
+  PublicDeleteAccountRoute: typeof PublicDeleteAccountRoute
   PublicLoginRoute: typeof PublicLoginRoute
+  PublicPrivacyRoute: typeof PublicPrivacyRoute
+  PublicTermsRoute: typeof PublicTermsRoute
 }
 
 const PublicRouteChildren: PublicRouteChildren = {
+  PublicDeleteAccountRoute: PublicDeleteAccountRoute,
   PublicLoginRoute: PublicLoginRoute,
+  PublicPrivacyRoute: PublicPrivacyRoute,
+  PublicTermsRoute: PublicTermsRoute,
 }
 
 const PublicRouteWithChildren =

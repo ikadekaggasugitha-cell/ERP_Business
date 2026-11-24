@@ -23,7 +23,15 @@ bash deploy/maintain-partitions.sh # Pre-creates +6 months of monthly partitions
 docker compose down -v           # tear down
 ```
 
-Bring-up order (compose `depends_on`): `db(healthy) → bootstrap(30 DBs + roles + login) → migrate-<db> ×30 → grants(30 DBs) → seeds (14 DBs) → 30 Go microservices → api-gateway`.
+Bring-up order (compose `depends_on`): `db(healthy) → bootstrap(30 DBs + roles + login) → migrate-<db> ×30 → grants(30 DBs + public.idempotency_key) → seeds (15 DBs incl. user_db) → 30 Go microservices → api-gateway`.
+
+## Production Deployment Manifests (`deploy/k8s/`, `deploy/kong/`, `deploy/observability/`)
+
+- **Kubernetes / Kustomize (`deploy/k8s/`)**:
+  - `base/`: `namespace.yaml` (restricted PSS), `networkpolicies.yaml` (default-deny + explicit ingress/egress), `postgres-cnpg.yaml` (CloudNativePG HA cluster + PgBouncer `rw`/`ro` poolers), `kafka-strimzi.yaml` (KRaft cluster + topics), `external-secrets.yaml` (Vault KV v2 `ClusterSecretStore` + `ExternalSecret` for HMAC, JWT, OIDC, DB, PII keyring), `api-gateway.yaml`, `web-spa.yaml`, and `microservices.yaml` (all 30 microservices running non-root `10001:10001`, `readOnlyRootFilesystem: true`, `/healthz` + `/readyz` probes, HPA, PDB).
+  - `overlays/staging` & `overlays/prod`: environment-specific namespace & replica overlays (`kubectl kustomize deploy/k8s/overlays/prod`).
+- **Kong Gateway 3.x (`deploy/kong/kong.yml`)**: Declarative `_format_version: "3.0"` config with strict CORS, Redis-backed rate limiting, security response headers (HSTS/CSP/X-Frame-Options), `/openapi.yaml`, and SSE-safe `/api/v1/stream/events` (`response_buffering: false`).
+- **Observability (`deploy/observability/`)**: `prometheus.yml` (scrapes `api-gateway:8000` + all 30 microservices `/metrics`), `otel-collector.yaml` (OTLP gRPC/HTTP -> Tempo + Prometheus), `alert-rules.yml` (5xx >1%, P99 >500ms, outbox lag, DB pool saturation, CrashLoopBackOff), and `grafana-dashboard-erp.json`.
 
 ## Services & ports (30 Go Microservices + `api-gateway`)
 
@@ -48,10 +56,10 @@ PGHOST=localhost POSTGRES_USER=postgres POSTGRES_PASSWORD=postgres MONTHS_AHEAD=
 DRY_RUN=true bash deploy/maintain-partitions.sh
 ```
 
-## What the smoke test verifies (104 checks across Steps 1–14)
+## What the smoke test verifies (Steps 1–15)
 
 - Every producer's REST create/action returns the expected status (`201`/`200`).
-- **Event flow**: all producers emit → transactional outbox → relay → Redpanda (40 domain event topics) → **audit** appends to `audit_log`; **reporting** projects `gl.journal.posted` into `gl_balance_snapshot` (CQRS read model).
+- **Event flow**: all producers emit → transactional outbox → relay → Redpanda (58 domain event topics) → **audit** appends to `audit_log`; **reporting** projects `gl.journal.posted` into `gl_balance_snapshot` (CQRS read model).
 - **Cross-domain sagas & fan-out**:
   - `INT-001`: `sales.order.confirmed → inventory (goods.issued) → ar (invoice.issued) → tax (e-Faktur) + gl (auto-journal) → reporting`, plus out-of-stock compensation (`inventory.reservation.failed → sales Cancelled`).
   - `INT-002 / INT-003`: `procurement.goods.received → ap → gl → reporting`, plus `treasury` draft payment scheduling from `ap.invoice.recorded` and `payroll.run.completed`.

@@ -1,0 +1,207 @@
+---
+# Strimzi KRaft Node Pool for ERP Event Streaming Backbone
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaNodePool
+metadata:
+  name: erp-kafka-dual-role
+  namespace: erp-platform
+  labels:
+    strimzi.io/cluster: erp-kafka
+    app.kubernetes.io/part-of: erp-platform
+    app.kubernetes.io/component: messaging
+spec:
+  replicas: 3
+  roles:
+    - controller
+    - broker
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        size: 100Gi
+        deleteClaim: false
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+---
+# Strimzi Kafka Cluster (KRaft mode, TLS internal listener, EOS-ready)
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: erp-kafka
+  namespace: erp-platform
+  annotations:
+    strimzi.io/node-pools: enabled
+    strimzi.io/kraft: enabled
+  labels:
+    app.kubernetes.io/part-of: erp-platform
+    app.kubernetes.io/component: messaging
+spec:
+  kafka:
+    version: 3.8.0
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+      - name: tls
+        port: 9093
+        type: internal
+        tls: true
+    config:
+      offsets.topic.replication.factor: 3
+      transaction.state.log.replication.factor: 3
+      transaction.state.log.min.isr: 2
+      default.replication.factor: 3
+      min.insync.replicas: 2
+      auto.create.topics.enable: false
+      log.retention.hours: 168
+  entityOperator:
+    topicOperator: {}
+    userOperator: {}
+---
+# Core Domain Event Topics (Selective EOS & Multi-Tenant Partitioned)
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: erp.gl.journal.posted.v1
+  namespace: erp-platform
+  labels:
+    strimzi.io/cluster: erp-kafka
+spec:
+  partitions: 12
+  replicas: 3
+  config:
+    retention.ms: "604800000"
+    min.insync.replicas: "2"
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: erp.gl.journal.reversed.v1
+  namespace: erp-platform
+  labels:
+    strimzi.io/cluster: erp-kafka
+spec:
+  partitions: 12
+  replicas: 3
+  config:
+    retention.ms: "604800000"
+    min.insync.replicas: "2"
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: erp.ap.invoice.recorded.v1
+  namespace: erp-platform
+  labels:
+    strimzi.io/cluster: erp-kafka
+spec:
+  partitions: 12
+  replicas: 3
+  config:
+    retention.ms: "604800000"
+    min.insync.replicas: "2"
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: erp.ar.invoice.issued.v1
+  namespace: erp-platform
+  labels:
+    strimzi.io/cluster: erp-kafka
+spec:
+  partitions: 12
+  replicas: 3
+  config:
+    retention.ms: "604800000"
+    min.insync.replicas: "2"
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: erp.treasury.payment.settled.v1
+  namespace: erp-platform
+  labels:
+    strimzi.io/cluster: erp-kafka
+spec:
+  partitions: 12
+  replicas: 3
+  config:
+    retention.ms: "604800000"
+    min.insync.replicas: "2"
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: erp.inventory.goods.issued.v1
+  namespace: erp-platform
+  labels:
+    strimzi.io/cluster: erp-kafka
+spec:
+  partitions: 12
+  replicas: 3
+  config:
+    retention.ms: "604800000"
+    min.insync.replicas: "2"
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: erp.sales.order.confirmed.v1
+  namespace: erp-platform
+  labels:
+    strimzi.io/cluster: erp-kafka
+spec:
+  partitions: 12
+  replicas: 3
+  config:
+    retention.ms: "604800000"
+    min.insync.replicas: "2"
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: erp.procurement.po.approved.v1
+  namespace: erp-platform
+  labels:
+    strimzi.io/cluster: erp-kafka
+spec:
+  partitions: 12
+  replicas: 3
+  config:
+    retention.ms: "604800000"
+    min.insync.replicas: "2"
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: erp.payroll.run.completed.v1
+  namespace: erp-platform
+  labels:
+    strimzi.io/cluster: erp-kafka
+spec:
+  partitions: 6
+  replicas: 3
+  config:
+    retention.ms: "604800000"
+    min.insync.replicas: "2"
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: erp.financialclose.period.closed.v1
+  namespace: erp-platform
+  labels:
+    strimzi.io/cluster: erp-kafka
+spec:
+  partitions: 6
+  replicas: 3
+  config:
+    retention.ms: "604800000"
+    min.insync.replicas: "2"

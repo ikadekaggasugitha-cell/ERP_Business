@@ -1,0 +1,227 @@
+---
+# Default deny all ingress and egress within erp-platform namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: erp-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Allow DNS resolution for all pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: erp-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Allow Ingress / Kong Gateway -> web-spa (:8080) and api-gateway (:8000)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-edge
+  namespace: erp-platform
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - gateway
+          - frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-kong
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 8080
+---
+# Allow api-gateway -> all 30 microservices (:8080)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-to-microservices
+  namespace: erp-platform
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: microservice
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# Allow Prometheus scraping of /metrics on api-gateway and all 30 microservices
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+  namespace: erp-platform
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - gateway
+          - microservice
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 8080
+---
+# Allow api-gateway egress -> microservices (:8080), Kafka (:9092/9093), OTel (:4318), Redis (:6379), OIDC HTTPS (:443)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-egress
+  namespace: erp-platform
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: api-gateway
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: microservice
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - podSelector:
+            matchLabels:
+              strimzi.io/cluster: erp-kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9093
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: monitoring
+      ports:
+        - protocol: TCP
+          port: 4318
+    - ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6379
+---
+# Allow microservices egress -> PostgreSQL/PgBouncer (:5432), Kafka (:9092/9093), OTel (:4318)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-microservices-egress
+  namespace: erp-platform
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: microservice
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: erp-postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/poolerName: erp-postgres-pooler-rw
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              strimzi.io/cluster: erp-kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9093
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: monitoring
+      ports:
+        - protocol: TCP
+          port: 4318
+---
+# Allow PostgreSQL/PgBouncer and Kafka ingress from microservices & gateway
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-data-plane-ingress
+  namespace: erp-platform
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - database
+          - messaging
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                  - microservice
+                  - gateway
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9093

@@ -310,14 +310,11 @@ async function submitWorkflowDecision(documentId, decision, notes, rowVersion) {
     });
 
     const action = decision.toLowerCase() === 'reject' ? 'reject' : 'approve';
+    const cleanComment = String(notes || '').trim();
     const response = await fetch(`${apiUrl}/workflow-tasks/${encodeURIComponent(documentId)}/${action}`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        notes,
-        origin: 'chrome-extension',
-        extension_version: getExtensionVersion(),
-      }),
+      body: JSON.stringify(cleanComment ? { comment: cleanComment } : {}),
     });
 
     if (!response.ok) {

@@ -25,17 +25,26 @@ import (
 	"github.com/sinergiinvestasiproperti/erp/services/api-gateway/internal/sse"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/eventbus"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/telemetry"
 )
 
 const (
-	systemOrgID  = "00000000-0000-0000-0000-000000000000"
-	defaultOrgID = "11111111-1111-1111-1111-111111111111" // HLD-01 (Head Office / Holding)
-	branchOrgID  = "22222222-2222-2222-2222-222222222222" // SUB-PRO (Subsidiary 1)
-	subLogOrgID  = "33333333-3333-3333-3333-333333333333" // SUB-LOG (Subsidiary 2)
-	brcJktOrgID  = "44444444-4444-4444-4444-444444444444" // BRC-JKT (Branch under SUB-PRO)
-	defaultUID   = "00000000-0000-0000-0000-000000000101"
+	systemOrgID   = "00000000-0000-0000-0000-000000000000"
+	defaultOrgID  = "11111111-1111-1111-1111-111111111111" // HLD-01 (Head Office / Holding)
+	branchOrgID   = "22222222-2222-2222-2222-222222222222" // SUB-PRO (Subsidiary 1)
+	subLogOrgID   = "33333333-3333-3333-3333-333333333333" // SUB-LOG (Subsidiary 2)
+	brcJktOrgID   = "44444444-4444-4444-4444-444444444444" // BRC-JKT (Branch under SUB-PRO)
+	defaultUID    = "00000000-0000-0000-0000-000000000101"
 	sessionCookie = "erp_session"
+	refreshCookie = "erp_refresh"
 )
+
+type authRuntime struct {
+	secret   []byte
+	devAuth  bool
+	oidc     *auth.OIDCVerifier
+	sessions *auth.SessionStore
+}
 
 type orgSummary struct {
 	ID                 string  `json:"id"`
@@ -447,13 +456,28 @@ func main() {
 	hub := sse.NewHub()
 	go hub.StartKafkaBridge(ctx, brokers, getenv("KAFKA_GROUP_ID", "api-gateway-sse"))
 
+	tracer := telemetry.InitFromEnv("api-gateway")
+	sessions := auth.NewSessionStore(os.Getenv("REDIS_URL"))
+	var oidcVerifier *auth.OIDCVerifier
+	if issuer := strings.TrimSpace(os.Getenv("OIDC_ISSUER_URL")); issuer != "" || strings.TrimSpace(os.Getenv("OIDC_JWKS_URL")) != "" {
+		v, err := auth.NewOIDCVerifier(auth.OIDCConfig{
+			IssuerURL: issuer,
+			Audience:  os.Getenv("OIDC_AUDIENCE"),
+			JWKSURL:   os.Getenv("OIDC_JWKS_URL"),
+		})
+		if err != nil {
+			log.Fatalf("oidc verifier init failed: %v", err)
+		}
+		oidcVerifier = v
+	}
+
 	metrics := httpx.NewMetrics("api-gateway")
-	mux := newGatewayMux(router, hub, jwtSecret, devAuthMode, allowAnon, brokers, metrics)
+	mux := newGatewayMux(router, hub, jwtSecret, devAuthMode, allowAnon, brokers, metrics, oidcVerifier, sessions)
 	rps := 200
 	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("RATE_LIMIT_RPS"))); err == nil && v > 0 {
 		rps = v
 	}
-	handler := withRecovery(metrics.Wrap(withCORS(allowedOrigins, allowChromeExt, allowedExtIDs)(withRateLimit(rps, rps*2)(mux))))
+	handler := withRecovery(metrics.Wrap(withCORS(allowedOrigins, allowChromeExt, allowedExtIDs)(withRateLimit(rps, rps*2, sessions)(mux))))
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           handler,
@@ -464,7 +488,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("api-gateway listening on %s (devAuth=%v, kafka=%v)", addr, devAuthMode, brokers)
+		log.Printf("api-gateway listening on %s (devAuth=%v, oidc=%v, kafka=%v)", addr, devAuthMode, oidcVerifier != nil, brokers)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("http: %v", err)
 		}
@@ -477,22 +501,38 @@ func main() {
 	sc, scCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer scCancel()
 	_ = srv.Shutdown(sc)
+	_ = tracer.Shutdown(sc)
 	log.Println("api-gateway stopped")
 }
 
 func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuthMode, allowAnon bool, extra ...any) *http.ServeMux {
 	var brokers []string
 	var metrics *httpx.Metrics
+	var oidcVerifier *auth.OIDCVerifier
+	var sessions *auth.SessionStore
 	for _, item := range extra {
 		switch v := item.(type) {
 		case []string:
 			brokers = v
 		case *httpx.Metrics:
 			metrics = v
+		case *auth.OIDCVerifier:
+			oidcVerifier = v
+		case *auth.SessionStore:
+			sessions = v
 		}
 	}
 	if metrics == nil {
 		metrics = httpx.NewMetrics("api-gateway")
+	}
+	if sessions == nil {
+		sessions = auth.NewSessionStore("")
+	}
+	rt := &authRuntime{
+		secret:   jwtSecret,
+		devAuth:  devAuthMode,
+		oidc:     oidcVerifier,
+		sessions: sessions,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -502,18 +542,24 @@ func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuth
 		return eventbus.CheckBrokers(c, brokers)
 	}))
 	mux.HandleFunc("GET /metrics", metrics.Handler())
+	mux.HandleFunc("GET /openapi.yaml", handleOpenAPISpec())
 
-	mux.HandleFunc("POST /api/v1/auth/login", handleLogin(jwtSecret, devAuthMode))
-	mux.HandleFunc("POST /api/v1/auth/logout", handleLogout())
-	mux.HandleFunc("GET /api/v1/auth/me", handleMe(jwtSecret))
-	mux.HandleFunc("POST /api/v1/auth/stream-ticket", handleStreamTicket(jwtSecret))
-	mux.HandleFunc("GET /api/v1/stream/events", handleSSE(hub, jwtSecret, allowAnon))
+	mux.HandleFunc("POST /api/v1/auth/login", handleLogin(rt))
+	mux.HandleFunc("POST /api/v1/auth/refresh", handleRefresh(rt))
+	mux.HandleFunc("POST /api/v1/auth/logout", handleLogout(rt))
+	mux.HandleFunc("GET /api/v1/auth/me", handleMe(rt))
+	mux.HandleFunc("POST /api/v1/auth/stream-ticket", handleStreamTicket(rt))
+	mux.HandleFunc("GET /api/v1/stream/events", handleSSE(hub, rt, allowAnon))
 
 	mux.HandleFunc("/api/v1/", func(w http.ResponseWriter, r *http.Request) {
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(30 * time.Second))
 		if r.Body != nil {
 			r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10 MiB gateway payload cap
 		}
+		_, childTC := telemetry.ExtractOrGenerate(r.Header)
+		r.Header.Set(telemetry.HeaderTraceparent, childTC.String())
+		w.Header().Set(telemetry.HeaderTraceparent, childTC.String())
+
 		rp, ok := router.Match(r.URL.Path)
 		if !ok {
 			writeErr(w, http.StatusNotFound, "ROUTE_NOT_FOUND", "No upstream service configured for path", r.Header.Get("X-Correlation-Id"))
@@ -537,7 +583,7 @@ func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuth
 
 		isReadMethod := r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions
 
-		claims, err := extractClaims(r, jwtSecret, "access")
+		claims, err := extractClaimsWithRuntime(r, rt, "access")
 		if err != nil {
 			if !allowAnon {
 				writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "Valid Bearer token or session required", corrID)
@@ -610,26 +656,89 @@ func newGatewayMux(router *proxy.Router, hub *sse.Hub, jwtSecret []byte, devAuth
 	return mux
 }
 
-func handleLogin(secret []byte, devAuthMode bool) http.HandlerFunc {
+func handleLogin(rt *authRuntime) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			OrgCode        string `json:"orgCode"`
 			OrganizationID string `json:"organizationId"`
 			Username       string `json:"username"`
 			Password       string `json:"password"`
+			IDToken        string `json:"idToken"`
+			AccessToken    string `json:"accessToken"`
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "INVALID_JSON", "Malformed JSON request", "")
 			return
 		}
+		if !rt.devAuth {
+			if rt.oidc == nil {
+				writeErr(w, http.StatusNotImplemented, "OIDC_REQUIRED", "DEV_AUTH_MODE is disabled; configure OIDC_ISSUER_URL or OIDC_JWKS_URL", "")
+				return
+			}
+			rawOIDC := firstNonEmptyStr(req.IDToken, req.AccessToken, strings.TrimPrefix(strings.TrimSpace(r.Header.Get("Authorization")), "Bearer "))
+			if rawOIDC == "" {
+				writeErr(w, http.StatusUnauthorized, "OIDC_TOKEN_REQUIRED", "OIDC idToken/accessToken or Bearer token is required", "")
+				return
+			}
+			oidcClaims, err := rt.oidc.Verify(r.Context(), rawOIDC, time.Now().UTC())
+			if err != nil {
+				writeErr(w, http.StatusUnauthorized, "OIDC_INVALID_TOKEN", "OIDC token verification failed: "+err.Error(), "")
+				return
+			}
+			activeOrg := resolveOrg(firstNonEmptyStr(req.OrganizationID, oidcClaims.OrgID), req.OrgCode)
+			if len(oidcClaims.OrgScope) == 0 {
+				oidcClaims.OrgScope = []string{activeOrg.ID}
+			}
+			oidcClaims.OrgID = activeOrg.ID
+			if oidcClaims.JTI == "" {
+				oidcClaims.JTI = uuid.NewString()
+			}
+			perms := oidcClaims.Permissions
+			for _, p := range permissionsForRoles(oidcClaims.Roles) {
+				if !slices.Contains(perms, p) {
+					perms = append(perms, p)
+				}
+			}
+			oidcClaims.Permissions = perms
+			adminTier := httpx.AdminTierForRoles(oidcClaims.Roles)
+			oidcClaims.AdminTier = adminTier
+			now := time.Now().UTC()
+			streamClaims := oidcClaims
+			streamClaims.TokenUse = "stream"
+			streamClaims.IssuedAt = now.Unix()
+			streamClaims.ExpiresAt = now.Add(60 * time.Second).Unix()
+			streamTicket, err := auth.SignHS256(streamClaims, rt.secret)
+			if err != nil {
+				writeErr(w, http.StatusInternalServerError, "TOKEN_SIGN_ERROR", err.Error(), "")
+				return
+			}
+			refreshTok, _ := rt.sessions.IssueRefreshToken(r.Context(), oidcClaims, 7*24*time.Hour)
+			setSessionCookies(w, r, rawOIDC, refreshTok, 28800)
+			writeJSON(w, http.StatusOK, map[string]any{
+				"token":        rawOIDC,
+				"refreshToken": refreshTok,
+				"streamTicket": streamTicket,
+				"expiresIn":    28800,
+				"user": userSummary{
+					ID:          oidcClaims.Subject,
+					Username:    oidcClaims.Username,
+					FullName:    oidcClaims.FullName,
+					Email:       oidcClaims.Email,
+					ActiveOrgID: activeOrg.ID,
+					AdminTier:   adminTier,
+					Roles:       oidcClaims.Roles,
+					Permissions: perms,
+				},
+				"activeOrg":     activeOrg,
+				"organizations": filterOrgsForScope(oidcClaims.OrgScope, oidcClaims.Roles),
+			})
+			return
+		}
+
 		req.Username = strings.TrimSpace(req.Username)
 		if req.Username == "" || strings.TrimSpace(req.Password) == "" {
 			writeErr(w, http.StatusBadRequest, "VALIDATION_ERROR", "username and password are required", "")
-			return
-		}
-		if !devAuthMode {
-			writeErr(w, http.StatusNotImplemented, "OIDC_REQUIRED", "DEV_AUTH_MODE is disabled; configure external OIDC provider", "")
 			return
 		}
 
@@ -646,7 +755,7 @@ func handleLogin(secret []byte, devAuthMode bool) http.HandlerFunc {
 			email      string
 			visibleOrg []orgSummary
 		)
-		if dyn, ok := resolveDynamicUser(r.Context(), req.Username, secret, req.OrganizationID); ok {
+		if dyn, ok := resolveDynamicUser(r.Context(), req.Username, rt.secret, req.OrganizationID); ok {
 			userID = dyn.UserID
 			fullName = dyn.FullName
 			email = dyn.Email
@@ -679,6 +788,7 @@ func handleLogin(secret []byte, devAuthMode bool) http.HandlerFunc {
 		now := time.Now().UTC()
 
 		accessClaims := auth.Claims{
+			JTI:         uuid.NewString(),
 			Subject:     userID,
 			Username:    req.Username,
 			FullName:    fullName,
@@ -692,7 +802,7 @@ func handleLogin(secret []byte, devAuthMode bool) http.HandlerFunc {
 			IssuedAt:    now.Unix(),
 			ExpiresAt:   now.Add(8 * time.Hour).Unix(),
 		}
-		token, err := auth.SignHS256(accessClaims, secret)
+		token, err := auth.SignHS256(accessClaims, rt.secret)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "TOKEN_SIGN_ERROR", err.Error(), "")
 			return
@@ -701,24 +811,18 @@ func handleLogin(secret []byte, devAuthMode bool) http.HandlerFunc {
 		streamClaims := accessClaims
 		streamClaims.TokenUse = "stream"
 		streamClaims.ExpiresAt = now.Add(60 * time.Second).Unix()
-		streamTicket, err := auth.SignHS256(streamClaims, secret)
+		streamTicket, err := auth.SignHS256(streamClaims, rt.secret)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "TOKEN_SIGN_ERROR", err.Error(), "")
 			return
 		}
 
-		http.SetCookie(w, &http.Cookie{
-			Name:     sessionCookie,
-			Value:    token,
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   isSecureCookie(r),
-			SameSite: http.SameSiteLaxMode,
-			MaxAge:   28800,
-		})
+		refreshTok, _ := rt.sessions.IssueRefreshToken(r.Context(), accessClaims, 7*24*time.Hour)
+		setSessionCookies(w, r, token, refreshTok, 28800)
 
 		writeJSON(w, http.StatusOK, map[string]any{
 			"token":        token,
+			"refreshToken": refreshTok,
 			"streamTicket": streamTicket,
 			"expiresIn":    28800,
 			"user": userSummary{
@@ -735,6 +839,121 @@ func handleLogin(secret []byte, devAuthMode bool) http.HandlerFunc {
 			"organizations": visibleOrg,
 		})
 	}
+}
+
+func setSessionCookies(w http.ResponseWriter, r *http.Request, accessTok, refreshTok string, maxAge int) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    accessTok,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   isSecureCookie(r),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   maxAge,
+	})
+	if refreshTok != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     refreshCookie,
+			Value:    refreshTok,
+			Path:     "/api/v1/auth",
+			HttpOnly: true,
+			Secure:   isSecureCookie(r),
+			SameSite: http.SameSiteLaxMode,
+			MaxAge:   7 * 24 * 3600,
+		})
+	}
+}
+
+func handleRefresh(rt *authRuntime) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			RefreshToken string `json:"refreshToken"`
+		}
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+			_ = json.NewDecoder(r.Body).Decode(&req)
+		}
+		rawRefresh := strings.TrimSpace(req.RefreshToken)
+		if rawRefresh == "" {
+			if c, err := r.Cookie(refreshCookie); err == nil {
+				rawRefresh = strings.TrimSpace(c.Value)
+			}
+		}
+		if rawRefresh == "" {
+			writeErr(w, http.StatusUnauthorized, "REFRESH_TOKEN_REQUIRED", "Refresh token is required", "")
+			return
+		}
+		baseClaims, nextRefresh, err := rt.sessions.RotateRefreshToken(r.Context(), rawRefresh, 7*24*time.Hour)
+		if err != nil {
+			code := "INVALID_REFRESH_TOKEN"
+			if errors.Is(err, auth.ErrRefreshTokenReused) {
+				code = "REFRESH_TOKEN_REUSED"
+			}
+			writeErr(w, http.StatusUnauthorized, code, err.Error(), "")
+			return
+		}
+		now := time.Now().UTC()
+		accessClaims := baseClaims
+		accessClaims.JTI = uuid.NewString()
+		accessClaims.TokenUse = "access"
+		accessClaims.IssuedAt = now.Unix()
+		accessClaims.ExpiresAt = now.Add(8 * time.Hour).Unix()
+		token, err := auth.SignHS256(accessClaims, rt.secret)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "TOKEN_SIGN_ERROR", err.Error(), "")
+			return
+		}
+		streamClaims := accessClaims
+		streamClaims.TokenUse = "stream"
+		streamClaims.ExpiresAt = now.Add(60 * time.Second).Unix()
+		streamTicket, err := auth.SignHS256(streamClaims, rt.secret)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "TOKEN_SIGN_ERROR", err.Error(), "")
+			return
+		}
+		setSessionCookies(w, r, token, nextRefresh, 28800)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"token":        token,
+			"refreshToken": nextRefresh,
+			"streamTicket": streamTicket,
+			"expiresIn":    28800,
+		})
+	}
+}
+
+func handleOpenAPISpec() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		candidates := []string{}
+		if envPath := strings.TrimSpace(os.Getenv("OPENAPI_SPEC_PATH")); envPath != "" {
+			candidates = append(candidates, envPath)
+		}
+		candidates = append(candidates,
+			"docs/openapi/erp-api-v1.openapi.yaml",
+			"../../docs/openapi/erp-api-v1.openapi.yaml",
+			"../../../docs/openapi/erp-api-v1.openapi.yaml",
+			"../../../../docs/openapi/erp-api-v1.openapi.yaml",
+			"/app/docs/openapi/erp-api-v1.openapi.yaml",
+		)
+		for _, p := range candidates {
+			if data, err := os.ReadFile(p); err == nil && len(data) > 0 {
+				w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+				w.Header().Set("Cache-Control", "public, max-age=300")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(data)
+				return
+			}
+		}
+		writeErr(w, http.StatusNotFound, "OPENAPI_NOT_FOUND", "OpenAPI specification file not found", "")
+	}
+}
+
+func firstNonEmptyStr(vals ...string) string {
+	for _, v := range vals {
+		if s := strings.TrimSpace(v); s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 type dynamicUserSession struct {
@@ -999,12 +1218,28 @@ func filterOrgsForScope(orgScope, roles []string) []orgSummary {
 	return out
 }
 
-func handleLogout() http.HandlerFunc {
+func handleLogout(rt *authRuntime) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if claims, err := extractClaimsWithRuntime(r, rt, "access"); err == nil && claims.JTI != "" {
+			ttl := time.Until(time.Unix(claims.ExpiresAt, 0))
+			if ttl < time.Minute {
+				ttl = time.Minute
+			}
+			_ = rt.sessions.RevokeJTI(r.Context(), claims.JTI, ttl)
+		}
 		http.SetCookie(w, &http.Cookie{
 			Name:     sessionCookie,
 			Value:    "",
 			Path:     "/",
+			HttpOnly: true,
+			Secure:   isSecureCookie(r),
+			SameSite: http.SameSiteLaxMode,
+			MaxAge:   -1,
+		})
+		http.SetCookie(w, &http.Cookie{
+			Name:     refreshCookie,
+			Value:    "",
+			Path:     "/api/v1/auth",
 			HttpOnly: true,
 			Secure:   isSecureCookie(r),
 			SameSite: http.SameSiteLaxMode,
@@ -1032,9 +1267,9 @@ func isSecureCookie(r *http.Request) bool {
 	return false
 }
 
-func handleMe(secret []byte) http.HandlerFunc {
+func handleMe(rt *authRuntime) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		claims, err := extractClaims(r, secret, "access")
+		claims, err := extractClaimsWithRuntime(r, rt, "access")
 		if err != nil {
 			writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "Valid Bearer token or session required", "")
 			return
@@ -1057,9 +1292,9 @@ func handleMe(secret []byte) http.HandlerFunc {
 	}
 }
 
-func handleStreamTicket(secret []byte) http.HandlerFunc {
+func handleStreamTicket(rt *authRuntime) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		claims, err := extractClaims(r, secret, "access")
+		claims, err := extractClaimsWithRuntime(r, rt, "access")
 		if err != nil {
 			writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "Valid Bearer token or session required", "")
 			return
@@ -1069,7 +1304,7 @@ func handleStreamTicket(secret []byte) http.HandlerFunc {
 		ticketClaims.TokenUse = "stream"
 		ticketClaims.IssuedAt = now.Unix()
 		ticketClaims.ExpiresAt = now.Add(60 * time.Second).Unix()
-		ticket, err := auth.SignHS256(ticketClaims, secret)
+		ticket, err := auth.SignHS256(ticketClaims, rt.secret)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "TOKEN_SIGN_ERROR", err.Error(), "")
 			return
@@ -1081,7 +1316,7 @@ func handleStreamTicket(secret []byte) http.HandlerFunc {
 	}
 }
 
-func handleSSE(hub *sse.Hub, secret []byte, allowAnon bool) http.HandlerFunc {
+func handleSSE(hub *sse.Hub, rt *authRuntime, allowAnon bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		flusher, ok := w.(http.Flusher)
 		if !ok {
@@ -1094,12 +1329,12 @@ func handleSSE(hub *sse.Hub, secret []byte, allowAnon bool) http.HandlerFunc {
 		var err error
 
 		if ticket := strings.TrimSpace(r.URL.Query().Get("ticket")); ticket != "" {
-			claims, err = auth.VerifyHS256(ticket, secret, time.Now().UTC())
+			claims, err = auth.VerifyHS256(ticket, rt.secret, time.Now().UTC())
 			if err == nil && claims.TokenUse != "stream" {
 				err = auth.ErrInvalidToken
 			}
 		} else {
-			claims, err = extractClaims(r, secret, "access")
+			claims, err = extractClaimsWithRuntime(r, rt, "access")
 		}
 
 		if err != nil {
@@ -1170,6 +1405,10 @@ func handleSSE(hub *sse.Hub, secret []byte, allowAnon bool) http.HandlerFunc {
 }
 
 func extractClaims(r *http.Request, secret []byte, expectedUse string) (auth.Claims, error) {
+	return extractClaimsWithRuntime(r, &authRuntime{secret: secret, devAuth: true}, expectedUse)
+}
+
+func extractClaimsWithRuntime(r *http.Request, rt *authRuntime, expectedUse string) (auth.Claims, error) {
 	var raw string
 	if hdr := strings.TrimSpace(r.Header.Get("Authorization")); strings.HasPrefix(hdr, "Bearer ") {
 		raw = strings.TrimSpace(strings.TrimPrefix(hdr, "Bearer "))
@@ -1179,12 +1418,34 @@ func extractClaims(r *http.Request, secret []byte, expectedUse string) (auth.Cla
 	if raw == "" {
 		return auth.Claims{}, auth.ErrInvalidToken
 	}
-	claims, err := auth.VerifyHS256(raw, secret, time.Now().UTC())
+
+	now := time.Now().UTC()
+	var (
+		claims auth.Claims
+		err    error
+	)
+	if !rt.devAuth && expectedUse != "stream" && rt.oidc != nil {
+		claims, err = rt.oidc.Verify(r.Context(), raw, now)
+		if err != nil {
+			// Also allow gateway-issued HS256 access tokens produced by /auth/refresh.
+			if hsClaims, hsErr := auth.VerifyHS256(raw, rt.secret, now); hsErr == nil {
+				claims, err = hsClaims, nil
+			}
+		}
+	} else {
+		claims, err = auth.VerifyHS256(raw, rt.secret, now)
+		if err != nil && rt.oidc != nil && expectedUse != "stream" {
+			claims, err = rt.oidc.Verify(r.Context(), raw, now)
+		}
+	}
 	if err != nil {
 		return auth.Claims{}, err
 	}
 	if expectedUse != "" && claims.TokenUse != expectedUse {
 		return auth.Claims{}, auth.ErrInvalidToken
+	}
+	if rt.sessions != nil && claims.JTI != "" && rt.sessions.IsRevoked(r.Context(), claims.JTI) {
+		return auth.Claims{}, auth.ErrTokenRevoked
 	}
 	return claims, nil
 }
@@ -1248,7 +1509,11 @@ type rateBucket struct {
 	last   time.Time
 }
 
-func withRateLimit(rps, burst int) func(http.Handler) http.Handler {
+func withRateLimit(rps, burst int, extra ...*auth.SessionStore) func(http.Handler) http.Handler {
+	var sessions *auth.SessionStore
+	if len(extra) > 0 {
+		sessions = extra[0]
+	}
 	if rps <= 0 {
 		rps = 200
 	}
@@ -1275,6 +1540,17 @@ func withRateLimit(rps, burst int) func(http.Handler) http.Handler {
 					clientIP = host
 				} else {
 					clientIP = r.RemoteAddr
+				}
+			}
+			if sessions != nil {
+				if allowed, usedRedis := sessions.AllowRateLimit(r.Context(), clientIP, burst, time.Second); usedRedis {
+					if !allowed {
+						w.Header().Set("Retry-After", "1")
+						writeErr(w, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED", "Too many requests; please retry shortly", r.Header.Get("X-Correlation-Id"))
+						return
+					}
+					next.ServeHTTP(w, r)
+					return
 				}
 			}
 			now := time.Now()

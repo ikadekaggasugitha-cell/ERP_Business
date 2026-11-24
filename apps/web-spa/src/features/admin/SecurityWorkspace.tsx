@@ -98,7 +98,7 @@ function SecurityWorkspaceInner({ orgId, canWrite }: SecurityWorkspaceInnerProps
 
   const roleForm = useForm<RoleFormValues>({
     resolver: zodResolver(roleFormSchema),
-    defaultValues: { code: '', name: '', isSystem: false },
+    defaultValues: { code: '', name: '' },
   });
 
   const permForm = useForm<PermissionFormValues>({
@@ -112,10 +112,9 @@ function SecurityWorkspaceInner({ orgId, canWrite }: SecurityWorkspaceInnerProps
       roleForm.reset({
         code: editingRole.code,
         name: editingRole.name,
-        isSystem: editingRole.isSystem,
       });
     } else {
-      roleForm.reset({ code: '', name: '', isSystem: false });
+      roleForm.reset({ code: '', name: '' });
     }
   }, [editingRole, roleDialogOpen, roleForm]);
 

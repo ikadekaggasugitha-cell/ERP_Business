@@ -1,0 +1,66 @@
+groups:
+  - name: erp-http-slo
+    rules:
+      - alert: ERPHighHTTP5xxRate
+        expr: |
+          (
+            sum by (service) (rate(erp_http_requests_total{status=~"5.."}[5m]))
+            /
+            clamp_min(sum by (service) (rate(erp_http_requests_total[5m])), 1e-6)
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High HTTP 5xx error rate on {{ $labels.service }}"
+          description: "Service {{ $labels.service }} 5xx error rate is above 1% over the last 5 minutes."
+
+      - alert: ERPHighP99Latency
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (service, le) (rate(erp_http_request_duration_ms_bucket[5m]))
+          ) > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High P99 HTTP latency on {{ $labels.service }}"
+          description: "Service {{ $labels.service }} P99 latency exceeded 500ms for 5 minutes."
+
+  - name: erp-outbox-and-db
+    rules:
+      - alert: ERPOutboxRelayLagHigh
+        expr: max by (service) (erp_outbox_unpublished_rows) > 500
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Transactional outbox backlog growing on {{ $labels.service }}"
+          description: "More than 500 unpublished outbox rows pending for 5+ minutes on {{ $labels.service }}."
+
+      - alert: ERPPostgresPoolSaturation
+        expr: |
+          (
+            sum(pg_stat_activity_count) / clamp_min(max(pg_settings_max_connections), 1)
+          ) > 0.85
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL connection pool saturation (>85%)"
+          description: "Active PostgreSQL connections exceeded 85% of max_connections for 5 minutes."
+
+  - name: erp-kubernetes-runtime
+    rules:
+      - alert: ERPPodCrashLoopBackOff
+        expr: |
+          sum by (namespace, pod) (
+            rate(kube_pod_container_status_restarts_total{namespace=~"erp-.*"}[15m])
+          ) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash-looping"
+          description: "Container restarts detected in {{ $labels.namespace }}/{{ $labels.pod }} over the last 15 minutes."

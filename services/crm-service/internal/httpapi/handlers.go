@@ -587,7 +587,11 @@ func (s *Server) listOpportunities(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	items := make([]opportunityDTO, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, toOpportunityDTO(row))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: items, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
 }
 
 func (s *Server) createOpportunity(w http.ResponseWriter, r *http.Request) {
@@ -604,10 +608,11 @@ func (s *Server) createOpportunity(w http.ResponseWriter, r *http.Request) {
 		EstimatedValue    *string `json:"estimatedValue"`
 		ExpectedCloseDate *string `json:"expectedCloseDate"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, idemHash, release, handled := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if handled {
 		return
 	}
+	defer release()
 	if strings.TrimSpace(req.Code) == "" || strings.TrimSpace(req.Stage) == "" {
 		httpx.WriteError(w, r, httpx.BadRequest("code and stage are required"))
 		return
@@ -646,7 +651,7 @@ func (s *Server) createOpportunity(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "status": "Open", "rowVersion": out.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, idemHash, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "status": "Open", "rowVersion": out.RowVersion})
 }
 
 func (s *Server) getOpportunity(w http.ResponseWriter, r *http.Request) {
@@ -664,7 +669,7 @@ func (s *Server) getOpportunity(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, row)
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, toOpportunityDTO(row))
 }
 
 func (s *Server) updateOpportunity(w http.ResponseWriter, r *http.Request) {
@@ -797,7 +802,11 @@ func (s *Server) listSegments(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	items := make([]segmentDTO, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, toSegmentDTO(row))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: items, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
 }
 
 func (s *Server) createSegment(w http.ResponseWriter, r *http.Request) {
@@ -810,10 +819,11 @@ func (s *Server) createSegment(w http.ResponseWriter, r *http.Request) {
 		Name     string          `json:"name"`
 		Criteria json.RawMessage `json:"criteria"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, idemHash, release, handled := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if handled {
 		return
 	}
+	defer release()
 	if strings.TrimSpace(req.Code) == "" || strings.TrimSpace(req.Name) == "" {
 		httpx.WriteError(w, r, httpx.BadRequest("code and name are required"))
 		return
@@ -826,7 +836,7 @@ func (s *Server) createSegment(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "rowVersion": out.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, idemHash, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "rowVersion": out.RowVersion})
 }
 
 func (s *Server) updateSegment(w http.ResponseWriter, r *http.Request) {
@@ -899,7 +909,11 @@ func (s *Server) listInteractions(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	items := make([]interactionDTO, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, toInteractionDTO(row))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: items, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
 }
 
 func (s *Server) createInteraction(w http.ResponseWriter, r *http.Request) {
@@ -914,10 +928,11 @@ func (s *Server) createInteraction(w http.ResponseWriter, r *http.Request) {
 		OccurredAt      *string `json:"occurredAt"`
 		Notes           *string `json:"notes"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, idemHash, release, handled := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if handled {
 		return
 	}
+	defer release()
 	switch req.InteractionType {
 	case "Call", "Meeting", "Email", "Note":
 	default:
@@ -952,7 +967,7 @@ func (s *Server) createInteraction(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "rowVersion": out.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, idemHash, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "rowVersion": out.RowVersion})
 }
 
 func (s *Server) listSupportCases(w http.ResponseWriter, r *http.Request) {
@@ -970,7 +985,11 @@ func (s *Server) listSupportCases(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	items := make([]supportCaseDTO, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, toSupportCaseDTO(row))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: items, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
 }
 
 func (s *Server) createSupportCase(w http.ResponseWriter, r *http.Request) {
@@ -983,10 +1002,11 @@ func (s *Server) createSupportCase(w http.ResponseWriter, r *http.Request) {
 		CustomerRef *string `json:"customerRef"`
 		Subject     string  `json:"subject"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, idemHash, release, handled := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if handled {
 		return
 	}
+	defer release()
 	if strings.TrimSpace(req.CaseNo) == "" || strings.TrimSpace(req.Subject) == "" {
 		httpx.WriteError(w, r, httpx.BadRequest("caseNo and subject are required"))
 		return
@@ -1004,7 +1024,7 @@ func (s *Server) createSupportCase(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "status": "Open", "rowVersion": out.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, idemHash, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "status": "Open", "rowVersion": out.RowVersion})
 }
 
 func (s *Server) getSupportCase(w http.ResponseWriter, r *http.Request) {
@@ -1022,7 +1042,7 @@ func (s *Server) getSupportCase(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, row)
+	httpx.WriteIDResponse(w, http.StatusOK, row.RowVersion, toSupportCaseDTO(row))
 }
 
 func (s *Server) escalateSupportCase(w http.ResponseWriter, r *http.Request) {
@@ -1116,7 +1136,11 @@ func (s *Server) listActivityTasks(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: rows, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
+	items := make([]activityTaskDTO, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, toActivityTaskDTO(row))
+	}
+	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: items, Page: httpx.NewPageMeta(int(page), int(size), int(total))})
 }
 
 func (s *Server) createActivityTask(w http.ResponseWriter, r *http.Request) {
@@ -1130,10 +1154,11 @@ func (s *Server) createActivityTask(w http.ResponseWriter, r *http.Request) {
 		RelatedRef  *string `json:"relatedRef"`
 		DueDate     *string `json:"dueDate"`
 	}
-	if err := httpx.DecodeJSON(w, r, &req); err != nil {
-		httpx.WriteError(w, r, err)
+	idemKey, idemHash, release, handled := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if handled {
 		return
 	}
+	defer release()
 	assignee, err := uuid.Parse(req.AssigneeRef)
 	if err != nil {
 		httpx.WriteError(w, r, httpx.BadRequest("valid assigneeRef is required"))
@@ -1157,7 +1182,7 @@ func (s *Server) createActivityTask(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteIDResponse(w, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "status": "Pending", "rowVersion": out.RowVersion})
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, idemHash, http.StatusCreated, out.RowVersion, map[string]any{"id": out.ID, "status": "Pending", "rowVersion": out.RowVersion})
 }
 
 func (s *Server) completeActivityTask(w http.ResponseWriter, r *http.Request) {

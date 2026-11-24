@@ -136,7 +136,6 @@ export type UserFormValues = z.infer<typeof userFormSchema>;
 export const roleFormSchema = z.object({
   code: z.string().trim().min(1, 'Role code required').max(64),
   name: z.string().trim().min(1, 'Role name required').max(150),
-  isSystem: z.boolean(),
 });
 export type RoleFormValues = z.infer<typeof roleFormSchema>;
 
@@ -602,7 +601,6 @@ export function useCreateRoleMutation() {
         body: JSON.stringify({
           code: values.code.trim(),
           name: values.name.trim(),
-          isSystem: values.isSystem,
         }),
       }),
     onSuccess: () => {
@@ -628,7 +626,6 @@ export function useUpdateRoleMutation() {
         ifMatch: String(rowVersion),
         body: JSON.stringify({
           name: values.name.trim(),
-          isSystem: values.isSystem,
         }),
       }),
     onSuccess: () => {

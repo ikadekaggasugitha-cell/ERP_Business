@@ -23,6 +23,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
+	"github.com/sinergiinvestasiproperti/erp/services/shared/telemetry"
 )
 
 // maxBodyBytes caps request body size to avoid unbounded decode (DoS guard).
@@ -320,8 +321,9 @@ func verifyGatewayHeaders(r *http.Request) bool {
 
 // ---- middleware ------------------------------------------------------------
 
-// Middleware injects correlation id, org scope, acting user, roles, admin tier, and
-// permissions into the request context, echoes X-Correlation-Id, and recovers panics.
+// Middleware injects correlation id, W3C traceparent context, org scope, acting user,
+// roles, admin tier, and permissions into the request context, echoes X-Correlation-Id
+// and traceparent, exports OTLP spans when configured, and recovers panics.
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cid := strings.TrimSpace(r.Header.Get("X-Correlation-Id"))
@@ -330,7 +332,22 @@ func Middleware(next http.Handler) http.Handler {
 		}
 		w.Header().Set("X-Correlation-Id", cid)
 
+		parentTC, childTC := telemetry.ExtractOrGenerate(r.Header)
+		w.Header().Set(telemetry.HeaderTraceparent, childTC.String())
+		if childTC.TraceState != "" {
+			w.Header().Set(telemetry.HeaderTracestate, childTC.TraceState)
+		}
+
 		ctx := context.WithValue(r.Context(), correlationKey, cid)
+		ctx = telemetry.WithTraceContext(ctx, childTC)
+		ctx, span := telemetry.StartSpan(ctx, r.Method+" "+r.URL.Path, 2, parentTC.SpanID)
+		if span != nil {
+			span.SetAttribute("http.method", r.Method)
+			span.SetAttribute("http.target", r.URL.Path)
+			span.SetAttribute("correlation.id", cid)
+			defer span.End()
+		}
+
 		if verifyGatewayHeaders(r) {
 			scope := mergeScopes(parseScope(r.Header.Get("X-Organization-Id")), parseScope(r.Header.Get("X-Org-Scope")))
 			ctx = context.WithValue(ctx, scopeKey, scope)
@@ -356,13 +373,31 @@ func Middleware(next http.Handler) http.Handler {
 			ctx = context.WithValue(ctx, adminTierKey, tier)
 		}
 		rWithCtx := r.WithContext(ctx)
+		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+		start := time.Now()
 		defer func() {
 			if rec := recover(); rec != nil {
-				log.Printf("[panic] cid=%s panic=%v", cid, rec)
-				WriteError(w, rWithCtx, Internal("panic"))
+				if span != nil {
+					span.SetStatus(telemetry.StatusError, "panic")
+				}
+				log.Printf("[panic] cid=%s traceId=%s panic=%v", cid, childTC.TraceID, rec)
+				WriteError(sw, rWithCtx, Internal("panic"))
+			} else {
+				if span != nil {
+					span.SetAttribute("http.status_code", strconv.Itoa(sw.status))
+					if sw.status >= 500 {
+						span.SetStatus(telemetry.StatusError, http.StatusText(sw.status))
+					} else {
+						span.SetStatus(telemetry.StatusOK, "")
+					}
+				}
+				if strings.EqualFold(strings.TrimSpace(os.Getenv("HTTP_ACCESS_LOG")), "true") {
+					log.Printf("[http] method=%s path=%s status=%d durMs=%d cid=%s traceId=%s",
+						r.Method, r.URL.Path, sw.status, time.Since(start).Milliseconds(), cid, childTC.TraceID)
+				}
 			}
 		}()
-		next.ServeHTTP(w, rWithCtx)
+		next.ServeHTTP(sw, rWithCtx)
 	})
 }
 

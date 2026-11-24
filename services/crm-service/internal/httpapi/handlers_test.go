@@ -138,3 +138,58 @@ func TestCRMOpportunityValidationAndWin(t *testing.T) {
 		t.Fatalf("expected 200 and won=true, got %d: %s", rec2.Code, rec2.Body.String())
 	}
 }
+
+func TestCRMCamelCaseDTOsAndIdempotency(t *testing.T) {
+	store := &fakeCRMStore{}
+	h := newTestMux(store)
+	orgID := uuid.NewString()
+	userID := uuid.NewString()
+
+	mkReq := func(method, path, body, perms, idemKey string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("X-Organization-Id", orgID)
+		req.Header.Set("X-User-Id", userID)
+		req.Header.Set("X-Permissions", perms)
+		req.Header.Set("Content-Type", "application/json")
+		if idemKey != "" {
+			req.Header.Set("Idempotency-Key", idemKey)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// Empty lists return [] (not null)
+	for _, path := range []string{"/opportunities", "/customer-segments", "/interactions", "/support-cases", "/activity-tasks"} {
+		rec := mkReq(http.MethodGet, path, "", "crm:read", "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s expected 200, got %d", path, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), `"data":[]`) {
+			t.Fatalf("GET %s expected empty JSON array data:[], got %s", path, rec.Body.String())
+		}
+	}
+
+	// GET single opportunity & support case use camelCase keys (no snake_case leaks)
+	for _, path := range []string{"/opportunities/" + uuid.NewString(), "/support-cases/" + uuid.NewString()} {
+		rec := mkReq(http.MethodGet, path, "", "crm:read", "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s expected 200, got %d", path, rec.Code)
+		}
+		body := rec.Body.String()
+		if strings.Contains(body, "row_version") || strings.Contains(body, "organization_id") {
+			t.Fatalf("GET %s leaked snake_case sqlc struct: %s", path, body)
+		}
+		if !strings.Contains(body, `"rowVersion"`) || !strings.Contains(body, `"organizationId"`) {
+			t.Fatalf("GET %s missing camelCase DTO keys: %s", path, body)
+		}
+	}
+
+	// Idempotent replay on POST /opportunities returns identical response body
+	body := `{"code":"OPP-IDEM","stage":"Discovery"}`
+	r1 := mkReq(http.MethodPost, "/opportunities", body, "crm:write", "crm-opp-idem-1")
+	r2 := mkReq(http.MethodPost, "/opportunities", body, "crm:write", "crm-opp-idem-1")
+	if r1.Code != http.StatusCreated || r2.Code != http.StatusCreated || r1.Body.String() != r2.Body.String() {
+		t.Fatalf("expected idempotent replay on POST /opportunities, got %d/%d (%s vs %s)", r1.Code, r2.Code, r1.Body.String(), r2.Body.String())
+	}
+}

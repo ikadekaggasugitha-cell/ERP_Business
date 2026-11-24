@@ -54,7 +54,15 @@ export interface Organization {
   id: string;
   code: string;
   name: string;
-  type: 'HOLDING' | 'SUB_HOLDING' | 'COMPANY' | 'BRANCH' | 'WAREHOUSE';
+  type:
+    | 'HOLDING'
+    | 'SUB_HOLDING'
+    | 'COMPANY'
+    | 'BRANCH'
+    | 'WAREHOUSE'
+    | 'DIVISION'
+    | 'DEPARTMENT'
+    | 'PLACE';
   parentId?: string | null;
   functionalCurrency: string;
   isActive?: boolean;

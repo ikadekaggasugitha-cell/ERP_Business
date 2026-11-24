@@ -38,12 +38,21 @@ export interface ForensicDiffEntry {
   afterText: string;
 }
 
+export interface AuditQueryParams {
+  page: number;
+  size: number;
+  entityType: string;
+  action: string;
+  from?: string;
+  to?: string;
+  entityId?: string;
+  correlationId?: string;
+}
+
 export const auditKeys = {
   all: ['audit'] as const,
-  list: (
-    orgId: string | undefined,
-    params: { page: number; size: number; entityType: string; action: string },
-  ) => ['audit', 'events', orgId, params] as const,
+  list: (orgId: string | undefined, params: AuditQueryParams) =>
+    ['audit', 'events', orgId, params] as const,
   detail: (orgId: string | undefined, id: string | null) =>
     ['audit', 'detail', orgId, id] as const,
 };
@@ -60,7 +69,7 @@ function buildAuditQuery(params: Record<string, string | number | undefined>): U
 
 export function useAuditEventsQuery(
   orgId: string | undefined,
-  params: { page: number; size: number; entityType: string; action: string },
+  params: AuditQueryParams,
 ) {
   return useQuery<{ items: AuditEventSummary[]; page: PageMeta }>({
     queryKey: auditKeys.list(orgId, params),
@@ -73,6 +82,10 @@ export function useAuditEventsQuery(
             size: params.size,
             entityType: params.entityType.trim() || undefined,
             action: params.action.trim() || undefined,
+            from: params.from?.trim() || undefined,
+            to: params.to?.trim() || undefined,
+            entityId: params.entityId?.trim() || undefined,
+            correlationId: params.correlationId?.trim() || undefined,
           }),
         },
       );

@@ -17,6 +17,7 @@ var (
 )
 
 type Claims struct {
+	JTI         string   `json:"jti,omitempty"`
 	Subject     string   `json:"sub"`
 	Username    string   `json:"username"`
 	FullName    string   `json:"fullName"`

@@ -21,8 +21,8 @@ import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { apiClient, ApiClientError } from '../../lib/api';
 import {
-  DEFAULT_BRANCH_ORG,
   DEFAULT_HOLDING_ORG,
+  DEFAULT_ORGANIZATIONS,
   useAuthStore,
 } from '../../store/auth-store';
 import { useUiStore } from '../../store/ui-store';
@@ -51,18 +51,25 @@ const ALL_BACKEND_PERMISSIONS: string[] = [
   'gl.reverse',
   'gl.close_period',
   'reporting.read',
+  'gl:read',
+  'gl:write',
+  'gl:approve',
   'ap:read',
   'ap:write',
+  'ap:approve',
   'ar:read',
   'ar:write',
+  'ar:approve',
   'coa:read',
   'coa:write',
   'tax:read',
   'tax:write',
+  'tax:approve',
   'currency:read',
   'currency:write',
   'treasury:read',
   'treasury:write',
+  'treasury:approve',
   'workflow:read',
   'workflow:write',
   'workflow:approve',
@@ -70,6 +77,7 @@ const ALL_BACKEND_PERMISSIONS: string[] = [
   'inventory:write',
   'procurement:read',
   'procurement:write',
+  'procurement:approve',
   'sales:read',
   'sales:write',
   'manufacturing:read',
@@ -78,6 +86,7 @@ const ALL_BACKEND_PERMISSIONS: string[] = [
   'hr:write',
   'payroll:read',
   'payroll:write',
+  'payroll:approve',
   'masterdata:read',
   'masterdata:write',
   'org:read',
@@ -87,6 +96,30 @@ const ALL_BACKEND_PERMISSIONS: string[] = [
   'security:read',
   'security:write',
   'audit:read',
+  'fixedasset:read',
+  'fixedasset:write',
+  'dimension:read',
+  'dimension:write',
+  'budget:read',
+  'budget:write',
+  'budget:approve',
+  'financialclose:read',
+  'financialclose:write',
+  'financialclose:approve',
+  'consolidation:read',
+  'consolidation:write',
+  'consolidation:approve',
+  'project:read',
+  'project:write',
+  'project:approve',
+  'asset:read',
+  'asset:write',
+  'maintenance:read',
+  'maintenance:write',
+  'crm:read',
+  'crm:write',
+  'localization:read',
+  'localization:write',
 ];
 
 const DEMO_PERSONAS: DemoPersona[] = [
@@ -336,7 +369,7 @@ function LoginPage() {
 
   const handleOfflineDemoLogin = () => {
     const targetOrg =
-      activePersona.orgCode === 'BRC-JKT' ? DEFAULT_BRANCH_ORG : DEFAULT_HOLDING_ORG;
+      DEFAULT_ORGANIZATIONS.find((o) => o.code === activePersona.orgCode) ?? DEFAULT_HOLDING_ORG;
     setDemoMode(true);
     setDemoAuth(
       {
@@ -349,7 +382,7 @@ function LoginPage() {
         permissions: activePersona.permissions,
       },
       targetOrg,
-      [DEFAULT_HOLDING_ORG, DEFAULT_BRANCH_ORG]
+      DEFAULT_ORGANIZATIONS
     );
     void navigate({ to: '/' });
   };
@@ -385,7 +418,7 @@ function LoginPage() {
         <div className="relative z-10 max-w-md space-y-5">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-brand-100">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-            <span>20 Microservices · Row-Level Security · Fixed-Point BigInt</span>
+            <span>30 Microservices · Row-Level Security · Fixed-Point BigInt</span>
           </div>
           <h2 className="text-3xl font-bold tracking-tight leading-tight">
             {t('auth.welcomeBack')}
@@ -468,11 +501,19 @@ function LoginPage() {
                   options={[
                     {
                       value: 'HLD-01',
-                      label: 'HLD-01 · PT Sinergi Investasi Properti (Holding)',
+                      label: 'HLD-01 · PT Sinergi Investasi Properti (Head Office / Holding)',
+                    },
+                    {
+                      value: 'SUB-PRO',
+                      label: 'SUB-PRO · PT Sinergi Properti Jakarta (Anak Perusahaan)',
+                    },
+                    {
+                      value: 'SUB-LOG',
+                      label: 'SUB-LOG · PT Sinergi Logistik Nusantara (Anak Perusahaan)',
                     },
                     {
                       value: 'BRC-JKT',
-                      label: 'BRC-JKT · PT Sinergi Properti Jakarta (Branch)',
+                      label: 'BRC-JKT · Cabang Jakarta Selatan (Branch)',
                     },
                   ]}
                 />
@@ -575,6 +616,20 @@ function LoginPage() {
                 {t('auth.demoButton')} ({activePersona.username})
               </Button>
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+            <a href="/privacy" className="hover:text-brand-600 dark:hover:text-brand-400 underline-offset-2 hover:underline">
+              Privacy Policy
+            </a>
+            <span aria-hidden="true">·</span>
+            <a href="/terms" className="hover:text-brand-600 dark:hover:text-brand-400 underline-offset-2 hover:underline">
+              Terms of Service
+            </a>
+            <span aria-hidden="true">·</span>
+            <a href="/delete-account" className="hover:text-brand-600 dark:hover:text-brand-400 underline-offset-2 hover:underline">
+              Delete Account
+            </a>
           </div>
         </div>
       </div>
