@@ -29,19 +29,23 @@ FROM (VALUES
 CROSS JOIN (VALUES ('read'),('write'),('approve')) acts(a)
 ON CONFLICT (organization_id, code) DO NOTHING;
 
--- System roles (tiered admin hierarchy: 0=SYSTEM_ADMIN, 1=HOLDING_ADMIN, 2=SUBSIDIARY_ADMIN, 3=BRANCH_ADMIN, 99=NON_ADMIN)
-INSERT INTO sec.role (organization_id, code, name, is_system, admin_tier, default_scope_type, created_by) VALUES
-  (:'org_id','SYSTEM_ADMIN','System Administrator',true,0,'all',:'actor'),
-  (:'org_id','HOLDING_ADMIN','Head Office / Holding Administrator',true,1,'holding',:'actor'),
-  (:'org_id','SUBSIDIARY_ADMIN','Subsidiary / Company Administrator',true,2,'subsidiary',:'actor'),
-  (:'org_id','BRANCH_ADMIN','Branch / Unit Administrator',true,3,'branch',:'actor'),
-  (:'org_id','FINANCE_MANAGER','Finance Manager',true,99,'organization',:'actor'),
-  (:'org_id','ACCOUNTANT','Accountant',true,99,'organization',:'actor'),
-  (:'org_id','PROCUREMENT_MANAGER','Procurement Manager',true,99,'organization',:'actor'),
-  (:'org_id','SALES_MANAGER','Sales Manager',true,99,'organization',:'actor'),
-  (:'org_id','HR_MANAGER','HR Manager',true,99,'organization',:'actor'),
-  (:'org_id','AUDITOR','Auditor',true,99,'organization',:'actor'),
-  (:'org_id','VIEWER','Viewer',true,99,'organization',:'actor')
+-- System roles (15 roles: 4 tiered admins + 11 functional division roles)
+INSERT INTO sec.role (id, organization_id, code, name, is_system, admin_tier, default_scope_type, created_by) VALUES
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000001'::uuid ELSE md5(:'org_id' || ':role:SYSTEM_ADMIN')::uuid END,         :'org_id','SYSTEM_ADMIN',         'System Administrator',                 true, 0,  'all',          :'actor'),
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000002'::uuid ELSE md5(:'org_id' || ':role:HOLDING_ADMIN')::uuid END,        :'org_id','HOLDING_ADMIN',        'Head Office / Holding Administrator',  true, 1,  'holding',      :'actor'),
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000003'::uuid ELSE md5(:'org_id' || ':role:SUBSIDIARY_ADMIN')::uuid END,     :'org_id','SUBSIDIARY_ADMIN',     'Subsidiary / Company Administrator',   true, 2,  'subsidiary',   :'actor'),
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000004'::uuid ELSE md5(:'org_id' || ':role:BRANCH_ADMIN')::uuid END,         :'org_id','BRANCH_ADMIN',         'Branch / Unit Administrator',          true, 3,  'branch',       :'actor'),
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000005'::uuid ELSE md5(:'org_id' || ':role:FINANCE_MANAGER')::uuid END,      :'org_id','FINANCE_MANAGER',      'Finance Manager',                      true, 99, 'organization', :'actor'),
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000006'::uuid ELSE md5(:'org_id' || ':role:ACCOUNTANT')::uuid END,           :'org_id','ACCOUNTANT',           'Accountant',                           true, 99, 'organization', :'actor'),
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000007'::uuid ELSE md5(:'org_id' || ':role:TAX_TREASURY_OFFICER')::uuid END, :'org_id','TAX_TREASURY_OFFICER', 'Tax & Treasury Officer',               true, 99, 'organization', :'actor'),
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000008'::uuid ELSE md5(:'org_id' || ':role:PROCUREMENT_MANAGER')::uuid END,  :'org_id','PROCUREMENT_MANAGER',  'Procurement Manager',                  true, 99, 'organization', :'actor'),
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000009'::uuid ELSE md5(:'org_id' || ':role:WAREHOUSE_MANAGER')::uuid END,    :'org_id','WAREHOUSE_MANAGER',    'Warehouse & Logistics Manager',        true, 99, 'organization', :'actor'),
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000010'::uuid ELSE md5(:'org_id' || ':role:SALES_MANAGER')::uuid END,        :'org_id','SALES_MANAGER',        'Sales & CRM Manager',                  true, 99, 'organization', :'actor'),
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000011'::uuid ELSE md5(:'org_id' || ':role:OPERATIONS_MANAGER')::uuid END,   :'org_id','OPERATIONS_MANAGER',   'Operations, Project & Maintenance Mgr',true, 99, 'organization', :'actor'),
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000012'::uuid ELSE md5(:'org_id' || ':role:HR_MANAGER')::uuid END,           :'org_id','HR_MANAGER',           'HR & Payroll Manager',                 true, 99, 'organization', :'actor'),
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000013'::uuid ELSE md5(:'org_id' || ':role:AUDITOR')::uuid END,              :'org_id','AUDITOR',              'Internal Auditor',                     true, 99, 'organization', :'actor'),
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000014'::uuid ELSE md5(:'org_id' || ':role:STAFF_OPERATOR')::uuid END,       :'org_id','STAFF_OPERATOR',       'Operational Staff',                    true, 99, 'organization', :'actor'),
+  (CASE WHEN :'org_id'::uuid = '00000000-0000-0000-0000-000000000000'::uuid THEN '5e000000-0000-4000-8000-000000000015'::uuid ELSE md5(:'org_id' || ':role:VIEWER')::uuid END,               :'org_id','VIEWER',               'Viewer',                               true, 99, 'organization', :'actor')
 ON CONFLICT (organization_id, code) DO UPDATE
   SET admin_tier = EXCLUDED.admin_tier,
       default_scope_type = EXCLUDED.default_scope_type,
@@ -112,4 +116,48 @@ FROM sec.role r JOIN sec.permission p ON p.organization_id = r.organization_id
     OR (p.module IN ('org','audit','inventory','sales','manufacturing','hr','localization','project','asset','maintenance','crm') AND p.action = 'read')
   )
 WHERE r.organization_id = :'org_id' AND r.code = 'FINANCE_MANAGER'
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- TAX_TREASURY_OFFICER
+INSERT INTO sec.role_permission (organization_id, role_id, permission_id, created_by)
+SELECT :'org_id', r.id, p.id, :'actor'
+FROM sec.role r JOIN sec.permission p ON p.organization_id = r.organization_id
+  AND (
+    (p.module IN ('tax','treasury','currency') AND p.action IN ('create','read','update','write','approve'))
+    OR (p.module IN ('ap','ar','gl','coa','reporting','org','workflow') AND p.action = 'read')
+  )
+WHERE r.organization_id = :'org_id' AND r.code = 'TAX_TREASURY_OFFICER'
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- WAREHOUSE_MANAGER
+INSERT INTO sec.role_permission (organization_id, role_id, permission_id, created_by)
+SELECT :'org_id', r.id, p.id, :'actor'
+FROM sec.role r JOIN sec.permission p ON p.organization_id = r.organization_id
+  AND (
+    (p.module IN ('inventory','asset') AND p.action IN ('create','read','update','write','approve'))
+    OR (p.module IN ('procurement','sales','maintenance','masterdata','reporting','org','workflow') AND p.action = 'read')
+  )
+WHERE r.organization_id = :'org_id' AND r.code = 'WAREHOUSE_MANAGER'
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- OPERATIONS_MANAGER
+INSERT INTO sec.role_permission (organization_id, role_id, permission_id, created_by)
+SELECT :'org_id', r.id, p.id, :'actor'
+FROM sec.role r JOIN sec.permission p ON p.organization_id = r.organization_id
+  AND (
+    (p.module IN ('manufacturing','project','asset','maintenance','inventory') AND p.action IN ('create','read','update','write','approve'))
+    OR (p.module IN ('procurement','dimension','masterdata','reporting','org','workflow') AND p.action = 'read')
+  )
+WHERE r.organization_id = :'org_id' AND r.code = 'OPERATIONS_MANAGER'
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- STAFF_OPERATOR (create/read/update operational drafts without approval)
+INSERT INTO sec.role_permission (organization_id, role_id, permission_id, created_by)
+SELECT :'org_id', r.id, p.id, :'actor'
+FROM sec.role r JOIN sec.permission p ON p.organization_id = r.organization_id
+  AND (
+    (p.module IN ('inventory','procurement','sales','manufacturing','project','asset','maintenance','crm') AND p.action IN ('create','read','update','write'))
+    OR (p.module IN ('masterdata','org','workflow') AND p.action = 'read')
+  )
+WHERE r.organization_id = :'org_id' AND r.code = 'STAFF_OPERATOR'
 ON CONFLICT (role_id, permission_id) DO NOTHING;

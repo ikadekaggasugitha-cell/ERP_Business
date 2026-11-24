@@ -334,6 +334,35 @@ var rolePermissions = map[string][]string{
 		"org.read", "org:read",
 		"user:read",
 	},
+	"TAX_TREASURY_OFFICER": {
+		"tax.create", "tax.read", "tax.update", "tax.approve", "tax:read", "tax:write", "tax:approve",
+		"treasury.create", "treasury.read", "treasury.update", "treasury.approve", "treasury:read", "treasury:write", "treasury:approve",
+		"currency:read", "currency:write",
+		"ap.read", "ap:read", "ar.read", "ar:read", "gl.read", "coa:read", "reporting.read", "org.read", "org:read", "workflow:read",
+	},
+	"WAREHOUSE_MANAGER": {
+		"inventory.create", "inventory.read", "inventory.update", "inventory:read", "inventory:write",
+		"asset.read", "asset.create", "asset.update", "asset:read", "asset:write",
+		"procurement.read", "procurement:read", "sales.read", "sales:read", "maintenance.read", "maintenance:read",
+		"masterdata:read", "reporting.read", "org.read", "org:read", "workflow:read",
+	},
+	"OPERATIONS_MANAGER": {
+		"manufacturing:read", "manufacturing:write",
+		"project.read", "project.create", "project.update", "project.approve", "project:read", "project:write", "project:approve",
+		"asset.read", "asset.create", "asset.update", "asset:read", "asset:write",
+		"maintenance.read", "maintenance.create", "maintenance.update", "maintenance:read", "maintenance:write",
+		"inventory.create", "inventory.read", "inventory.update", "inventory:read", "inventory:write",
+		"procurement.read", "procurement:read", "dimension:read", "masterdata:read", "reporting.read", "org.read", "org:read", "workflow:read",
+	},
+	"STAFF_OPERATOR": {
+		"inventory.create", "inventory.read", "inventory.update", "inventory:read", "inventory:write",
+		"procurement.create", "procurement.read", "procurement.update", "procurement:read", "procurement:write",
+		"sales.create", "sales.read", "sales.update", "sales:read", "sales:write",
+		"manufacturing:read", "manufacturing:write",
+		"project.read", "project.create", "project:read", "project:write",
+		"asset.read", "asset:read", "maintenance.read", "maintenance:read", "crm.read", "crm:read",
+		"masterdata:read", "org.read", "org:read", "workflow:read",
+	},
 	"AUDITOR": {
 		"gl.read", "ap.read", "ar.read", "tax.read", "treasury.read",
 		"procurement.read", "inventory.read", "sales.read",
@@ -906,6 +935,46 @@ func resolveDevPersona(username string, requested orgSummary) (roles []string, o
 			[]string{brcJktOrgID},
 			devOrganizations[3],
 			"Admin Cabang Jakarta Selatan"
+	case "finance.mgr":
+		return []string{"FINANCE_MANAGER"},
+			[]string{defaultOrgID, branchOrgID},
+			devOrganizations[0],
+			"Kepala Divisi Finance & Accounting"
+	case "tax.treasury":
+		return []string{"TAX_TREASURY_OFFICER"},
+			[]string{defaultOrgID},
+			devOrganizations[0],
+			"Tax & Treasury Officer"
+	case "procurement.mgr":
+		return []string{"PROCUREMENT_MANAGER"},
+			[]string{branchOrgID},
+			devOrganizations[1],
+			"Kepala Divisi Procurement"
+	case "warehouse.mgr":
+		return []string{"WAREHOUSE_MANAGER"},
+			[]string{subLogOrgID},
+			devOrganizations[2],
+			"Kepala Divisi Warehouse & Logistik"
+	case "sales.mgr":
+		return []string{"SALES_MANAGER"},
+			[]string{branchOrgID},
+			devOrganizations[1],
+			"Kepala Divisi Sales & CRM"
+	case "ops.mgr":
+		return []string{"OPERATIONS_MANAGER"},
+			[]string{branchOrgID, brcJktOrgID},
+			devOrganizations[1],
+			"Kepala Divisi Operations & Proyek"
+	case "hr.mgr":
+		return []string{"HR_MANAGER"},
+			[]string{defaultOrgID},
+			devOrganizations[0],
+			"Kepala Divisi HR & Payroll"
+	case "auditor.it", "auditor.internal":
+		return []string{"AUDITOR"},
+			[]string{defaultOrgID, branchOrgID, subLogOrgID, brcJktOrgID},
+			devOrganizations[0],
+			"Internal Auditor & IT Governance"
 	default:
 		return []string{"ACCOUNTANT"},
 			[]string{requested.ID},
