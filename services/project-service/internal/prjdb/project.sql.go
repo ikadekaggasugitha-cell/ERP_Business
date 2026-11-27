@@ -868,19 +868,19 @@ func (q *Queries) MarkOutboxPublished(ctx context.Context, arg MarkOutboxPublish
 
 const shiftProjectEndDate = `-- name: ShiftProjectEndDate :exec
 UPDATE prj.project
-SET end_date = (end_date + ($2 * interval '1 day'))::date, updated_by = $3
+SET end_date = (end_date + ($3::integer * interval '1 day'))::date, updated_by = $2
 WHERE id = $1 AND end_date IS NOT NULL AND deleted_at IS NULL
   AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
 `
 
 type ShiftProjectEndDateParams struct {
 	ID        uuid.UUID  `json:"id"`
-	Days      int32      `json:"days"`
 	UpdatedBy *uuid.UUID `json:"updated_by"`
+	Days      int32      `json:"days"`
 }
 
 func (q *Queries) ShiftProjectEndDate(ctx context.Context, arg ShiftProjectEndDateParams) error {
-	_, err := q.db.Exec(ctx, shiftProjectEndDate, arg.ID, arg.Days, arg.UpdatedBy)
+	_, err := q.db.Exec(ctx, shiftProjectEndDate, arg.ID, arg.UpdatedBy, arg.Days)
 	return err
 }
 

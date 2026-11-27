@@ -43,7 +43,7 @@ WHERE id = $1 AND row_version = $3 AND status = 'Draft' AND deleted_at IS NULL
 
 -- name: ShiftProjectEndDate :exec
 UPDATE prj.project
-SET end_date = (end_date + ($2 * interval '1 day'))::date, updated_by = $3
+SET end_date = (end_date + (sqlc.arg(days)::integer * interval '1 day'))::date, updated_by = $2
 WHERE id = $1 AND end_date IS NOT NULL AND deleted_at IS NULL
   AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid;
 

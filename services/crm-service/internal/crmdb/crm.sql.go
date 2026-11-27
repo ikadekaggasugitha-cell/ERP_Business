@@ -438,6 +438,29 @@ func (q *Queries) EscalateSupportCase(ctx context.Context, arg EscalateSupportCa
 	return row_version, err
 }
 
+const getCustomerSegment = `-- name: GetCustomerSegment :one
+SELECT id, organization_id, code, name, criteria, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM crm.customer_segment WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetCustomerSegment(ctx context.Context, id uuid.UUID) (CrmCustomerSegment, error) {
+	row := q.db.QueryRow(ctx, getCustomerSegment, id)
+	var i CrmCustomerSegment
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Code,
+		&i.Name,
+		&i.Criteria,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+		&i.DeletedAt,
+		&i.RowVersion,
+	)
+	return i, err
+}
+
 const getLead = `-- name: GetLead :one
 SELECT id, organization_id, code, name, source, status, estimated_value, customer_ref, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM crm.lead WHERE id = $1 AND deleted_at IS NULL
 `
@@ -891,29 +914,6 @@ func (q *Queries) ResolveSupportCase(ctx context.Context, arg ResolveSupportCase
 	var row_version int32
 	err := row.Scan(&row_version)
 	return row_version, err
-}
-
-const getCustomerSegment = `-- name: GetCustomerSegment :one
-SELECT id, organization_id, code, name, criteria, created_at, created_by, updated_at, updated_by, deleted_at, row_version FROM crm.customer_segment WHERE id = $1 AND deleted_at IS NULL
-`
-
-func (q *Queries) GetCustomerSegment(ctx context.Context, id uuid.UUID) (CrmCustomerSegment, error) {
-	row := q.db.QueryRow(ctx, getCustomerSegment, id)
-	var i CrmCustomerSegment
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.Code,
-		&i.Name,
-		&i.Criteria,
-		&i.CreatedAt,
-		&i.CreatedBy,
-		&i.UpdatedAt,
-		&i.UpdatedBy,
-		&i.DeletedAt,
-		&i.RowVersion,
-	)
-	return i, err
 }
 
 const softDeleteCustomerSegment = `-- name: SoftDeleteCustomerSegment :execrows
