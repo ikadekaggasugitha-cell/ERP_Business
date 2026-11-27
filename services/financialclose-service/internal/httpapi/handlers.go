@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -47,6 +48,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /closing-runs", s.createRun)
 	mux.HandleFunc("GET /closing-runs/{id}", s.getRun)
 	mux.HandleFunc("POST /closing-runs/{id}/fx-revaluation", s.fxRevaluation)
+	mux.HandleFunc("POST /closing-runs/{id}/auto-reversals", s.autoReversals)
+	mux.HandleFunc("POST /closing-runs/{id}/verify-subledgers", s.verifySubledgers)
 	mux.HandleFunc("POST /closing-runs/{id}/close", func(w http.ResponseWriter, r *http.Request) { s.transitionRun(w, r, "Closed") })
 	mux.HandleFunc("POST /closing-runs/{id}/lock", func(w http.ResponseWriter, r *http.Request) { s.transitionRun(w, r, "Locked") })
 	mux.HandleFunc("POST /closing-tasks/{id}/complete", s.completeTask)
@@ -540,4 +543,145 @@ func (s *Server) approveReopening(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, next, map[string]any{"id": id, "status": "Reopened", "rowVersion": next})
+}
+
+func (s *Server) autoReversals(w http.ResponseWriter, r *http.Request) {
+	scope, _, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	runID, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var req struct {
+		ReversalDate string `json:"reversalDate"`
+		Entries      []struct {
+			Reference         string `json:"reference"`
+			AccountCode       string `json:"accountCode"`
+			ContraAccountCode string `json:"contraAccountCode"`
+			Description       string `json:"description"`
+			Amount            string `json:"amount"`
+		} `json:"entries"`
+	}
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
+		return
+	}
+	defer release()
+
+	revDate := time.Now().UTC().AddDate(0, 0, 1).Format("2006-01-02")
+	if strings.TrimSpace(req.ReversalDate) != "" {
+		if _, perr := platform.ParseDate(req.ReversalDate); perr != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("reversalDate must be YYYY-MM-DD"))
+			return
+		}
+		revDate = strings.TrimSpace(req.ReversalDate)
+	}
+	if _, _, err := s.repo.GetClosingRun(r.Context(), scope, runID); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+
+	total := new(big.Rat)
+	reversals := make([]map[string]any, 0, len(req.Entries))
+	for i, e := range req.Entries {
+		num, perr := platform.ParseNumeric(e.Amount)
+		if perr != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("entries[].amount is invalid"))
+			return
+		}
+		amt := platform.NumericToRat(num)
+		if amt == nil || amt.Sign() <= 0 {
+			httpx.WriteError(w, r, httpx.Unprocessable("INVALID_AMOUNT", "reversal entry amount must be > 0"))
+			return
+		}
+		total.Add(total, amt)
+		ref := strings.TrimSpace(e.Reference)
+		if ref == "" {
+			ref = "REV-" + runID.String()[:8]
+		}
+		reversals = append(reversals, map[string]any{
+			"lineNo":      i + 1,
+			"reference":   ref,
+			"reversalDate": revDate,
+			"debitAccount":  strings.TrimSpace(e.ContraAccountCode),
+			"creditAccount": strings.TrimSpace(e.AccountCode),
+			"description":   strings.TrimSpace(e.Description),
+			"amount":        amt.FloatString(4),
+			"status":        "PreviewGenerated",
+		})
+	}
+
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, 1, map[string]any{
+		"closingRunId": runID,
+		"reversalDate": revDate,
+		"count":        len(reversals),
+		"totalAmount":  total.FloatString(4),
+		"reversals":    reversals,
+	})
+}
+
+func (s *Server) verifySubledgers(w http.ResponseWriter, r *http.Request) {
+	scope, _, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	runID, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	run, tasks, err := s.repo.GetClosingRun(r.Context(), scope, runID)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+
+	subledgers := []string{"GL", "AP", "AR", "INVENTORY", "FIXED_ASSET"}
+	openTaskBySub := make(map[string]int, len(subledgers))
+	for _, t := range tasks {
+		if strings.EqualFold(t.Status, "Completed") || strings.EqualFold(t.Status, "Skipped") {
+			continue
+		}
+		upper := strings.ToUpper(t.TaskName)
+		for _, sub := range subledgers {
+			if strings.Contains(upper, sub) {
+				openTaskBySub[sub]++
+			}
+		}
+	}
+
+	checks := make([]map[string]any, 0, len(subledgers))
+	passed := 0
+	failed := 0
+	for _, sub := range subledgers {
+		if n := openTaskBySub[sub]; n > 0 {
+			failed++
+			checks = append(checks, map[string]any{
+				"subledger": sub,
+				"status":    "FAILED",
+				"openTasks": n,
+				"detail":    "pending closing tasks remain for subledger",
+			})
+		} else {
+			passed++
+			checks = append(checks, map[string]any{
+				"subledger": sub,
+				"status":    "PASSED",
+				"openTasks": 0,
+				"detail":    "subledger ready for period close",
+			})
+		}
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"closingRunId": run.ID,
+		"runStatus":    run.Status,
+		"readyToClose": failed == 0,
+		"passedCount":  passed,
+		"failedCount":  failed,
+		"checks":       checks,
+	})
 }

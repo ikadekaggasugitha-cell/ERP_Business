@@ -45,8 +45,8 @@ Platform ERP mengadopsi arsitektur **Domain-Driven Microservices** yang terdesen
                                     ▼                                          ▼
      ┌──────────────────────────────────────────────────┐      ┌─────────────────────────────────────────────────┐
      │          READ MODEL & AUDIT CONSUMERS            │      │        ANALYTIC DATA LAKEHOUSE (CORTEX V7)      │
-     │  audit-service (immutable audit_log)             │      │  Replicated SAP DDIC Tables + Debezium CDC      │
-     │  reporting-service (CQRS + Financial Statements) │      │  Dataform: 36 Datasets, 6 Assertions, 35 Decls  │
+     │  audit-service (immutable audit_log + hash-chain)│      │  Replicated SAP DDIC Tables + Debezium CDC      │
+     │  reporting-service (CQRS + Financial Statements) │      │  Dataform: 43 Datasets, 7 Assertions, 42 Decls  │
      └──────────────────────────────────────────────────┘      └─────────────────────────────────────────────────┘
 ```
 
@@ -68,7 +68,7 @@ Platform ERP mengadopsi arsitektur **Domain-Driven Microservices** yang terdesen
 | **API Gateway** | Go `api-gateway` (:8000) + Kong 3.x (`deploy/kong/kong.yml`) | 3.6+ | OIDC/JWKS & JWT enforcement, 3-Tier Admin RBAC (`HOLDING_ADMIN` → `SUBSIDIARY_ADMIN` → `BRANCH_ADMIN`), HMAC trust headers, SSE streaming, OpenAPI 3.1 (`/openapi.yaml`). |
 | **Frontend Presentation** | Decoupled SPA (React 19 + Vite + TanStack Router & TanStack Query v5) | Latest | Antarmuka transaksi backoffice interaktif kaya data (Zustand & Tailwind CSS v4) mencakup seluruh domain inti & 10 layanan extended. |
 | **Browser Companion** | Chrome Extension | Manifest V3 | Otomasi pengisian portal pajak (e-Faktur), rekonsiliasi bank, dan quick approvals. |
-| **Enterprise Analytics** | Cortex Framework V7 + Dataform + Debezium CDC (`deploy/cdc/`) | V7 / v3.1.5 | Integrasi tabel SAP DDIC + Debezium/BigQuery CDC, star-schema reporting (36 datasets, 6 assertions, 35 declarations), dan multi-country consolidation. |
+| **Enterprise Analytics** | Cortex Framework V7 + Dataform + Debezium CDC (`deploy/cdc/`) | V7 / v3.1.5 | Integrasi tabel SAP DDIC + Debezium/BigQuery CDC, star-schema reporting (50 actions: 43 datasets, 7 assertions, 42 declarations), dan multi-country consolidation. |
 | **Observability** | OpenTelemetry + Prometheus + Grafana (`deploy/observability/`) | Latest | Tracing terdistribusi W3C `traceparent` + OTLP collector, metrik RED/outbox/SLA, alert rules, dan log JSON terpusat. |
 | **Container & Orchestration**| Docker + Kubernetes/Kustomize (`deploy/k8s/`) | K8s 1.30+ | Operator-based deployment (Strimzi untuk Kafka, CloudNativePG + PgBouncer untuk PostgreSQL, ExternalSecrets/Vault, default-deny NetworkPolicies, non-root pods, HPA/PDB). |
 

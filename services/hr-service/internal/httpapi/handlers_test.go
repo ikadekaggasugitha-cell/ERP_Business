@@ -210,5 +210,72 @@ func TestHRCRUDMaskingBlindLookupAndRBAC(t *testing.T) {
 	if term.Status != "Terminated" || term.RowVersion != 3 {
 		t.Fatalf("unexpected terminated state: %+v", term)
 	}
+
+	// 5. Leave requests (POST -> GET -> approve with SoD) & Attendance logs (POST -> GET)
+	orgID := uuid.NewString()
+	makerID := uuid.NewString()
+	approverID := uuid.NewString()
+
+	lvReq := httptest.NewRequest(http.MethodPost, "/leave-requests", bytes.NewBufferString(`{"employeeId":"`+created.ID.String()+`","leaveType":"Annual","startDate":"2026-12-01","endDate":"2026-12-03","reason":"vacation"}`))
+	lvReq.Header.Set("X-Organization-Id", orgID)
+	lvReq.Header.Set("X-User-Id", makerID)
+	lvReq.Header.Set("X-Permissions", "hr:write")
+	lvReq.Header.Set("Idempotency-Key", "lv-1")
+	lvRec := httptest.NewRecorder()
+	router.ServeHTTP(lvRec, lvReq)
+	if lvRec.Code != http.StatusCreated {
+		t.Fatalf("create leave got %d: %s", lvRec.Code, lvRec.Body.String())
+	}
+	var lvCreated struct {
+		ID        string `json:"id"`
+		DaysCount int    `json:"daysCount"`
+	}
+	_ = json.Unmarshal(lvRec.Body.Bytes(), &lvCreated)
+	if lvCreated.DaysCount != 3 {
+		t.Fatalf("expected daysCount=3, got %d", lvCreated.DaysCount)
+	}
+
+	// Self-approval blocked by SoD (403)
+	selfApp := httptest.NewRequest(http.MethodPost, "/leave-requests/"+lvCreated.ID+"/approve", nil)
+	selfApp.Header.Set("X-Organization-Id", orgID)
+	selfApp.Header.Set("X-User-Id", makerID)
+	selfApp.Header.Set("X-Permissions", "hr:write")
+	selfAppRec := httptest.NewRecorder()
+	router.ServeHTTP(selfAppRec, selfApp)
+	if selfAppRec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 on leave self-approval, got %d", selfAppRec.Code)
+	}
+
+	// Different approver succeeds (200)
+	appReq := httptest.NewRequest(http.MethodPost, "/leave-requests/"+lvCreated.ID+"/approve", nil)
+	appReq.Header.Set("X-Organization-Id", orgID)
+	appReq.Header.Set("X-User-Id", approverID)
+	appReq.Header.Set("X-Permissions", "hr:write")
+	appRec := httptest.NewRecorder()
+	router.ServeHTTP(appRec, appReq)
+	if appRec.Code != http.StatusOK || !bytes.Contains(appRec.Body.Bytes(), []byte(`"status":"Approved"`)) {
+		t.Fatalf("approve leave got %d: %s", appRec.Code, appRec.Body.String())
+	}
+
+	// Attendance log POST + GET
+	attReq := httptest.NewRequest(http.MethodPost, "/attendance-logs", bytes.NewBufferString(`{"employeeId":"`+created.ID.String()+`","logDate":"2026-11-27","status":"Present","clockIn":"08:30","clockOut":"17:30"}`))
+	attReq.Header.Set("X-Organization-Id", orgID)
+	attReq.Header.Set("X-User-Id", makerID)
+	attReq.Header.Set("X-Permissions", "hr:write")
+	attReq.Header.Set("Idempotency-Key", "att-1")
+	attRec := httptest.NewRecorder()
+	router.ServeHTTP(attRec, attReq)
+	if attRec.Code != http.StatusCreated {
+		t.Fatalf("create attendance got %d: %s", attRec.Code, attRec.Body.String())
+	}
+
+	listAtt := httptest.NewRequest(http.MethodGet, "/attendance-logs?date=2026-11-27", nil)
+	listAtt.Header.Set("X-Organization-Id", orgID)
+	listAtt.Header.Set("X-Permissions", "hr:read")
+	listAttRec := httptest.NewRecorder()
+	router.ServeHTTP(listAttRec, listAtt)
+	if listAttRec.Code != http.StatusOK || !bytes.Contains(listAttRec.Body.Bytes(), []byte(`"status":"Present"`)) {
+		t.Fatalf("list attendance got %d: %s", listAttRec.Code, listAttRec.Body.String())
+	}
 }
 

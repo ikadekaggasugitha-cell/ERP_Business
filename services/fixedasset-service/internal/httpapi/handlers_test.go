@@ -38,6 +38,12 @@ func (m *mockFAStore) ListCategories(_ context.Context, _ []uuid.UUID, _, _ int3
 func (m *mockFAStore) CreateAsset(_ context.Context, _ []uuid.UUID, _ fadb.CreateFixedAssetParams) (fadb.CreateFixedAssetRow, error) {
 	return fadb.CreateFixedAssetRow{ID: uuid.New(), Status: "Draft", RowVersion: 1}, nil
 }
+func (m *mockFAStore) GetAsset(_ context.Context, scope []uuid.UUID, id uuid.UUID) (fadb.FaFixedAsset, error) {
+	nbv, _ := platform.ParseNumeric("47000000.0000")
+	return fadb.FaFixedAsset{
+		ID: id, OrganizationID: scope[0], AssetNo: "FA-001", Status: "Active", NetBookValue: nbv, RowVersion: 2,
+	}, nil
+}
 func (m *mockFAStore) ListAssets(_ context.Context, _ []uuid.UUID, _ *string, _, _ int32) ([]fadb.FaFixedAsset, int64, error) {
 	return []fadb.FaFixedAsset{
 		{ID: uuid.New(), AssetNo: "FA-001", Status: "Active", RowVersion: 1},
@@ -178,5 +184,18 @@ func TestFixedAssetDepreciationAndLifecycle(t *testing.T) {
 	bReplay := doFAWithIdem(h, "POST", "/fixed-assets/depreciate-batch", batchBody, "fixedasset:write", "", orgID, "batch-dep-1")
 	if bReplay.Code != http.StatusOK || bReplay.Header().Get("Idempotency-Replayed") != "true" {
 		t.Fatalf("expected idempotent replay on depreciate-batch, got %d", bReplay.Code)
+	}
+
+	// POST /fixed-assets/{id}/transfer (inter-org transfer with If-Match + Idempotency-Key)
+	targetOrg := uuid.NewString()
+	trRec := doFAWithIdem(h, "POST", "/fixed-assets/"+assetID+"/transfer", `{"targetOrganizationId":"`+targetOrg+`","transferDate":"2026-11-27","reason":"relocation"}`, "fixedasset:write", `"2"`, orgID, "tr-1")
+	if trRec.Code != http.StatusOK || !strings.Contains(trRec.Body.String(), targetOrg) {
+		t.Fatalf("transfer got %d: %s", trRec.Code, trRec.Body.String())
+	}
+
+	// POST /fixed-assets/{id}/revalue (47M -> 50M = +3M RevaluationSurplus)
+	rvRec := doFAWithIdem(h, "POST", "/fixed-assets/"+assetID+"/revalue", `{"fairValue":"50000000.0000","revaluationDate":"2026-11-27","reason":"appraisal"}`, "fixedasset:write", `"2"`, orgID, "rv-1")
+	if rvRec.Code != http.StatusOK || !strings.Contains(rvRec.Body.String(), `"revaluationDelta":"3000000.0000"`) || !strings.Contains(rvRec.Body.String(), `"RevaluationSurplus"`) {
+		t.Fatalf("revalue got %d: %s", rvRec.Code, rvRec.Body.String())
 	}
 }

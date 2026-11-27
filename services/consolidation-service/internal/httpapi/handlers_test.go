@@ -37,6 +37,9 @@ func (m *mockConsStore) PostEliminations(_ context.Context, _ []uuid.UUID, _ uui
 func (m *mockConsStore) FinalizeRunAndEmit(_ context.Context, _ []uuid.UUID, _ uuid.UUID, _ int32, _, _ uuid.UUID) (int32, error) {
 	return 3, nil
 }
+func (m *mockConsStore) GetRunDetail(_ context.Context, _ []uuid.UUID, id uuid.UUID) (consdb.ConsConsolidationRun, []consdb.ConsEliminationEntry, []consdb.ConsConsolidationAdjustment, error) {
+	return consdb.ConsConsolidationRun{ID: id, Status: "Open", RowVersion: 1}, nil, nil, nil
+}
 
 func TestConsolidationEliminationBalanceAndFinalize(t *testing.T) {
 	st := &mockConsStore{}
@@ -121,5 +124,45 @@ func TestConsolidationEliminationBalanceAndFinalize(t *testing.T) {
 	}
 	if st.elimCalls != 1 {
 		t.Fatalf("expected PostEliminations called once via idempotency, got %d", st.elimCalls)
+	}
+
+	// Generate eliminations (IC + NCI + CTA) gated to HOLDING_ADMIN (SUBSIDIARY_ADMIN rejected with 403)
+	genBody := `{"intercompanyBalances":[{"fromEntityId":"SUB-PRO","toEntityId":"SUB-LOG","accountCode":"1150","amount":"500000.0000"}],"subsidiaryEquity":[{"entityId":"SUB-PRO","equityAmount":"10000000.0000","netIncome":"2000000.0000","ownershipPercent":"80"}],"fxTranslations":[{"entityId":"SUB-SG","functionalCurrency":"SGD","reportingCurrency":"IDR","foreignNetAssets":"1000.0000","historicalRate":"11500.0000","closingRate":"12000.0000"}]}`
+	subGenReq := httptest.NewRequest("POST", "/consolidation-runs/"+runID+"/generate-eliminations", strings.NewReader(genBody))
+	subGenReq.Header.Set("X-Organization-Id", orgID)
+	subGenReq.Header.Set("X-User-Id", uuid.NewString())
+	subGenReq.Header.Set("X-Roles", "SUBSIDIARY_ADMIN")
+	subGenReq.Header.Set("X-Permissions", "consolidation:write")
+	subGenRec := httptest.NewRecorder()
+	h.ServeHTTP(subGenRec, subGenReq)
+	if subGenRec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for SUBSIDIARY_ADMIN generate-eliminations, got %d", subGenRec.Code)
+	}
+
+	hoReq := httptest.NewRequest("POST", "/consolidation-runs/"+runID+"/generate-eliminations", strings.NewReader(genBody))
+	hoReq.Header.Set("X-Organization-Id", orgID)
+	hoReq.Header.Set("X-User-Id", uuid.NewString())
+	hoReq.Header.Set("X-Roles", "HOLDING_ADMIN")
+	hoReq.Header.Set("X-Permissions", "consolidation:write")
+	hoReq.Header.Set("Idempotency-Key", "gen-elim-1")
+	hoRec := httptest.NewRecorder()
+	h.ServeHTTP(hoRec, hoReq)
+	if hoRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 generate-eliminations, got %d %s", hoRec.Code, hoRec.Body.String())
+	}
+	if !strings.Contains(hoRec.Body.String(), `"icEliminationTotal":"500000.0000"`) ||
+		!strings.Contains(hoRec.Body.String(), `"nciEquityTotal":"2000000.0000"`) ||
+		!strings.Contains(hoRec.Body.String(), `"ctaTotal":"500000.0000"`) {
+		t.Fatalf("unexpected generate-eliminations body: %s", hoRec.Body.String())
+	}
+
+	// GET /consolidation-runs/{id}/statements
+	stmtReq := httptest.NewRequest("GET", "/consolidation-runs/"+runID+"/statements", nil)
+	stmtReq.Header.Set("X-Organization-Id", orgID)
+	stmtReq.Header.Set("X-Permissions", "consolidation:read")
+	stmtRec := httptest.NewRecorder()
+	h.ServeHTTP(stmtRec, stmtReq)
+	if stmtRec.Code != http.StatusOK || !strings.Contains(stmtRec.Body.String(), `"ctaReserve":"500000.0000"`) {
+		t.Fatalf("unexpected consolidated statements: %d %s", stmtRec.Code, stmtRec.Body.String())
 	}
 }

@@ -31,6 +31,12 @@ func (m *mockFCLStore) ListTemplates(_ context.Context, _ []uuid.UUID, _, _ int3
 func (m *mockFCLStore) CreateClosingRun(_ context.Context, _ []uuid.UUID, _ fcldb.CreateClosingRunParams, _ *uuid.UUID) (fcldb.CreateClosingRunRow, error) {
 	return fcldb.CreateClosingRunRow{ID: uuid.New(), Status: "Open", RowVersion: 1}, nil
 }
+func (m *mockFCLStore) GetClosingRun(_ context.Context, _ []uuid.UUID, id uuid.UUID) (fcldb.FclClosingRun, []fcldb.FclClosingTask, error) {
+	return fcldb.FclClosingRun{ID: id, Status: "Open", RowVersion: 1}, []fcldb.FclClosingTask{
+		{ID: uuid.New(), TaskName: "GL Trial Balance Check", Status: "Completed"},
+		{ID: uuid.New(), TaskName: "AP Subledger Close", Status: "Completed"},
+	}, nil
+}
 func (m *mockFCLStore) TransitionClosingRunAndEmit(_ context.Context, _ []uuid.UUID, _ uuid.UUID, _ int32, _ string, _, _ uuid.UUID) (int32, error) {
 	m.closeCalls++
 	return 2, nil
@@ -103,5 +109,28 @@ func TestFinancialCloseEndpointsAndValidation(t *testing.T) {
 	}
 	if st.closeCalls != 1 {
 		t.Fatalf("expected idempotent replay on close run, calls=%d", st.closeCalls)
+	}
+
+	// POST /closing-runs/{id}/auto-reversals
+	revReq := httptest.NewRequest("POST", "/closing-runs/"+runID+"/auto-reversals", strings.NewReader(`{"reversalDate":"2026-12-01","entries":[{"reference":"ACC-1","accountCode":"2190","contraAccountCode":"6100","description":"Accrued utilities","amount":"1500000.0000"}]}`))
+	revReq.Header.Set("X-Organization-Id", orgID)
+	revReq.Header.Set("X-User-Id", uuid.NewString())
+	revReq.Header.Set("X-Permissions", "financialclose:write")
+	revReq.Header.Set("Idempotency-Key", "rev-1")
+	revRec := httptest.NewRecorder()
+	h.ServeHTTP(revRec, revReq)
+	if revRec.Code != http.StatusOK || !strings.Contains(revRec.Body.String(), `"totalAmount":"1500000.0000"`) {
+		t.Fatalf("auto-reversals got %d %s", revRec.Code, revRec.Body.String())
+	}
+
+	// POST /closing-runs/{id}/verify-subledgers
+	verReq := httptest.NewRequest("POST", "/closing-runs/"+runID+"/verify-subledgers", nil)
+	verReq.Header.Set("X-Organization-Id", orgID)
+	verReq.Header.Set("X-User-Id", uuid.NewString())
+	verReq.Header.Set("X-Permissions", "financialclose:write")
+	verRec := httptest.NewRecorder()
+	h.ServeHTTP(verRec, verReq)
+	if verRec.Code != http.StatusOK || !strings.Contains(verRec.Body.String(), `"readyToClose":true`) || !strings.Contains(verRec.Body.String(), `"passedCount":5`) {
+		t.Fatalf("verify-subledgers got %d %s", verRec.Code, verRec.Body.String())
 	}
 }

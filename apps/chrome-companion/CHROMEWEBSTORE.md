@@ -44,17 +44,38 @@ Indonesian
 | Store Icon | 128×128 PNG | ✅ Ready | `icons/icon-128.png` |
 | Toolbar Icon | 16×16 PNG | ✅ Ready | `icons/icon-16.png` |
 | Management Icon | 48×48 PNG | ✅ Ready | `icons/icon-48.png` |
-| Screenshot 1 | 1280×800 | ⬜ Not created | `screenshots/01-approvals.png` |
-| Screenshot 2 | 1280×800 | ⬜ Not created | `screenshots/02-efaktur-bank.png` |
-| Screenshot 3 | 1280×800 | ⬜ Not created | `screenshots/03-djp-helper.png` |
-| Screenshot 4 | 1280×800 | ⬜ Not created | `screenshots/04-bank-extractor.png` |
-| Small Promo Tile | 440×280 | ⬜ Not created | `screenshots/promo-small.png` |
+| Screenshot 1 | 1280×800 | ✅ Vector SVG Ready | `assets/store/01-approvals.svg` |
+| Screenshot 2 | 1280×800 | ✅ Vector SVG Ready | `assets/store/02-efaktur.svg` |
+| Screenshot 3 | 1280×800 | ✅ Vector SVG Ready | `assets/store/03-djp-bridge.svg` |
+| Screenshot 4 | 1280×800 | ✅ Vector SVG Ready | `assets/store/04-bank-extractor.svg` |
+| Small Promo Tile | 440×280 | ✅ Vector SVG Ready | `assets/store/promo-small.svg` |
+
+### Exporting Storefront SVGs to PNG
+
+Chrome Web Store requires PNG/JPEG uploads. Export the vector sources in `assets/store/` using either `rsvg-convert` (`librsvg`) or `npx sharp-cli`:
+
+```bash
+# Option A: librsvg (macOS: brew install librsvg)
+mkdir -p screenshots
+rsvg-convert -w 440  -h 280 assets/store/promo-small.svg        -o screenshots/promo-small.png
+rsvg-convert -w 1280 -h 800 assets/store/01-approvals.svg       -o screenshots/01-approvals.png
+rsvg-convert -w 1280 -h 800 assets/store/02-efaktur.svg         -o screenshots/02-efaktur.png
+rsvg-convert -w 1280 -h 800 assets/store/03-djp-bridge.svg      -o screenshots/03-djp-bridge.png
+rsvg-convert -w 1280 -h 800 assets/store/04-bank-extractor.svg  -o screenshots/04-bank-extractor.png
+
+# Option B: Node sharp-cli
+npx sharp-cli -i assets/store/promo-small.svg       -o screenshots/promo-small.png       resize 440 280
+npx sharp-cli -i assets/store/01-approvals.svg      -o screenshots/01-approvals.png      resize 1280 800
+npx sharp-cli -i assets/store/02-efaktur.svg        -o screenshots/02-efaktur.png        resize 1280 800
+npx sharp-cli -i assets/store/03-djp-bridge.svg     -o screenshots/03-djp-bridge.png     resize 1280 800
+npx sharp-cli -i assets/store/04-bank-extractor.svg -o screenshots/04-bank-extractor.png resize 1280 800
+```
 
 ### Screenshot Notes
-1. **01-approvals.png**: Menampilkan Side Panel tab Persetujuan dengan antrean dokumen PO/Journal Entry dan tombol aksi cepat.
-2. **02-efaktur-bank.png**: Menampilkan tab Pajak & Bank beserta ringkasan ekstraksi mutasi rekening.
-3. **03-djp-helper.png**: Menampilkan badge biru ERP Companion aktif di situs `pajak.go.id`.
-4. **04-bank-extractor.png**: Menampilkan badge hijau ERP Treasury aktif di halaman mutasi rekening bank.
+1. **01-approvals.svg**: Menampilkan Side Panel tab Persetujuan dengan antrean dokumen PO/Journal Entry dan tombol aksi cepat.
+2. **02-efaktur.svg**: Menampilkan tab Pajak & e-Faktur beserta sinkronisasi live dari `GET /api/v1/tax-invoices`.
+3. **03-djp-bridge.svg**: Menampilkan badge biru ERP Companion aktif di situs `pajak.go.id` dengan pengisian otomatis 4 kolom e-Faktur.
+4. **04-bank-extractor.svg**: Menampilkan badge hijau ERP Treasury aktif di halaman mutasi rekening bank korporasi.
 
 ---
 

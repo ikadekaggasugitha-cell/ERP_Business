@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -30,12 +31,18 @@ type Store interface {
 }
 
 type Handler struct {
-	store Store
-	idem  *httpx.IdemStore
+	store      Store
+	idem       *httpx.IdemStore
+	qMu        sync.RWMutex
+	quotations map[uuid.UUID]salesQuotationDTO
 }
 
 func NewRouter(store Store, metrics *httpx.Metrics, checks ...httpx.ReadinessCheck) http.Handler {
-	h := &Handler{store: store, idem: httpx.NewIdemStore()}
+	h := &Handler{
+		store:      store,
+		idem:       httpx.NewIdemStore(),
+		quotations: make(map[uuid.UUID]salesQuotationDTO),
+	}
 	if metrics == nil {
 		metrics = httpx.NewMetrics("sales-service")
 	}
@@ -46,12 +53,17 @@ func NewRouter(store Store, metrics *httpx.Metrics, checks ...httpx.ReadinessChe
 	mux.HandleFunc("GET /readyz", httpx.ReadinessHandler("sales-service", checks...))
 	mux.HandleFunc("GET /metrics", metrics.Handler())
 
+	mux.HandleFunc("GET /sales-quotations", h.handleListQuotations)
+	mux.HandleFunc("POST /sales-quotations", h.handleCreateQuotation)
+	mux.HandleFunc("POST /sales-quotations/{id}/convert-to-order", h.handleConvertQuotationToOrder)
+
 	mux.HandleFunc("POST /sales-orders", h.handleCreateSO)
 	mux.HandleFunc("GET /sales-orders", h.handleListSO)
 	mux.HandleFunc("GET /sales-orders/{id}", h.handleGetSO)
 	mux.HandleFunc("PUT /sales-orders/{id}", h.handleUpdateDraftSO)
 	mux.HandleFunc("DELETE /sales-orders/{id}", h.handleDeleteDraftSO)
 	mux.HandleFunc("POST /sales-orders/{id}/confirm", h.handleConfirmSO)
+	mux.HandleFunc("POST /sales-orders/{id}/return", h.handleReturnSO)
 	mux.HandleFunc("POST /sales-orders/{id}/deliveries", h.handleCreateDelivery)
 	mux.HandleFunc("GET /deliveries", h.handleListDeliveries)
 	mux.HandleFunc("GET /deliveries/{id}", h.handleGetDelivery)

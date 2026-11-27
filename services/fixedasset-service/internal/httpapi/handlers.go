@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,11 +37,21 @@ type Store interface {
 }
 
 type Server struct {
-	repo Store
-	idem *httpx.IdemStore
+	repo         Store
+	idem         *httpx.IdemStore
+	mu           sync.RWMutex
+	transfers    map[uuid.UUID][]map[string]any
+	revaluations map[uuid.UUID][]map[string]any
 }
 
-func NewServer(repo Store) *Server { return &Server{repo: repo, idem: httpx.NewIdemStore()} }
+func NewServer(repo Store) *Server {
+	return &Server{
+		repo:         repo,
+		idem:         httpx.NewIdemStore(),
+		transfers:    make(map[uuid.UUID][]map[string]any),
+		revaluations: make(map[uuid.UUID][]map[string]any),
+	}
+}
 
 func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /asset-categories", s.listCategories)
@@ -57,6 +68,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /fixed-assets/{id}/capitalize", s.capitalizeAsset)
 	mux.HandleFunc("POST /fixed-assets/{id}/depreciate", s.depreciateAsset)
 	mux.HandleFunc("POST /fixed-assets/{id}/dispose", s.disposeAsset)
+	mux.HandleFunc("POST /fixed-assets/{id}/transfer", s.transferAsset)
+	mux.HandleFunc("POST /fixed-assets/{id}/revalue", s.revalueAsset)
 	mux.HandleFunc("GET /fixed-assets/{id}/depreciation-entries", s.listDepreciationEntries)
 	mux.HandleFunc("GET /fixed-assets/{id}/transactions", s.listTransactions)
 }
@@ -819,4 +832,173 @@ func (s *Server) depreciateBatch(w http.ResponseWriter, r *http.Request) {
 		"totalDepreciation": totalDep.FloatString(4),
 		"results":           results,
 	})
+}
+
+func (s *Server) transferAsset(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var req struct {
+		TargetOrganizationID uuid.UUID  `json:"targetOrganizationId"`
+		TargetCostCenterRef  *uuid.UUID `json:"targetCostCenterRef,omitempty"`
+		TransferDate         string     `json:"transferDate"`
+		Reason               string     `json:"reason"`
+	}
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
+		return
+	}
+	defer release()
+
+	if req.TargetOrganizationID == uuid.Nil || req.TargetOrganizationID == platform.SystemOrgID {
+		httpx.WriteError(w, r, httpx.BadRequest("targetOrganizationId must be a valid tenant UUID"))
+		return
+	}
+	transferDate := time.Now().UTC().Format("2006-01-02")
+	if strings.TrimSpace(req.TransferDate) != "" {
+		if _, perr := platform.ParseDate(req.TransferDate); perr != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("transferDate must be YYYY-MM-DD"))
+			return
+		}
+		transferDate = strings.TrimSpace(req.TransferDate)
+	}
+
+	asset, err := s.repo.GetAsset(r.Context(), scope, id)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if asset.Status == "Disposed" {
+		httpx.WriteError(w, r, httpx.Unprocessable("ASSET_DISPOSED", "disposed assets cannot be transferred"))
+		return
+	}
+	if asset.OrganizationID == req.TargetOrganizationID {
+		httpx.WriteError(w, r, httpx.Unprocessable("SAME_ORGANIZATION", "targetOrganizationId must differ from current organization"))
+		return
+	}
+	if asset.RowVersion != rowVer {
+		httpx.WriteError(w, r, httpx.Conflict("STALE_ROW_VERSION", "rowVersion mismatch"))
+		return
+	}
+
+	nextVer := rowVer + 1
+	rec := map[string]any{
+		"assetId":              asset.ID,
+		"assetNo":              asset.AssetNo,
+		"fromOrganizationId":   asset.OrganizationID,
+		"toOrganizationId":     req.TargetOrganizationID,
+		"targetCostCenterRef":  req.TargetCostCenterRef,
+		"transferDate":         transferDate,
+		"netBookValue":         platform.FormatNumeric(asset.NetBookValue, 4),
+		"reason":               strings.TrimSpace(req.Reason),
+		"transferredBy":        user,
+		"rowVersion":           nextVer,
+	}
+	s.mu.Lock()
+	s.transfers[asset.ID] = append(s.transfers[asset.ID], rec)
+	s.mu.Unlock()
+
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, nextVer, rec)
+}
+
+func (s *Server) revalueAsset(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var req struct {
+		FairValue       string `json:"fairValue"`
+		RevaluationDate string `json:"revaluationDate"`
+		Reason          string `json:"reason"`
+	}
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
+		return
+	}
+	defer release()
+
+	fvNum, perr := platform.ParseNumeric(req.FairValue)
+	if perr != nil {
+		httpx.WriteError(w, r, httpx.BadRequest("fairValue must be a valid decimal string"))
+		return
+	}
+	fvRat := platform.NumericToRat(fvNum)
+	if fvRat == nil || fvRat.Sign() < 0 {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVALID_FAIR_VALUE", "fairValue must be >= 0"))
+		return
+	}
+	revalDate := time.Now().UTC().Format("2006-01-02")
+	if strings.TrimSpace(req.RevaluationDate) != "" {
+		if _, perr := platform.ParseDate(req.RevaluationDate); perr != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("revaluationDate must be YYYY-MM-DD"))
+			return
+		}
+		revalDate = strings.TrimSpace(req.RevaluationDate)
+	}
+
+	asset, err := s.repo.GetAsset(r.Context(), scope, id)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if asset.Status != "Active" {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVALID_STATUS", "only Active assets can be revalued or impaired"))
+		return
+	}
+	if asset.RowVersion != rowVer {
+		httpx.WriteError(w, r, httpx.Conflict("STALE_ROW_VERSION", "rowVersion mismatch"))
+		return
+	}
+
+	prevNBV := platform.NumericToRat(asset.NetBookValue)
+	if prevNBV == nil {
+		prevNBV = new(big.Rat)
+	}
+	delta := new(big.Rat).Sub(fvRat, prevNBV)
+	revalType := "NoChange"
+	if delta.Sign() > 0 {
+		revalType = "RevaluationSurplus"
+	} else if delta.Sign() < 0 {
+		revalType = "ImpairmentLoss"
+	}
+
+	nextVer := rowVer + 1
+	rec := map[string]any{
+		"assetId":              asset.ID,
+		"assetNo":              asset.AssetNo,
+		"previousNetBookValue": prevNBV.FloatString(4),
+		"newFairValue":         fvRat.FloatString(4),
+		"revaluationDelta":     delta.FloatString(4),
+		"revaluationType":      revalType,
+		"revaluationDate":      revalDate,
+		"reason":               strings.TrimSpace(req.Reason),
+		"revaluedBy":           user,
+		"rowVersion":           nextVer,
+	}
+	s.mu.Lock()
+	s.revaluations[asset.ID] = append(s.revaluations[asset.ID], rec)
+	s.mu.Unlock()
+
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, nextVer, rec)
 }

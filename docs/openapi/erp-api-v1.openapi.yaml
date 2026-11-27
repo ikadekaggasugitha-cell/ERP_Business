@@ -686,3 +686,298 @@ paths:
       summary: Register language
       parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
       responses: { '201': { description: Created } }
+
+  # ---- P1 / P2 / P3 Core Finance, Compliance & Analytics Endpoints ----
+  /api/v1/financial-statements/income-statement:
+    get:
+      tags: [Core Finance]
+      summary: Generate Income Statement — Revenue, COGS, Gross Profit, OpEx, Net Income (reporting-service)
+      parameters:
+        - { name: fiscalPeriodId, in: query, schema: { type: string, format: uuid } }
+        - { name: format, in: query, schema: { type: string, enum: [json, csv] } }
+      responses: { '200': { description: Income Statement (JSON or formula-safe CSV) } }
+  /api/v1/financial-statements/balance-sheet:
+    get:
+      tags: [Core Finance]
+      summary: Generate Balance Sheet — Assets, Liabilities, Equity + Current Period Net Income & isBalanced check (reporting-service)
+      parameters:
+        - { name: fiscalPeriodId, in: query, schema: { type: string, format: uuid } }
+        - { name: format, in: query, schema: { type: string, enum: [json, csv] } }
+      responses: { '200': { description: Balance Sheet (JSON or formula-safe CSV) } }
+  /api/v1/financial-statements/cash-flow:
+    get:
+      tags: [Core Finance]
+      summary: Generate Cash Flow Statement — Operating, Investing, Financing & netCashChange (reporting-service)
+      parameters:
+        - { name: fiscalPeriodId, in: query, schema: { type: string, format: uuid } }
+        - { name: format, in: query, schema: { type: string, enum: [json, csv] } }
+      responses: { '200': { description: Cash Flow Statement (JSON or formula-safe CSV) } }
+  /api/v1/accounts/hierarchy:
+    get:
+      tags: [Core Finance]
+      summary: Retrieve nested Chart of Accounts tree hierarchy (coa-service)
+      responses: { '200': { description: Hierarchical CoA tree } }
+  /api/v1/journal-entries/fx-revaluation:
+    post:
+      tags: [Core Finance]
+      summary: Compute unrealized FX gain/loss via exact fixed-point arithmetic and create Draft FX_Revaluation journal (gl-service)
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
+      responses: { '201': { description: FX revaluation draft journal created } }
+  /api/v1/journal-entries/recurring:
+    get:
+      tags: [Core Finance]
+      summary: List Monthly/Quarterly recurring journal templates (gl-service)
+      responses: { '200': { description: Recurring journal templates } }
+    post:
+      tags: [Core Finance]
+      summary: Create recurring journal template with optional immediate Draft generation (gl-service)
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
+      responses: { '201': { description: Recurring template created } }
+  /api/v1/vendor-invoices/aging:
+    get:
+      tags: [Core Finance]
+      summary: AP aging report across current, 1-30, 31-60, 61-90, and 90+ day buckets (ap-service)
+      responses: { '200': { description: AP aging buckets } }
+  /api/v1/vendor-invoices/{id}/debit-note:
+    post:
+      tags: [Core Finance]
+      summary: Issue AP debit note reducing vendor invoice outstanding amount and emitting ap.debit_note.issued (ap-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
+      responses: { '200': { description: Debit note applied } }
+  /api/v1/customer-invoices/aging:
+    get:
+      tags: [Core Finance]
+      summary: AR aging report across current, 1-30, 31-60, 61-90, and 90+ day buckets (ar-service)
+      responses: { '200': { description: AR aging buckets } }
+  /api/v1/customer-invoices/{id}:
+    put:
+      tags: [Core Finance]
+      summary: Update unpaid Draft/Issued customer invoice with optimistic locking (ar-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IfMatchHeader' }
+      responses: { '200': { description: Customer invoice updated } }
+  /api/v1/customer-invoices/{id}/credit-note:
+    post:
+      tags: [Core Finance]
+      summary: Issue AR credit note reducing customer invoice outstanding amount and emitting ar.credit_note.issued (ar-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
+      responses: { '200': { description: Credit note applied } }
+  /api/v1/customer-invoices/{id}/write-off:
+    post:
+      tags: [Core Finance]
+      summary: Write off unpaid customer invoice as bad debt and emit ar.invoice.written_off (ar-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
+      responses: { '200': { description: Customer invoice written off } }
+  /api/v1/tax-invoices/export/efaktur:
+    get:
+      tags: [Core Finance]
+      summary: Export DJP e-Faktur FK/OF CSV batch (tax-service)
+      responses: { '200': { description: DJP e-Faktur CSV } }
+  /api/v1/tax-returns/spt-ppn:
+    get:
+      tags: [Core Finance]
+      summary: Compute monthly SPT Masa PPN (Output VAT, Input VAT, Net VAT Payable/Overpaid) (tax-service)
+      parameters:
+        - { name: period, in: query, schema: { type: string, example: "2026-11" } }
+      responses: { '200': { description: SPT Masa PPN summary } }
+  /api/v1/withholding-tax/calculate:
+    post:
+      tags: [Core Finance]
+      summary: Calculate Indonesian withholding tax — PPh 21, PPh 23, PPh 26, PPh 4(2) — via exact fixed-point arithmetic (tax-service)
+      responses: { '200': { description: Withholding tax calculation } }
+  /api/v1/bank-accounts/{id}/statements/import-csv:
+    post:
+      tags: [Core Finance]
+      summary: Import BCA/Mandiri/generic CSV or MT940 bank statements into fixed-point statement lines (treasury-cashbank-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
+      responses: { '201': { description: Bank statement lines imported } }
+  /api/v1/bank-accounts/{id}/reconcile/manual:
+    post:
+      tags: [Core Finance]
+      summary: Manually match or unmatch a bank statement line with audit outbox emission (treasury-cashbank-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
+      responses: { '200': { description: Manual reconciliation applied } }
+  /api/v1/cash-position:
+    get:
+      tags: [Core Finance]
+      summary: Multi-currency settled/pending cash position and 30/60/90-day cashflow forecast (treasury-cashbank-service)
+      responses: { '200': { description: Cash position and forecast } }
+  /api/v1/payments/export/disbursement:
+    get:
+      tags: [Core Finance]
+      summary: Export batch bank disbursement CSV — BIFAST, LLG, SKN (treasury-cashbank-service)
+      parameters:
+        - { name: format, in: query, schema: { type: string, enum: [BIFAST, LLG, SKN], default: BIFAST } }
+      responses: { '200': { description: Bank disbursement CSV } }
+  /api/v1/audit-events/export:
+    get:
+      tags: [Core Finance]
+      summary: Export filtered immutable audit log events in CSV or JSON format (audit-service)
+      parameters:
+        - { name: format, in: query, schema: { type: string, enum: [csv, json], default: json } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: entityType, in: query, schema: { type: string } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: correlationId, in: query, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Audit events export } }
+  /api/v1/audit-events/verify-chain:
+    get:
+      tags: [Core Finance]
+      summary: Verify deterministic SHA-256 tamper-evident hash chain over org-scoped audit_log rows (audit-service)
+      responses: { '200': { description: Chain integrity report } }
+
+  # ---- P2 / P3 Operations, HR & Payroll Endpoints ----
+  /api/v1/purchase-orders/{id}/three-way-match:
+    post:
+      tags: [Operations]
+      summary: Validate PO vs Goods Receipt vs AP Invoice quantity and unit-price tolerances (procurement-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Three-way match result and variances } }
+  /api/v1/goods-receipts/{id}/return-to-vendor:
+    post:
+      tags: [Operations]
+      summary: Record return-to-vendor against a goods receipt (procurement-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
+      responses: { '201': { description: Return-to-vendor recorded } }
+  /api/v1/sales-quotations:
+    get:
+      tags: [Operations]
+      summary: List sales quotations (sales-service)
+      responses: { '200': { description: Sales quotations } }
+    post:
+      tags: [Operations]
+      summary: Create sales quotation (sales-service)
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
+      responses: { '201': { description: Sales quotation created } }
+  /api/v1/sales-quotations/{id}/convert:
+    post:
+      tags: [Operations]
+      summary: Convert sales quotation into a Draft Sales Order (sales-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
+      responses: { '201': { description: Sales order created from quotation } }
+  /api/v1/mrp-plan:
+    post:
+      tags: [Operations]
+      summary: Run Material Requirements Planning (MRP) BOM explosion & net material shortage calculation (manufacturing-service)
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
+      responses: { '200': { description: MRP plan and net requirements } }
+  /api/v1/work-orders/{id}/variance:
+    get:
+      tags: [Operations]
+      summary: Compute Work Order standard vs actual cost variance analysis (manufacturing-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Work order cost variance } }
+  /api/v1/payroll-runs/{id}/export/bank-csv:
+    get:
+      tags: [HR & Payroll]
+      summary: Export BCA/Mandiri/BI-FAST payroll bank disbursement CSV (payroll-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Payroll bank disbursement CSV } }
+  /api/v1/payroll-runs/{id}/export/ebupot:
+    get:
+      tags: [HR & Payroll]
+      summary: Export DJP e-Bupot 1721-A1 CSV for payroll run (payroll-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '200': { description: DJP e-Bupot 1721-A1 CSV } }
+  /api/v1/leave-requests:
+    get:
+      tags: [HR & Payroll]
+      summary: List employee leave requests (hr-service)
+      responses: { '200': { description: Leave requests } }
+    post:
+      tags: [HR & Payroll]
+      summary: Submit employee leave request (hr-service)
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
+      responses: { '201': { description: Leave request created } }
+  /api/v1/leave-requests/{id}/approve:
+    post:
+      tags: [HR & Payroll]
+      summary: Approve employee leave request (hr-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
+      responses: { '200': { description: Leave request approved } }
+  /api/v1/attendance-logs:
+    get:
+      tags: [HR & Payroll]
+      summary: List employee attendance check-in/check-out logs (hr-service)
+      responses: { '200': { description: Attendance logs } }
+    post:
+      tags: [HR & Payroll]
+      summary: Record employee attendance log (hr-service)
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
+      responses: { '201': { description: Attendance log recorded } }
+
+  # ---- P2 / P3 Extended Enterprise Endpoints ----
+  /api/v1/fixed-assets/depreciate-batch:
+    post:
+      tags: [Extended Enterprise]
+      summary: Run monthly batch depreciation across all Active fixed assets in org scope (fixedasset-service)
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
+      responses: { '200': { description: Batch depreciation summary } }
+  /api/v1/fixed-assets/{id}/transfer:
+    post:
+      tags: [Extended Enterprise]
+      summary: Transfer fixed asset between organizations/locations/cost centers with audit outbox event (fixedasset-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
+      responses: { '200': { description: Fixed asset transferred } }
+  /api/v1/fixed-assets/{id}/revalue:
+    post:
+      tags: [Extended Enterprise]
+      summary: Revalue fixed asset carrying amount under PSAK 16 / IAS 16 (fixedasset-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
+      responses: { '200': { description: Fixed asset revalued } }
+  /api/v1/consolidation-runs/{id}/generate-eliminations:
+    post:
+      tags: [Extended Enterprise]
+      summary: Auto-generate intercompany elimination entries, NCI, and CTA for a consolidation run (consolidation-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
+      responses: { '200': { description: Eliminations generated } }
+  /api/v1/consolidation-runs/{id}/statements:
+    get:
+      tags: [Extended Enterprise]
+      summary: Retrieve consolidated financial statements with intercompany eliminations, NCI, and CTA (consolidation-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Consolidated financial statements } }
+  /api/v1/closing-runs/{id}/auto-reversals:
+    post:
+      tags: [Extended Enterprise]
+      summary: Trigger accrual auto-reversal journals for the opening of the next fiscal period (financialclose-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
+      responses: { '200': { description: Auto-reversals generated } }
+  /api/v1/closing-runs/{id}/verify-subledgers:
+    get:
+      tags: [Extended Enterprise]
+      summary: Verify AP, AR, Inventory, and Fixed Asset subledger reconciliation against GL control accounts (financialclose-service)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '200': { description: Subledger verification report } }

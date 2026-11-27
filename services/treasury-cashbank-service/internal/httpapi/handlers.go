@@ -59,6 +59,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 
 	mux.HandleFunc("POST /payments", s.createPayment)
 	mux.HandleFunc("GET /payments", s.listPayments)
+	mux.HandleFunc("GET /payments/export/disbursement", s.exportDisbursement)
 	mux.HandleFunc("GET /payments/{id}", s.getPayment)
 	mux.HandleFunc("PUT /payments/{id}", s.updateDraftPayment)
 	mux.HandleFunc("DELETE /payments/{id}", s.deleteDraftPayment)

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <rect width="1280" height="800" fill="#f1f5f9"/>
+  <rect width="1280" height="52" fill="#0f172a"/>
+  <rect x="28" y="12" width="840" height="28" rx="6" fill="#1e293b"/>
+  <text x="44" y="31" font-family="Inter,system-ui,sans-serif" font-size="13" fill="#cbd5e1">https://web-efaktur.pajak.go.id/rekam-faktur-keluaran</text>
+  <!-- DJP Portal Form Mockup -->
+  <rect x="40" y="84" width="1200" height="676" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+  <rect x="40" y="84" width="1200" height="64" rx="12" fill="#1e3a8a"/>
+  <text x="72" y="124" font-family="Inter,system-ui,sans-serif" font-size="20" font-weight="700" fill="#ffffff">DJP Online — Rekam Faktur Pajak Keluaran</text>
+  <!-- Active Blue Badge -->
+  <rect x="920" y="98" width="292" height="36" rx="18" fill="#0ea5e9"/>
+  <text x="1066" y="121" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="700" fill="#ffffff">● ERP Companion DJP Bridge Aktif</text>
+  <!-- Auto-filled Fields -->
+  <text x="72" y="196" font-family="Inter,system-ui,sans-serif" font-size="14" font-weight="600" fill="#334155">NPWP Lawan Transaksi</text>
+  <rect x="72" y="208" width="520" height="44" rx="8" fill="#f0f9ff" stroke="#0284c7" stroke-width="2"/>
+  <text x="90" y="236" font-family="monospace" font-size="15" fill="#0f172a">01.234.567.8-012.000</text>
+  <text x="640" y="196" font-family="Inter,system-ui,sans-serif" font-size="14" font-weight="600" fill="#334155">Nama Lawan Transaksi</text>
+  <rect x="640" y="208" width="560" height="44" rx="8" fill="#f0f9ff" stroke="#0284c7" stroke-width="2"/>
+  <text x="658" y="236" font-family="Inter,system-ui,sans-serif" font-size="15" fill="#0f172a">PT Karya Mandiri Properti</text>
+  <text x="72" y="296" font-family="Inter,system-ui,sans-serif" font-size="14" font-weight="600" fill="#334155">Dasar Pengenaan Pajak (DPP)</text>
+  <rect x="72" y="308" width="520" height="44" rx="8" fill="#f0f9ff" stroke="#0284c7" stroke-width="2"/>
+  <text x="90" y="336" font-family="monospace" font-size="15" fill="#0f172a">250.000.000</text>
+  <text x="640" y="296" font-family="Inter,system-ui,sans-serif" font-size="14" font-weight="600" fill="#334155">Jumlah PPN (11%)</text>
+  <rect x="640" y="308" width="560" height="44" rx="8" fill="#f0f9ff" stroke="#0284c7" stroke-width="2"/>
+  <text x="658" y="336" font-family="monospace" font-size="15" fill="#0f172a">27.500.000</text>
+  <rect x="72" y="396" width="1128" height="60" rx="10" fill="#ecfdf5" stroke="#10b981"/>
+  <text x="96" y="432" font-family="Inter,system-ui,sans-serif" font-size="14" font-weight="600" fill="#065f46">✓ 4 kolom e-Faktur berhasil diisikan otomatis oleh tax-helper.js (tanpa menyimpan kredensial DJP)</text>
+</svg>

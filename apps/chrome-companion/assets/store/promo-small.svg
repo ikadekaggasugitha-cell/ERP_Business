@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="280" viewBox="0 0 440 280">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#22c55e"/>
+    </linearGradient>
+  </defs>
+  <rect width="440" height="280" rx="16" fill="url(#bg)"/>
+  <rect x="24" y="24" width="52" height="52" rx="12" fill="#2563eb"/>
+  <text x="50" y="57" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="22" font-weight="700" fill="#ffffff">ERP</text>
+  <text x="92" y="47" font-family="Inter,system-ui,sans-serif" font-size="18" font-weight="700" fill="#ffffff">ERP Enterprise Companion</text>
+  <text x="92" y="68" font-family="Inter,system-ui,sans-serif" font-size="12" fill="#94a3b8">Manifest V3 • OIDC PKCE • Side Panel</text>
+  <rect x="24" y="96" width="392" height="3" rx="1.5" fill="url(#accent)"/>
+  <rect x="24" y="116" width="122" height="120" rx="10" fill="#1e293b" stroke="#334155"/>
+  <circle cx="46" cy="140" r="10" fill="#2563eb"/>
+  <text x="46" y="144" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="11" font-weight="700" fill="#fff">✓</text>
+  <text x="36" y="172" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="600" fill="#f8fafc">Quick</text>
+  <text x="36" y="189" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="600" fill="#f8fafc">Approvals</text>
+  <text x="36" y="214" font-family="Inter,system-ui,sans-serif" font-size="10" fill="#94a3b8">PO, AP &amp; GL</text>
+  <rect x="159" y="116" width="122" height="120" rx="10" fill="#1e293b" stroke="#334155"/>
+  <circle cx="181" cy="140" r="10" fill="#0ea5e9"/>
+  <text x="181" y="144" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="10" font-weight="700" fill="#fff">PPN</text>
+  <text x="171" y="172" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="600" fill="#f8fafc">e-Faktur</text>
+  <text x="171" y="189" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="600" fill="#f8fafc">DJP Bridge</text>
+  <text x="171" y="214" font-family="Inter,system-ui,sans-serif" font-size="10" fill="#94a3b8">1-Click Fill</text>
+  <rect x="294" y="116" width="122" height="120" rx="10" fill="#1e293b" stroke="#334155"/>
+  <circle cx="316" cy="140" r="10" fill="#16a34a"/>
+  <text x="316" y="144" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="11" font-weight="700" fill="#fff">Rp</text>
+  <text x="306" y="172" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="600" fill="#f8fafc">Treasury</text>
+  <text x="306" y="189" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="600" fill="#f8fafc">Bank Sync</text>
+  <text x="306" y="214" font-family="Inter,system-ui,sans-serif" font-size="10" fill="#94a3b8">BCA • BNI • MDR</text>
+  <text x="24" y="260" font-family="Inter,system-ui,sans-serif" font-size="11" fill="#cbd5e1">PT Sinergi Investasi Properti — Enterprise ERP</text>
+</svg>

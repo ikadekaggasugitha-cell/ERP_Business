@@ -63,6 +63,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /goods-receipts", s.listGRs)
 	mux.HandleFunc("GET /goods-receipts/{id}", s.getGR)
+	mux.HandleFunc("POST /goods-receipts/{id}/return-to-vendor", s.returnToVendor)
 
 	mux.HandleFunc("POST /purchase-requisitions", s.createPR)
 	mux.HandleFunc("GET /purchase-requisitions", s.listPRs)

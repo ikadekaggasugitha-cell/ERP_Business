@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <rect width="1280" height="800" fill="#f8fafc"/>
+  <rect width="1280" height="52" fill="#0f172a"/>
+  <text x="32" y="32" font-family="Inter,system-ui,sans-serif" font-size="15" font-weight="700" fill="#ffffff">ERP Enterprise Companion — Live e-Faktur &amp; Tax Synchronization</text>
+  <!-- Left Panel: Tax Invoice Queue -->
+  <rect x="28" y="78" width="800" height="694" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="56" y="122" font-family="Inter,system-ui,sans-serif" font-size="22" font-weight="700" fill="#0f172a">Daftar Faktur Pajak Keluaran (PPN 11%)</text>
+  <text x="56" y="148" font-family="Inter,system-ui,sans-serif" font-size="13" fill="#64748b">Live sync via GET /api/v1/tax-invoices • Fixed-point decimal strings</text>
+  <rect x="56" y="178" width="744" height="88" rx="10" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="76" y="208" font-family="monospace" font-size="15" font-weight="700" fill="#1d4ed8">EF-010.008-26.00014210</text>
+  <text x="76" y="232" font-family="Inter,system-ui,sans-serif" font-size="13" fill="#1e293b">PT Karya Mandiri Properti • NPWP 01.234.567.8-012.000</text>
+  <text x="76" y="254" font-family="monospace" font-size="13" fill="#0f172a">DPP: Rp 250.000.000,00  |  PPN: Rp 27.500.000,00</text>
+  <rect x="650" y="204" width="128" height="36" rx="8" fill="#2563eb"/>
+  <text x="714" y="227" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="12" font-weight="700" fill="#ffffff">Pilih Faktur</text>
+  <rect x="56" y="284" width="744" height="88" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="76" y="314" font-family="monospace" font-size="15" font-weight="700" fill="#0f172a">EF-010.008-26.00014211</text>
+  <text x="76" y="338" font-family="Inter,system-ui,sans-serif" font-size="13" fill="#334155">PT Logistik Nusantara • NPWP 02.987.654.3-045.000</text>
+  <text x="76" y="360" font-family="monospace" font-size="13" fill="#475569">DPP: Rp 95.000.000,00   |  PPN: Rp 10.450.000,00</text>
+  <!-- Right Panel: Companion Side Panel Tax Tab -->
+  <rect x="852" y="78" width="400" height="694" rx="12" fill="#0f172a"/>
+  <text x="878" y="118" font-family="Inter,system-ui,sans-serif" font-size="18" font-weight="700" fill="#ffffff">Tab Pajak &amp; e-Faktur</text>
+  <rect x="878" y="142" width="348" height="220" rx="10" fill="#1e293b" stroke="#334155"/>
+  <text x="898" y="172" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="600" fill="#38bdf8">Faktur Terpilih untuk Injeksi DJP</text>
+  <text x="898" y="202" font-family="monospace" font-size="13" fill="#f8fafc">No. Seri : 010.008-26.00014210</text>
+  <text x="898" y="228" font-family="monospace" font-size="13" fill="#f8fafc">NPWP     : 01.234.567.8-012.000</text>
+  <text x="898" y="254" font-family="monospace" font-size="13" fill="#f8fafc">DPP      : 250000000.0000</text>
+  <text x="898" y="280" font-family="monospace" font-size="13" fill="#f8fafc">PPN 11%  : 27500000.0000</text>
+  <rect x="898" y="302" width="308" height="40" rx="8" fill="#0284c7"/>
+  <text x="1052" y="327" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="700" fill="#ffffff">Isi Formulir e-Faktur di Tab DJP</text>
+</svg>

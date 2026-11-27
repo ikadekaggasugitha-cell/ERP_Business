@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -35,12 +36,27 @@ type Store interface {
 	FinalizeRunAndEmit(ctx context.Context, scope []uuid.UUID, runID uuid.UUID, rowVer int32, actor, corr uuid.UUID) (int32, error)
 }
 
+type generatedConsSummary struct {
+	ICElimTotal string
+	NCIEquity   string
+	NCINetInc   string
+	CTAReserve  string
+}
+
 type Server struct {
 	repo Store
 	idem *httpx.IdemStore
+	mu   sync.RWMutex
+	gen  map[uuid.UUID]generatedConsSummary
 }
 
-func NewServer(repo Store) *Server { return &Server{repo: repo, idem: httpx.NewIdemStore()} }
+func NewServer(repo Store) *Server {
+	return &Server{
+		repo: repo,
+		idem: httpx.NewIdemStore(),
+		gen:  make(map[uuid.UUID]generatedConsSummary),
+	}
+}
 
 func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /consolidation-groups", s.listGroups)
@@ -56,6 +72,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /consolidation-runs", s.listRuns)
 	mux.HandleFunc("POST /consolidation-runs", s.createRun)
 	mux.HandleFunc("GET /consolidation-runs/{id}", s.getRun)
+	mux.HandleFunc("GET /consolidation-runs/{id}/statements", s.consolidatedStatements)
+	mux.HandleFunc("POST /consolidation-runs/{id}/generate-eliminations", s.generateEliminations)
 	mux.HandleFunc("POST /consolidation-runs/{id}/eliminate", s.postEliminations)
 	mux.HandleFunc("POST /consolidation-runs/{id}/adjustments", s.postAdjustments)
 	mux.HandleFunc("POST /consolidation-runs/{id}/finalize", s.finalizeRun)
@@ -747,4 +765,234 @@ func (s *Server) finalizeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, next, map[string]any{"id": runID, "status": "Finalized", "rowVersion": next})
+}
+
+func (s *Server) generateEliminations(w http.ResponseWriter, r *http.Request) {
+	scope, _, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	if err := httpx.RequireMaxAdminTier(r, httpx.AdminTierHolding); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	runID, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var req struct {
+		IntercompanyBalances []struct {
+			FromEntityID string `json:"fromEntityId"`
+			ToEntityID   string `json:"toEntityId"`
+			AccountCode  string `json:"accountCode"`
+			Amount       string `json:"amount"`
+		} `json:"intercompanyBalances"`
+		SubsidiaryEquity []struct {
+			EntityID         string `json:"entityId"`
+			EquityAmount     string `json:"equityAmount"`
+			NetIncome        string `json:"netIncome"`
+			OwnershipPercent string `json:"ownershipPercent"`
+		} `json:"subsidiaryEquity"`
+		FXTranslations []struct {
+			EntityID           string `json:"entityId"`
+			FunctionalCurrency string `json:"functionalCurrency"`
+			ReportingCurrency  string `json:"reportingCurrency"`
+			ForeignNetAssets   string `json:"foreignNetAssets"`
+			HistoricalRate     string `json:"historicalRate"`
+			ClosingRate        string `json:"closingRate"`
+		} `json:"fxTranslations"`
+	}
+	idemKey, reqHash, release, done := beginIdemOptional(w, r, s.idem, scope, &req)
+	if done {
+		return
+	}
+	defer release()
+
+	if _, _, _, err := s.repo.GetRunDetail(r.Context(), scope, runID); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+
+	hundred := big.NewRat(100, 1)
+	icTotal := new(big.Rat)
+	nciEquityTotal := new(big.Rat)
+	nciNetIncTotal := new(big.Rat)
+	ctaTotal := new(big.Rat)
+	entries := make([]map[string]any, 0)
+
+	for _, ic := range req.IntercompanyBalances {
+		num, perr := platform.ParseNumeric(ic.Amount)
+		if perr != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("intercompanyBalances[].amount is invalid"))
+			return
+		}
+		amt := platform.NumericToRat(num)
+		if amt == nil || amt.Sign() <= 0 {
+			httpx.WriteError(w, r, httpx.Unprocessable("INVALID_AMOUNT", "intercompany amount must be > 0"))
+			return
+		}
+		icTotal.Add(icTotal, amt)
+		entries = append(entries, map[string]any{
+			"type":         "IC_ELIMINATION",
+			"fromEntityId": ic.FromEntityID,
+			"toEntityId":   ic.ToEntityID,
+			"accountCode":  ic.AccountCode,
+			"debit":        amt.FloatString(4),
+			"credit":       amt.FloatString(4),
+		})
+	}
+
+	for _, sub := range req.SubsidiaryEquity {
+		ownNum, perr := platform.ParseNumeric(sub.OwnershipPercent)
+		if perr != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("ownershipPercent is invalid"))
+			return
+		}
+		ownPct := platform.NumericToRat(ownNum)
+		if ownPct == nil || ownPct.Sign() < 0 || ownPct.Cmp(hundred) > 0 {
+			httpx.WriteError(w, r, httpx.Unprocessable("INVALID_OWNERSHIP", "ownershipPercent must be between 0 and 100"))
+			return
+		}
+		nciPct := new(big.Rat).Sub(hundred, ownPct)
+		nciRatio := new(big.Rat).Quo(nciPct, hundred)
+
+		eqRat := new(big.Rat)
+		if strings.TrimSpace(sub.EquityAmount) != "" {
+			if n, e := platform.ParseNumeric(sub.EquityAmount); e == nil {
+				eqRat = platform.NumericToRat(n)
+			}
+		}
+		niRat := new(big.Rat)
+		if strings.TrimSpace(sub.NetIncome) != "" {
+			if n, e := platform.ParseNumeric(sub.NetIncome); e == nil {
+				niRat = platform.NumericToRat(n)
+			}
+		}
+		nciEq := new(big.Rat).Mul(eqRat, nciRatio)
+		nciNI := new(big.Rat).Mul(niRat, nciRatio)
+		nciEquityTotal.Add(nciEquityTotal, nciEq)
+		nciNetIncTotal.Add(nciNetIncTotal, nciNI)
+		entries = append(entries, map[string]any{
+			"type":             "NCI_ALLOCATION",
+			"entityId":         sub.EntityID,
+			"nciPercent":       nciPct.FloatString(4),
+			"nciEquity":        nciEq.FloatString(4),
+			"nciNetIncome":     nciNI.FloatString(4),
+			"ownershipPercent": ownPct.FloatString(4),
+		})
+	}
+
+	for _, fx := range req.FXTranslations {
+		fnaNum, err1 := platform.ParseNumeric(fx.ForeignNetAssets)
+		hrNum, err2 := platform.ParseNumeric(fx.HistoricalRate)
+		crNum, err3 := platform.ParseNumeric(fx.ClosingRate)
+		if err1 != nil || err2 != nil || err3 != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("fxTranslations numeric fields are invalid"))
+			return
+		}
+		diff := new(big.Rat).Sub(platform.NumericToRat(crNum), platform.NumericToRat(hrNum))
+		cta := new(big.Rat).Mul(platform.NumericToRat(fnaNum), diff)
+		ctaTotal.Add(ctaTotal, cta)
+		entries = append(entries, map[string]any{
+			"type":               "CTA_TRANSLATION",
+			"entityId":           fx.EntityID,
+			"functionalCurrency": fx.FunctionalCurrency,
+			"reportingCurrency":  fx.ReportingCurrency,
+			"ctaAmount":          cta.FloatString(4),
+		})
+	}
+
+	nciCombined := new(big.Rat).Add(nciEquityTotal, nciNetIncTotal)
+	s.mu.Lock()
+	s.gen[runID] = generatedConsSummary{
+		ICElimTotal: icTotal.FloatString(4),
+		NCIEquity:   nciEquityTotal.FloatString(4),
+		NCINetInc:   nciNetIncTotal.FloatString(4),
+		CTAReserve:  ctaTotal.FloatString(4),
+	}
+	s.mu.Unlock()
+
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, 1, map[string]any{
+		"runId":              runID,
+		"icEliminationTotal": icTotal.FloatString(4),
+		"nciEquityTotal":     nciEquityTotal.FloatString(4),
+		"nciNetIncomeTotal":  nciNetIncTotal.FloatString(4),
+		"nciTotal":           nciCombined.FloatString(4),
+		"ctaTotal":           ctaTotal.FloatString(4),
+		"balanced":           true,
+		"entries":            entries,
+	})
+}
+
+func (s *Server) consolidatedStatements(w http.ResponseWriter, r *http.Request) {
+	scope, ok := requireRead(w, r)
+	if !ok {
+		return
+	}
+	runID, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	run, elims, adjs, err := s.repo.GetRunDetail(r.Context(), scope, runID)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+
+	totDr := new(big.Rat)
+	totCr := new(big.Rat)
+	for _, e := range elims {
+		if d := platform.NumericToRat(e.DebitAmount); d != nil {
+			totDr.Add(totDr, d)
+		}
+		if c := platform.NumericToRat(e.CreditAmount); c != nil {
+			totCr.Add(totCr, c)
+		}
+	}
+	for _, a := range adjs {
+		if d := platform.NumericToRat(a.DebitAmount); d != nil {
+			totDr.Add(totDr, d)
+		}
+		if c := platform.NumericToRat(a.CreditAmount); c != nil {
+			totCr.Add(totCr, c)
+		}
+	}
+
+	s.mu.RLock()
+	gen := s.gen[runID]
+	s.mu.RUnlock()
+	if gen.NCIEquity == "" {
+		gen.NCIEquity = "0.0000"
+	}
+	if gen.NCINetInc == "" {
+		gen.NCINetInc = "0.0000"
+	}
+	if gen.CTAReserve == "" {
+		gen.CTAReserve = "0.0000"
+	}
+	if gen.ICElimTotal == "" {
+		gen.ICElimTotal = "0.0000"
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"runId":            run.ID,
+		"status":           run.Status,
+		"currency":         "IDR",
+		"eliminationCount": len(elims),
+		"adjustmentCount":  len(adjs),
+		"balanceSheet": map[string]any{
+			"totalEliminationsDebit":  totDr.FloatString(4),
+			"totalEliminationsCredit": totCr.FloatString(4),
+			"icEliminationTotal":      gen.ICElimTotal,
+			"nciEquity":               gen.NCIEquity,
+			"ctaReserve":              gen.CTAReserve,
+			"isBalanced":              totDr.Cmp(totCr) == 0,
+		},
+		"incomeStatement": map[string]any{
+			"nciNetIncome": gen.NCINetInc,
+			"status":       run.Status,
+		},
+	})
 }

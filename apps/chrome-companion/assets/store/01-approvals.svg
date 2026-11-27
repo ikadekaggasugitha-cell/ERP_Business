@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <rect width="1280" height="800" fill="#f1f5f9"/>
+  <!-- Browser Chrome Top Bar -->
+  <rect width="1280" height="52" fill="#0f172a"/>
+  <circle cx="28" cy="26" r="7" fill="#ef4444"/>
+  <circle cx="52" cy="26" r="7" fill="#f59e0b"/>
+  <circle cx="76" cy="26" r="7" fill="#22c55e"/>
+  <rect x="112" y="12" width="760" height="28" rx="6" fill="#1e293b"/>
+  <text x="130" y="31" font-family="Inter,system-ui,sans-serif" font-size="13" fill="#cbd5e1">https://app.erp.example/journals</text>
+  <rect x="1150" y="12" width="110" height="28" rx="6" fill="#2563eb"/>
+  <text x="1205" y="31" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="12" font-weight="600" fill="#ffffff">ERP (3)</text>
+  <!-- Main Backoffice SPA Canvas -->
+  <rect x="24" y="76" width="820" height="700" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="52" y="120" font-family="Inter,system-ui,sans-serif" font-size="22" font-weight="700" fill="#0f172a">General Ledger &amp; Approvals Workspace</text>
+  <text x="52" y="146" font-family="Inter,system-ui,sans-serif" font-size="14" fill="#64748b">PT Sinergi Investasi Properti (Holding — HLD-01) • Active Period: FY2026-P06</text>
+  <rect x="52" y="176" width="764" height="44" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="72" y="203" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="600" fill="#334155">Document No</text>
+  <text x="270" y="203" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="600" fill="#334155">Module</text>
+  <text x="430" y="203" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="600" fill="#334155">Amount (IDR)</text>
+  <text x="640" y="203" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="600" fill="#334155">Status</text>
+  <rect x="52" y="232" width="764" height="56" rx="8" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="72" y="265" font-family="monospace" font-size="13" fill="#0f172a">PO-2026-00418</text>
+  <text x="270" y="265" font-family="Inter,system-ui,sans-serif" font-size="13" fill="#334155">Procurement</text>
+  <text x="430" y="265" font-family="monospace" font-size="13" fill="#0f172a">145.500.000,00</text>
+  <rect x="640" y="246" width="120" height="26" rx="13" fill="#fef3c7"/>
+  <text x="700" y="263" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="12" font-weight="600" fill="#92400e">Pending Approval</text>
+  <!-- Chrome Side Panel (Right) -->
+  <rect x="864" y="76" width="392" height="700" rx="12" fill="#0f172a" stroke="#1e293b"/>
+  <text x="890" y="114" font-family="Inter,system-ui,sans-serif" font-size="18" font-weight="700" fill="#ffffff">ERP Companion — Side Panel</text>
+  <text x="890" y="136" font-family="Inter,system-ui,sans-serif" font-size="12" fill="#94a3b8">Signed in: admin.finance (HOLDING_ADMIN)</text>
+  <!-- Tabs -->
+  <rect x="890" y="156" width="112" height="34" rx="8" fill="#2563eb"/>
+  <text x="946" y="178" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="12" font-weight="600" fill="#ffffff">Persetujuan (3)</text>
+  <rect x="1010" y="156" width="112" height="34" rx="8" fill="#1e293b"/>
+  <text x="1066" y="178" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="12" fill="#94a3b8">Pajak &amp; Bank</text>
+  <rect x="1130" y="156" width="100" height="34" rx="8" fill="#1e293b"/>
+  <text x="1180" y="178" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="12" fill="#94a3b8">Status</text>
+  <!-- Approval Card 1 -->
+  <rect x="890" y="210" width="340" height="168" rx="10" fill="#1e293b" stroke="#334155"/>
+  <text x="910" y="238" font-family="monospace" font-size="14" font-weight="700" fill="#38bdf8">PO-2026-00418</text>
+  <text x="910" y="260" font-family="Inter,system-ui,sans-serif" font-size="12" fill="#e2e8f0">PT Baja Nusantara — Material Struktur</text>
+  <text x="910" y="284" font-family="monospace" font-size="16" font-weight="700" fill="#ffffff">Rp 145.500.000,00</text>
+  <rect x="910" y="300" width="300" height="28" rx="6" fill="#0f172a" stroke="#334155"/>
+  <text x="920" y="319" font-family="Inter,system-ui,sans-serif" font-size="11" fill="#94a3b8">Catatan: Anggaran CapEx disetujui...</text>
+  <rect x="910" y="338" width="144" height="30" rx="6" fill="#16a34a"/>
+  <text x="982" y="358" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="12" font-weight="700" fill="#ffffff">Setujui</text>
+  <rect x="1066" y="338" width="144" height="30" rx="6" fill="#dc2626"/>
+  <text x="1138" y="358" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="12" font-weight="700" fill="#ffffff">Tolak</text>
+  <!-- Approval Card 2 -->
+  <rect x="890" y="396" width="340" height="148" rx="10" fill="#1e293b" stroke="#334155"/>
+  <text x="910" y="424" font-family="monospace" font-size="14" font-weight="700" fill="#38bdf8">JV-2026-01922</text>
+  <text x="910" y="446" font-family="Inter,system-ui,sans-serif" font-size="12" fill="#e2e8f0">Accrual Beban Konstruksi — SUB-PRO</text>
+  <text x="910" y="470" font-family="monospace" font-size="16" font-weight="700" fill="#ffffff">Rp 82.000.000,00</text>
+  <rect x="910" y="494" width="144" height="30" rx="6" fill="#16a34a"/>
+  <text x="982" y="514" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="12" font-weight="700" fill="#ffffff">Setujui</text>
+  <rect x="1066" y="494" width="144" height="30" rx="6" fill="#dc2626"/>
+  <text x="1138" y="514" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="12" font-weight="700" fill="#ffffff">Tolak</text>
+</svg>
