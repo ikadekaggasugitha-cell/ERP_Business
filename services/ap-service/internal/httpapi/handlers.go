@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -26,6 +27,7 @@ type Store interface {
 	UpdateDraftWithLines(ctx context.Context, scope []uuid.UUID, hdr apdb.UpdateDraftInvoiceParams, lines []apdb.CreateInvoiceLineParams) (int32, error)
 	DeleteDraft(ctx context.Context, scope []uuid.UUID, arg apdb.DeleteDraftInvoiceParams) (int64, error)
 	RecordAndEmit(ctx context.Context, scope []uuid.UUID, rec apdb.RecordInvoiceParams, ev apdb.InsertOutboxParams) (int64, error)
+	ApplyDebitNoteAndEmit(ctx context.Context, scope []uuid.UUID, arg apdb.ApplyPaymentToInvoiceParams, ev apdb.InsertOutboxParams) (int64, error)
 }
 
 // Server serves AP HTTP endpoints.
@@ -43,10 +45,12 @@ func NewServer(repo Store) *Server {
 func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /vendor-invoices", s.create)
 	mux.HandleFunc("GET /vendor-invoices", s.list)
+	mux.HandleFunc("GET /vendor-invoices/aging", s.aging)
 	mux.HandleFunc("GET /vendor-invoices/{id}", s.get)
 	mux.HandleFunc("PUT /vendor-invoices/{id}", s.update)
 	mux.HandleFunc("DELETE /vendor-invoices/{id}", s.deleteDraft)
 	mux.HandleFunc("POST /vendor-invoices/{id}/record", s.record)
+	mux.HandleFunc("POST /vendor-invoices/{id}/debit-note", s.debitNote)
 }
 
 type lineReq struct {
@@ -566,4 +570,188 @@ func deflt(v, d string) string {
 		return s
 	}
 	return d
+}
+
+// aging computes AP aging buckets (current, 1-30, 31-60, 61-90, 90+, totalOutstanding) via *big.Rat.
+func (s *Server) aging(w http.ResponseWriter, r *http.Request) {
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := httpx.RequirePermission(r, "ap:read"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	asOf := time.Now().UTC().Truncate(24 * time.Hour)
+	if raw := strings.TrimSpace(r.URL.Query().Get("asOfDate")); raw != "" {
+		d, perr := time.Parse("2006-01-02", raw)
+		if perr != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("asOfDate harus YYYY-MM-DD"))
+			return
+		}
+		asOf = d.UTC()
+	}
+
+	rows, _, err := s.repo.ListWithCount(r.Context(), scope, "", 10000, 0)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+
+	current := new(big.Rat)
+	d1To30 := new(big.Rat)
+	d31To60 := new(big.Rat)
+	d61To90 := new(big.Rat)
+	d90Plus := new(big.Rat)
+	total := new(big.Rat)
+	openCount := 0
+
+	for _, row := range rows {
+		if row.Status == "Draft" || row.Status == "Paid" || row.Status == "Cancelled" {
+			continue
+		}
+		outRat := platform.NumericToRat(row.OutstandingAmount)
+		if outRat == nil || outRat.Sign() <= 0 {
+			continue
+		}
+		openCount++
+		total.Add(total, outRat)
+		due := row.DueDate.Time.UTC().Truncate(24 * time.Hour)
+		days := int(asOf.Sub(due).Hours() / 24)
+		switch {
+		case days <= 0:
+			current.Add(current, outRat)
+		case days <= 30:
+			d1To30.Add(d1To30, outRat)
+		case days <= 60:
+			d31To60.Add(d31To60, outRat)
+		case days <= 90:
+			d61To90.Add(d61To90, outRat)
+		default:
+			d90Plus.Add(d90Plus, outRat)
+		}
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"asOfDate":         asOf.Format("2006-01-02"),
+		"invoiceCount":     openCount,
+		"current":          current.FloatString(4),
+		"days1To30":        d1To30.FloatString(4),
+		"days31To60":       d31To60.FloatString(4),
+		"days61To90":       d61To90.FloatString(4),
+		"days90Plus":       d90Plus.FloatString(4),
+		"totalOutstanding": total.FloatString(4),
+	})
+}
+
+type debitNoteReq struct {
+	DebitNoteNo string `json:"debitNoteNo,omitempty"`
+	Amount      string `json:"amount"`
+	Reason      string `json:"reason"`
+}
+
+func (s *Server) debitNote(w http.ResponseWriter, r *http.Request) {
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := httpx.RequirePermission(r, "ap:write"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	user, err := httpx.RequireUser(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+
+	var req debitNoteReq
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
+		return
+	}
+	defer release()
+
+	amtNum, err := platform.ParseNumeric(req.Amount)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.BadRequest("amount tidak valid"))
+		return
+	}
+	amtRat := platform.NumericToRat(amtNum)
+	if amtRat == nil || amtRat.Sign() <= 0 {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVALID_AMOUNT", "debit note amount harus > 0"))
+		return
+	}
+
+	inv, err := s.repo.GetByID(r.Context(), scope, id)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	if inv.Status != "Recorded" && inv.Status != "PartiallyPaid" {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVALID_STATUS", "debit note hanya berlaku untuk invoice Recorded atau PartiallyPaid"))
+		return
+	}
+	outRat := platform.NumericToRat(inv.OutstandingAmount)
+	if outRat == nil || amtRat.Cmp(outRat) > 0 {
+		httpx.WriteError(w, r, httpx.Unprocessable("DEBIT_NOTE_EXCEEDS_OUTSTANDING", "jumlah debit note melebihi sisa tagihan (outstanding)"))
+		return
+	}
+
+	remaining := new(big.Rat).Sub(outRat, amtRat)
+	nextStatus := "PartiallyPaid"
+	if remaining.Sign() <= 0 {
+		nextStatus = "Paid"
+	}
+	dnNo := strings.TrimSpace(req.DebitNoteNo)
+	if dnNo == "" {
+		dnNo = "DN-" + inv.InvoiceNo
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"invoiceId":      inv.ID,
+		"invoiceNo":      inv.InvoiceNo,
+		"debitNoteNo":    dnNo,
+		"vendorId":       inv.VendorID,
+		"currencyCode":   inv.CurrencyCode,
+		"debitAmount":    amtRat.FloatString(4),
+		"remainingAfter": remaining.FloatString(4),
+		"reason":         strings.TrimSpace(req.Reason),
+		"actorId":        user,
+	})
+	n, err := s.repo.ApplyDebitNoteAndEmit(r.Context(), scope, apdb.ApplyPaymentToInvoiceParams{
+		ID:          inv.ID,
+		InvoiceDate: inv.InvoiceDate,
+		UpdatedBy:   &user,
+		PaidAmount:  amtNum,
+	}, apdb.InsertOutboxParams{
+		AggregateType:  "VendorInvoice",
+		AggregateID:    inv.ID,
+		EventType:      "ap.debit_note.issued",
+		Payload:        payload,
+		OrganizationID: inv.OrganizationID,
+		CorrelationID:  httpx.CorrelationUUID(r),
+	})
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	if n == 0 {
+		httpx.WriteError(w, r, httpx.Conflict("STATE_CONFLICT", "invoice tidak dapat diaplikasikan debit note"))
+		return
+	}
+
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, inv.RowVersion+1, map[string]any{
+		"invoiceId":         inv.ID,
+		"debitNoteNo":       dnNo,
+		"debitAmount":       amtRat.FloatString(4),
+		"outstandingAmount": remaining.FloatString(4),
+		"status":            nextStatus,
+	})
 }

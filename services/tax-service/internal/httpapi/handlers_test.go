@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/sinergiinvestasiproperti/erp/services/shared/httpx"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/platform"
@@ -18,6 +19,8 @@ import (
 type stubStore struct {
 	code   taxdb.TaxTaxCode
 	txn    taxdb.TaxTaxTransaction
+	codes  []taxdb.ListTaxCodesRow
+	txns   []taxdb.ListTaxTransactionsRow
 	outbox taxdb.InsertOutboxParams
 }
 
@@ -28,7 +31,7 @@ func (s *stubStore) GetTaxCode(_ context.Context, _ []uuid.UUID, _ uuid.UUID) (t
 	return s.code, nil
 }
 func (s *stubStore) ListTaxCodesWithCount(_ context.Context, _ []uuid.UUID, _, _ int32) ([]taxdb.ListTaxCodesRow, int64, error) {
-	return nil, 0, nil
+	return s.codes, int64(len(s.codes)), nil
 }
 func (s *stubStore) CreateTransactionAndEmit(_ context.Context, _ []uuid.UUID, txn taxdb.CreateTaxTransactionParams, ev taxdb.InsertOutboxParams) (taxdb.CreateTaxTransactionRow, error) {
 	id := uuid.New()
@@ -44,7 +47,7 @@ func (s *stubStore) GetByID(_ context.Context, _ []uuid.UUID, _ uuid.UUID) (taxd
 	return s.txn, nil
 }
 func (s *stubStore) ListTxnWithCount(_ context.Context, _ []uuid.UUID, _ string, _, _ int32) ([]taxdb.ListTaxTransactionsRow, int64, error) {
-	return nil, 0, nil
+	return s.txns, int64(len(s.txns)), nil
 }
 func (s *stubStore) ReportEfakturAndEmit(_ context.Context, _ []uuid.UUID, _ taxdb.ReportTaxTransactionParams, ev taxdb.InsertOutboxParams) (int32, error) {
 	s.outbox = ev
@@ -145,6 +148,73 @@ func TestTaxAutoComputationAndEfakturReport(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 on re-reporting Reported invoice, got %d", rec.Code)
+	}
+}
+
+func TestTaxEfakturExportSptPPNAndWithholding(t *testing.T) {
+	orgID := uuid.New()
+	outCodeID := uuid.New()
+	inCodeID := uuid.New()
+	mkAmt := func(s string) pgtype.Numeric { n, _ := platform.ParseNumeric(s); return n }
+	efNo := "=010.000-26.00000001"
+	st := "Reported"
+
+	store := &stubStore{
+		codes: []taxdb.ListTaxCodesRow{
+			{ID: outCodeID, Code: "PPN_OUT", TaxType: "VAT_OUT", Rate: mkAmt("11.0000")},
+			{ID: inCodeID, Code: "PPN_IN", TaxType: "VAT_IN", Rate: mkAmt("11.0000")},
+		},
+		txns: []taxdb.ListTaxTransactionsRow{
+			{ID: uuid.New(), TaxCodeID: outCodeID, SourceDocumentRef: "AR-001", BaseAmount: mkAmt("1000000.0000"), TaxAmount: mkAmt("110000.0000"), EfakturNo: &efNo, EfakturStatus: &st},
+			{ID: uuid.New(), TaxCodeID: inCodeID, SourceDocumentRef: "AP-001", BaseAmount: mkAmt("400000.0000"), TaxAmount: mkAmt("44000.0000"), EfakturNo: &efNo, EfakturStatus: &st},
+		},
+	}
+
+	mux := http.NewServeMux()
+	NewServer(store).Register(mux)
+	h := httpx.Middleware(mux)
+
+	// 1. e-Faktur CSV export with formula neutralization
+	req := httptest.NewRequest(http.MethodGet, "/tax-invoices/export/efaktur", nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-Permissions", "tax:read")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), "text/csv") {
+		t.Fatalf("efaktur export got %d ct=%q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	if !strings.Contains(rec.Body.String(), "'=010.000-26.00000001") {
+		t.Fatalf("expected formula-neutralized efakturNo in CSV: %s", rec.Body.String())
+	}
+
+	// 2. SPT Masa PPN summary
+	req = httptest.NewRequest(http.MethodGet, "/tax-invoices/spt-ppn?period=2026-11", nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-Permissions", "tax:read")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("spt-ppn got %d: %s", rec.Code, rec.Body.String())
+	}
+	var spt map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &spt)
+	if spt["pajakKeluaran"] != "110000.0000" || spt["pajakMasukan"] != "44000.0000" || spt["kurangLebihBayar"] != "66000.0000" {
+		t.Fatalf("unexpected SPT PPN: %+v", spt)
+	}
+
+	// 3. PPh 23 non-NPWP surcharge (2% * 2 = 4% -> 40000 on 1000000)
+	req = httptest.NewRequest(http.MethodPost, "/withholding-tax/calculate", strings.NewReader(`{"taxType":"PPH23","category":"SERVICES","grossAmount":"1000000.0000","hasNpwp":false}`))
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-Permissions", "tax:read")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("withholding calc got %d: %s", rec.Code, rec.Body.String())
+	}
+	var wh map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &wh)
+	if wh["effectiveRatePercent"] != "4.0000" || wh["withholdingAmount"] != "40000.0000" || wh["netAmount"] != "960000.0000" {
+		t.Fatalf("unexpected PPh 23 calc: %+v", wh)
 	}
 }
 

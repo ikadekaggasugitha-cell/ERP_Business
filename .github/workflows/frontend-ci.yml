@@ -1,0 +1,92 @@
+name: frontend-ci
+
+on:
+  push:
+    paths:
+      - "apps/web-spa/**"
+      - "apps/chrome-companion/**"
+      - ".github/workflows/frontend-ci.yml"
+  pull_request:
+    paths:
+      - "apps/web-spa/**"
+      - "apps/chrome-companion/**"
+      - ".github/workflows/frontend-ci.yml"
+  workflow_dispatch:
+    inputs:
+      run_playwright:
+        description: "Run Playwright E2E suite against web-spa preview server"
+        required: false
+        default: "false"
+
+jobs:
+  web-spa:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web-spa
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: apps/web-spa/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Type-check, build, and test web-spa
+        run: |
+          npx vite build
+          npx tsc --noEmit
+          npm test
+          npm run test:unit
+
+  chrome-companion:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/chrome-companion
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: apps/chrome-companion/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Syntax check & unit tests
+        run: |
+          node --check service-worker.js
+          npm test
+
+  playwright-e2e:
+    runs-on: ubuntu-latest
+    needs: [web-spa]
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.run_playwright == 'true') ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'e2e'))
+    defaults:
+      run:
+        working-directory: apps/web-spa
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: apps/web-spa/pnpm-lock.yaml
+      - name: Install dependencies & Playwright browsers
+        run: |
+          pnpm install --no-frozen-lockfile
+          npx playwright install --with-deps chromium
+      - name: Run Playwright E2E suite
+        run: npm run test:e2e

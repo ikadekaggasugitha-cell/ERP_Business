@@ -1,0 +1,24 @@
+{
+  "name": "erp-bq-sink-erp-staging",
+  "config": {
+    "connector.class": "com.wepay.kafka.connect.bigquery.BigQuerySinkConnector",
+    "tasks.max": "4",
+    "project": "erp-enterprise-analytics",
+    "defaultDataset": "erp_staging",
+    "keyfile": "/opt/kafka/external-configuration/gcp-sa/key.json",
+    "sanitizeTopics": "true",
+    "autoCreateTables": "true",
+    "autoUpdateSchemas": "true",
+    "allBQFieldsNullable": "true",
+    "upsertEnabled": "false",
+    "topics": "erp.cdc.gl.gl.journal_line,erp.cdc.sales.so.sales_order_line,erp.cdc.inventory.inv.stock_balance,erp.cdc.org.org.organization,erp.cdc.currency.cur.exchange_rate,erp.cdc.coa.fin.account,erp.cdc.masterdata.md.item,erp.cdc.coa.fin.holding_coa_mapping,erp.cdc.fixedasset.fa.depreciation_schedule,erp.cdc.budget.bud.budget_line,erp.cdc.project.prj.project,erp.cdc.crm.crm.opportunity",
+    "topic2TableMap": "erp.cdc.gl.gl.journal_line:stg_gl_journal_cdc,erp.cdc.sales.so.sales_order_line:stg_sales_order_cdc,erp.cdc.inventory.inv.stock_balance:stg_inventory_snapshot,erp.cdc.org.org.organization:stg_organizations_cdc,erp.cdc.currency.cur.exchange_rate:stg_exchange_rates_cdc,erp.cdc.coa.fin.account:stg_chart_of_accounts_cdc,erp.cdc.masterdata.md.item:stg_items_cdc,erp.cdc.coa.fin.holding_coa_mapping:stg_holding_coa_mapping,erp.cdc.fixedasset.fa.depreciation_schedule:stg_fixed_assets_cdc,erp.cdc.budget.bud.budget_line:stg_budgets_cdc,erp.cdc.project.prj.project:stg_projects_cdc,erp.cdc.crm.crm.opportunity:stg_crm_opportunities_cdc",
+    "transforms": "unwrap",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.drop.tombstones": "true",
+    "transforms.unwrap.delete.handling.mode": "rewrite",
+    "errors.tolerance": "all",
+    "errors.deadletterqueue.topic.name": "erp.cdc.bq.sink.dlq",
+    "errors.deadletterqueue.context.headers.enable": "true"
+  }
+}

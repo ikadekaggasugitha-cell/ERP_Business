@@ -34,12 +34,14 @@ type Store interface {
 
 	CreateLedger(ctx context.Context, scope []uuid.UUID, arg coadb.CreateLedgerParams) (coadb.CreateLedgerRow, error)
 	ListLedgersWithCount(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]coadb.ListLedgersRow, int64, error)
+	UpdateLedger(ctx context.Context, scope []uuid.UUID, arg coadb.UpdateLedgerParams) (int32, error)
 
 	CreateFiscalCalendar(ctx context.Context, scope []uuid.UUID, arg coadb.CreateFiscalCalendarParams) (coadb.CreateFiscalCalendarRow, error)
 	ListFiscalCalendarsWithCount(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]coadb.ListFiscalCalendarsRow, int64, error)
 
 	CreateFiscalYear(ctx context.Context, scope []uuid.UUID, arg coadb.CreateFiscalYearParams) (coadb.CreateFiscalYearRow, error)
 	ListFiscalYearsWithCount(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]coadb.ListFiscalYearsRow, int64, error)
+	UpdateFiscalYear(ctx context.Context, scope []uuid.UUID, arg coadb.UpdateFiscalYearParams) (int32, error)
 
 	CreateFiscalPeriod(ctx context.Context, scope []uuid.UUID, arg coadb.CreateFiscalPeriodParams) (coadb.CreateFiscalPeriodRow, error)
 	ListFiscalPeriodsWithCount(ctx context.Context, scope []uuid.UUID, fiscalYearID string, limit, offset int32) ([]coadb.ListFiscalPeriodsRow, int64, error)
@@ -63,6 +65,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /charts-of-accounts/{id}", s.deleteChart)
 
 	mux.HandleFunc("GET /accounts", s.listAccounts)
+	mux.HandleFunc("GET /accounts/hierarchy", s.accountHierarchy)
 	mux.HandleFunc("POST /accounts", s.createAccount)
 	mux.HandleFunc("GET /accounts/{id}", s.getAccount)
 	mux.HandleFunc("PUT /accounts/{id}", s.updateAccount)
@@ -72,11 +75,13 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /financial-organizations", s.createFinOrg)
 	mux.HandleFunc("GET /ledgers", s.listLedgers)
 	mux.HandleFunc("POST /ledgers", s.createLedger)
+	mux.HandleFunc("PUT /ledgers/{id}", s.updateLedger)
 
 	mux.HandleFunc("GET /fiscal-calendars", s.listCalendars)
 	mux.HandleFunc("POST /fiscal-calendars", s.createCalendar)
 	mux.HandleFunc("GET /fiscal-years", s.listYears)
 	mux.HandleFunc("POST /fiscal-years", s.createYear)
+	mux.HandleFunc("PUT /fiscal-years/{id}", s.updateFiscalYear)
 	mux.HandleFunc("GET /fiscal-periods", s.listPeriods)
 	mux.HandleFunc("POST /fiscal-periods", s.createPeriod)
 	mux.HandleFunc("POST /fiscal-periods/{id}/close", s.transitionPeriod("Open", "Closed"))
@@ -1034,4 +1039,206 @@ func deflt(v, d string) string {
 		return s
 	}
 	return d
+}
+
+// -----------------------------------------------------------------------------
+// Account Hierarchy Rollup & Ledger / Fiscal Year Metadata Updates
+// -----------------------------------------------------------------------------
+
+type accountTreeNode struct {
+	ID              string             `json:"id"`
+	Code            string             `json:"code"`
+	Name            string             `json:"name"`
+	AccountType     string             `json:"accountType"`
+	ParentAccountID string             `json:"parentAccountId,omitempty"`
+	AllowPosting    bool               `json:"allowPosting"`
+	RowVersion      int32              `json:"rowVersion"`
+	Children        []*accountTreeNode `json:"children"`
+}
+
+func (s *Server) accountHierarchy(w http.ResponseWriter, r *http.Request) {
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := httpx.RequirePermission(r, "coa:read"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	acctType := strings.TrimSpace(r.URL.Query().Get("accountType"))
+	rows, _, err := s.repo.ListWithCount(r.Context(), scope, acctType, 10000, 0)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+
+	nodes := make(map[uuid.UUID]*accountTreeNode, len(rows))
+	order := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		parentStr := ""
+		if row.ParentID != nil {
+			parentStr = row.ParentID.String()
+		}
+		nodes[row.ID] = &accountTreeNode{
+			ID:              row.ID.String(),
+			Code:            row.Code,
+			Name:            row.Name,
+			AccountType:     row.AccountType,
+			ParentAccountID: parentStr,
+			AllowPosting:    row.AllowPosting,
+			RowVersion:      row.RowVersion,
+			Children:        make([]*accountTreeNode, 0),
+		}
+		order = append(order, row.ID)
+	}
+
+	roots := make([]*accountTreeNode, 0)
+	for _, id := range order {
+		n := nodes[id]
+		if n.ParentAccountID != "" {
+			if pid, perr := uuid.Parse(n.ParentAccountID); perr == nil {
+				if parent, ok := nodes[pid]; ok && pid != id {
+					parent.Children = append(parent.Children, n)
+					continue
+				}
+			}
+		}
+		roots = append(roots, n)
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"data":       roots,
+		"totalNodes": len(rows),
+	})
+}
+
+func (s *Server) updateLedger(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var req struct {
+		Code         string `json:"code"`
+		LedgerType   string `json:"ledgerType"`
+		CurrencyCode string `json:"currencyCode"`
+	}
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	code := strings.TrimSpace(req.Code)
+	if code == "" {
+		httpx.WriteError(w, r, httpx.BadRequest("code wajib diisi"))
+		return
+	}
+	ledgerType := deflt(req.LedgerType, "Primary")
+	currency := strings.ToUpper(deflt(req.CurrencyCode, "IDR"))
+	if len(currency) != 3 {
+		httpx.WriteError(w, r, httpx.BadRequest("currencyCode harus 3 karakter ISO-4217"))
+		return
+	}
+
+	nextVer, err := s.repo.UpdateLedger(r.Context(), scope, coadb.UpdateLedgerParams{
+		ID:           id,
+		RowVersion:   rowVer,
+		Code:         code,
+		LedgerType:   ledgerType,
+		CurrencyCode: currency,
+		UpdatedBy:    &user,
+	})
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	httpx.WriteIDResponse(w, http.StatusOK, nextVer, map[string]any{
+		"id":           id.String(),
+		"code":         code,
+		"ledgerType":   ledgerType,
+		"currencyCode": currency,
+		"rowVersion":   nextVer,
+	})
+}
+
+func (s *Server) updateFiscalYear(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var req struct {
+		Name      string `json:"name"`
+		StartDate string `json:"startDate"`
+		EndDate   string `json:"endDate"`
+		Status    string `json:"status"`
+	}
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		httpx.WriteError(w, r, httpx.BadRequest("name wajib diisi"))
+		return
+	}
+	startDate, err := platform.ParseDate(req.StartDate)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.BadRequest("startDate harus YYYY-MM-DD"))
+		return
+	}
+	endDate, err := platform.ParseDate(req.EndDate)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.BadRequest("endDate harus YYYY-MM-DD"))
+		return
+	}
+	if endDate.Time.Before(startDate.Time) {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVALID_DATE_RANGE", "endDate tidak boleh lebih awal dari startDate"))
+		return
+	}
+	status := deflt(req.Status, "Open")
+	if status != "Open" && status != "Closed" && status != "Locked" {
+		httpx.WriteError(w, r, httpx.BadRequest("status harus Open, Closed, atau Locked"))
+		return
+	}
+
+	nextVer, err := s.repo.UpdateFiscalYear(r.Context(), scope, coadb.UpdateFiscalYearParams{
+		ID:         id,
+		RowVersion: rowVer,
+		Name:       name,
+		StartDate:  startDate,
+		EndDate:    endDate,
+		Status:     status,
+		UpdatedBy:  &user,
+	})
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	httpx.WriteIDResponse(w, http.StatusOK, nextVer, map[string]any{
+		"id":         id.String(),
+		"name":       name,
+		"startDate":  platform.FormatDate(startDate),
+		"endDate":    platform.FormatDate(endDate),
+		"status":     status,
+		"rowVersion": nextVer,
+	})
 }

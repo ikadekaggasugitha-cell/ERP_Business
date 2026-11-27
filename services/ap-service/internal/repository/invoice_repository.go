@@ -190,6 +190,23 @@ func (r *InvoiceRepository) LineTotal(ctx context.Context, scope []uuid.UUID, ar
 	return out, err
 }
 
+// ApplyDebitNoteAndEmit reduces an AP invoice's outstanding amount and enqueues ap.debit_note.issued atomically.
+func (r *InvoiceRepository) ApplyDebitNoteAndEmit(
+	ctx context.Context, scope []uuid.UUID, arg apdb.ApplyPaymentToInvoiceParams, ev apdb.InsertOutboxParams,
+) (int64, error) {
+	var n int64
+	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		var e error
+		n, e = q.ApplyPaymentToInvoice(ctx, arg)
+		if e != nil || n == 0 {
+			return e
+		}
+		return q.InsertOutbox(ctx, ev)
+	})
+	return n, err
+}
+
 // SettlementAllocation carries one AP payment allocation from treasury.payment.settled.
 type SettlementAllocation struct {
 	InvoiceRef      string

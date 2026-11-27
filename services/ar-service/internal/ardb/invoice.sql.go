@@ -224,6 +224,21 @@ func (q *Queries) DeleteDraftInvoice(ctx context.Context, arg DeleteDraftInvoice
 	return result.RowsAffected(), nil
 }
 
+const deleteInvoiceLines = `-- name: DeleteInvoiceLines :exec
+DELETE FROM ar.ar_invoice_line
+WHERE ar_invoice_id = $1 AND invoice_date = $2
+`
+
+type DeleteInvoiceLinesParams struct {
+	ArInvoiceID uuid.UUID   `json:"ar_invoice_id"`
+	InvoiceDate pgtype.Date `json:"invoice_date"`
+}
+
+func (q *Queries) DeleteInvoiceLines(ctx context.Context, arg DeleteInvoiceLinesParams) error {
+	_, err := q.db.Exec(ctx, deleteInvoiceLines, arg.ArInvoiceID, arg.InvoiceDate)
+	return err
+}
+
 const drainOutbox = `-- name: DrainOutbox :many
 SELECT id, aggregate_type, aggregate_id, event_type, payload, organization_id, correlation_id, created_at
 FROM ar.outbox
@@ -661,6 +676,48 @@ func (q *Queries) MarkOutboxPublished(ctx context.Context, arg MarkOutboxPublish
 	return err
 }
 
+const updateDraftInvoice = `-- name: UpdateDraftInvoice :one
+UPDATE ar.ar_invoice
+SET customer_id = $4,
+    due_date = $5,
+    currency_code = $6,
+    total_amount = $7,
+    outstanding_amount = $7,
+    sales_order_ref = $8,
+    updated_by = $9
+WHERE id = $1 AND invoice_date = $2 AND status IN ('Draft', 'Issued') AND outstanding_amount = total_amount AND row_version = $3 AND deleted_at IS NULL
+RETURNING row_version
+`
+
+type UpdateDraftInvoiceParams struct {
+	ID            uuid.UUID      `json:"id"`
+	InvoiceDate   pgtype.Date    `json:"invoice_date"`
+	RowVersion    int32          `json:"row_version"`
+	CustomerID    uuid.UUID      `json:"customer_id"`
+	DueDate       pgtype.Date    `json:"due_date"`
+	CurrencyCode  string         `json:"currency_code"`
+	TotalAmount   pgtype.Numeric `json:"total_amount"`
+	SalesOrderRef *string        `json:"sales_order_ref"`
+	UpdatedBy     *uuid.UUID     `json:"updated_by"`
+}
+
+func (q *Queries) UpdateDraftInvoice(ctx context.Context, arg UpdateDraftInvoiceParams) (int32, error) {
+	row := q.db.QueryRow(ctx, updateDraftInvoice,
+		arg.ID,
+		arg.InvoiceDate,
+		arg.RowVersion,
+		arg.CustomerID,
+		arg.DueDate,
+		arg.CurrencyCode,
+		arg.TotalAmount,
+		arg.SalesOrderRef,
+		arg.UpdatedBy,
+	)
+	var row_version int32
+	err := row.Scan(&row_version)
+	return row_version, err
+}
+
 const upsertMasterdataCache = `-- name: UpsertMasterdataCache :exec
 INSERT INTO ar.masterdata_cache (organization_id, party_id, code, name, party_type)
 VALUES ($1, $2, $3, $4, $5)
@@ -685,4 +742,30 @@ func (q *Queries) UpsertMasterdataCache(ctx context.Context, arg UpsertMasterdat
 		arg.PartyType,
 	)
 	return err
+}
+
+const writeOffInvoice = `-- name: WriteOffInvoice :execrows
+UPDATE ar.ar_invoice
+SET status = 'Cancelled', outstanding_amount = 0, updated_by = $4
+WHERE id = $1 AND invoice_date = $2 AND status IN ('Issued', 'PartiallyPaid', 'Overdue') AND row_version = $3 AND deleted_at IS NULL
+`
+
+type WriteOffInvoiceParams struct {
+	ID          uuid.UUID   `json:"id"`
+	InvoiceDate pgtype.Date `json:"invoice_date"`
+	RowVersion  int32       `json:"row_version"`
+	UpdatedBy   *uuid.UUID  `json:"updated_by"`
+}
+
+func (q *Queries) WriteOffInvoice(ctx context.Context, arg WriteOffInvoiceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, writeOffInvoice,
+		arg.ID,
+		arg.InvoiceDate,
+		arg.RowVersion,
+		arg.UpdatedBy,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

@@ -101,7 +101,19 @@ func requireWrite(w http.ResponseWriter, r *http.Request) ([]uuid.UUID, uuid.UUI
 		httpx.WriteError(w, r, err)
 		return nil, uuid.Nil, false
 	}
+	if scope[0] == platform.SystemOrgID && !httpx.HasRole(r.Context(), "SYSTEM_ADMIN") {
+		httpx.WriteError(w, r, httpx.Forbidden("data dimensi sistem tidak dapat dimodifikasi oleh non-SYSTEM_ADMIN"))
+		return nil, uuid.Nil, false
+	}
 	return scope, user, true
+}
+
+func guardSystemOrgMutation(w http.ResponseWriter, r *http.Request, orgID uuid.UUID) bool {
+	if orgID == platform.SystemOrgID && !httpx.HasRole(r.Context(), "SYSTEM_ADMIN") {
+		httpx.WriteError(w, r, httpx.Forbidden("data dimensi sistem tidak dapat dimodifikasi oleh non-SYSTEM_ADMIN"))
+		return false
+	}
+	return true
 }
 
 func requireRead(w http.ResponseWriter, r *http.Request) ([]uuid.UUID, bool) {
@@ -302,6 +314,11 @@ func (s *Server) updateCostCenter(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	if existing, err := s.repo.GetCostCenter(r.Context(), scope, id); err == nil {
+		if !guardSystemOrgMutation(w, r, existing.OrganizationID) {
+			return
+		}
+	}
 	next, err := s.repo.UpdateCostCenter(r.Context(), scope, dimensiondb.UpdateCostCenterParams{
 		ID: id, RowVersion: rowVer, Name: strings.TrimSpace(req.Name), Description: req.Description,
 		ParentID: req.ParentID, OwnerRef: req.OwnerRef, Status: status, EffectiveFrom: from, EffectiveTo: to, UpdatedBy: &user,
@@ -326,6 +343,11 @@ func (s *Server) deleteCostCenter(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
+	}
+	if existing, err := s.repo.GetCostCenter(r.Context(), scope, id); err == nil {
+		if !guardSystemOrgMutation(w, r, existing.OrganizationID) {
+			return
+		}
 	}
 	if err := s.repo.DeleteCostCenter(r.Context(), scope, dimensiondb.DeleteCostCenterParams{ID: id, RowVersion: rowVer, UpdatedBy: &user}); err != nil {
 		httpx.WriteError(w, r, err)
@@ -437,6 +459,11 @@ func (s *Server) updateProfitCenter(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	if existing, err := s.repo.GetProfitCenter(r.Context(), scope, id); err == nil {
+		if !guardSystemOrgMutation(w, r, existing.OrganizationID) {
+			return
+		}
+	}
 	next, err := s.repo.UpdateProfitCenter(r.Context(), scope, dimensiondb.UpdateProfitCenterParams{
 		ID: id, RowVersion: rowVer, Name: strings.TrimSpace(req.Name), ParentID: req.ParentID, Status: status,
 		EffectiveFrom: from, EffectiveTo: to, UpdatedBy: &user,
@@ -461,6 +488,11 @@ func (s *Server) deleteProfitCenter(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
+	}
+	if existing, err := s.repo.GetProfitCenter(r.Context(), scope, id); err == nil {
+		if !guardSystemOrgMutation(w, r, existing.OrganizationID) {
+			return
+		}
 	}
 	if err := s.repo.DeleteProfitCenter(r.Context(), scope, dimensiondb.DeleteProfitCenterParams{ID: id, RowVersion: rowVer, UpdatedBy: &user}); err != nil {
 		httpx.WriteError(w, r, err)
@@ -633,6 +665,9 @@ func (s *Server) updateAllocationRule(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	if !guardSystemOrgMutation(w, r, existing.OrganizationID) {
+		return
+	}
 	if err := validateTargets(existing.SourceCostCenterID, req.Targets); err != nil {
 		httpx.WriteError(w, r, err)
 		return
@@ -669,6 +704,11 @@ func (s *Server) deleteAllocationRule(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
+	}
+	if existing, err := s.repo.GetAllocationRule(r.Context(), scope, id); err == nil {
+		if !guardSystemOrgMutation(w, r, existing.OrganizationID) {
+			return
+		}
 	}
 	if err := s.repo.DeleteAllocationRule(r.Context(), scope, dimensiondb.DeleteAllocationRuleParams{
 		ID: id, RowVersion: rowVer, UpdatedBy: &user,

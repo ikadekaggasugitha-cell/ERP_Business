@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -23,8 +24,11 @@ type Store interface {
 	GetWithLines(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (ardb.ArArInvoice, []ardb.ListInvoiceLinesRow, error)
 	GetByID(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (ardb.ArArInvoice, error)
 	ListWithCount(ctx context.Context, scope []uuid.UUID, status string, limit, offset int32) ([]ardb.ListInvoicesRow, int64, error)
+	UpdateDraftWithLines(ctx context.Context, scope []uuid.UUID, hdr ardb.UpdateDraftInvoiceParams, lines []ardb.CreateInvoiceLineParams) (int32, error)
 	MarkPaid(ctx context.Context, scope []uuid.UUID, arg ardb.MarkInvoicePaidParams, ev ardb.InsertOutboxParams) (int64, error)
 	DeleteDraft(ctx context.Context, scope []uuid.UUID, arg ardb.DeleteDraftInvoiceParams) (int64, error)
+	ApplyCreditNoteAndEmit(ctx context.Context, scope []uuid.UUID, arg ardb.ApplyReceiptToInvoiceParams, ev ardb.InsertOutboxParams) (ardb.ApplyReceiptToInvoiceRow, error)
+	WriteOffAndEmit(ctx context.Context, scope []uuid.UUID, arg ardb.WriteOffInvoiceParams, ev ardb.InsertOutboxParams) (int64, error)
 }
 
 // Server serves AR HTTP endpoints.
@@ -42,8 +46,12 @@ func NewServer(repo Store) *Server {
 func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /customer-invoices", s.create)
 	mux.HandleFunc("GET /customer-invoices", s.list)
+	mux.HandleFunc("GET /customer-invoices/aging", s.aging)
 	mux.HandleFunc("GET /customer-invoices/{id}", s.get)
+	mux.HandleFunc("PUT /customer-invoices/{id}", s.update)
 	mux.HandleFunc("POST /customer-invoices/{id}/pay", s.markPaid)
+	mux.HandleFunc("POST /customer-invoices/{id}/credit-note", s.creditNote)
+	mux.HandleFunc("POST /customer-invoices/{id}/write-off", s.writeOff)
 	mux.HandleFunc("DELETE /customer-invoices/{id}", s.deleteDraft)
 }
 
@@ -518,4 +526,383 @@ func deflt(v, d string) string {
 		return s
 	}
 	return d
+}
+
+// aging computes AR aging buckets (current, 1-30, 31-60, 61-90, 90+, totalOutstanding) via *big.Rat.
+func (s *Server) aging(w http.ResponseWriter, r *http.Request) {
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := httpx.RequirePermission(r, "ar:read"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	asOf := time.Now().UTC().Truncate(24 * time.Hour)
+	if raw := strings.TrimSpace(r.URL.Query().Get("asOfDate")); raw != "" {
+		d, perr := time.Parse("2006-01-02", raw)
+		if perr != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("asOfDate harus YYYY-MM-DD"))
+			return
+		}
+		asOf = d.UTC()
+	}
+
+	rows, _, err := s.repo.ListWithCount(r.Context(), scope, "", 10000, 0)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+
+	current := new(big.Rat)
+	d1To30 := new(big.Rat)
+	d31To60 := new(big.Rat)
+	d61To90 := new(big.Rat)
+	d90Plus := new(big.Rat)
+	total := new(big.Rat)
+	openCount := 0
+
+	for _, row := range rows {
+		if row.Status == "Draft" || row.Status == "Paid" || row.Status == "Cancelled" {
+			continue
+		}
+		outRat := platform.NumericToRat(row.OutstandingAmount)
+		if outRat == nil || outRat.Sign() <= 0 {
+			continue
+		}
+		openCount++
+		total.Add(total, outRat)
+		due := row.DueDate.Time.UTC().Truncate(24 * time.Hour)
+		days := int(asOf.Sub(due).Hours() / 24)
+		switch {
+		case days <= 0:
+			current.Add(current, outRat)
+		case days <= 30:
+			d1To30.Add(d1To30, outRat)
+		case days <= 60:
+			d31To60.Add(d31To60, outRat)
+		case days <= 90:
+			d61To90.Add(d61To90, outRat)
+		default:
+			d90Plus.Add(d90Plus, outRat)
+		}
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"asOfDate":         asOf.Format("2006-01-02"),
+		"invoiceCount":     openCount,
+		"current":          current.FloatString(4),
+		"days1To30":        d1To30.FloatString(4),
+		"days31To60":       d31To60.FloatString(4),
+		"days61To90":       d61To90.FloatString(4),
+		"days90Plus":       d90Plus.FloatString(4),
+		"totalOutstanding": total.FloatString(4),
+	})
+}
+
+type updateReq struct {
+	CustomerID    string    `json:"customerId"`
+	DueDate       string    `json:"dueDate"`
+	CurrencyCode  string    `json:"currencyCode"`
+	TotalAmount   string    `json:"totalAmount"`
+	SalesOrderRef string    `json:"salesOrderRef,omitempty"`
+	Lines         []lineReq `json:"lines"`
+}
+
+func (s *Server) update(w http.ResponseWriter, r *http.Request) {
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := httpx.RequirePermission(r, "ar:write"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	user, err := httpx.RequireUser(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var req updateReq
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+
+	existing, err := s.repo.GetByID(r.Context(), scope, id)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	if existing.Status != "Draft" && existing.Status != "Issued" {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVOICE_NOT_EDITABLE", "hanya invoice Draft/Issued tanpa pembayaran yang dapat diubah"))
+		return
+	}
+	outRat := platform.NumericToRat(existing.OutstandingAmount)
+	totRat := platform.NumericToRat(existing.TotalAmount)
+	if outRat != nil && totRat != nil && outRat.Cmp(totRat) != 0 {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVOICE_HAS_PAYMENTS", "invoice yang sudah memiliki pembayaran tidak dapat diubah"))
+		return
+	}
+
+	customerID := existing.CustomerID
+	if strings.TrimSpace(req.CustomerID) != "" {
+		customerID, err = httpx.ParseUUIDParam("customerId", req.CustomerID)
+		if err != nil {
+			httpx.WriteError(w, r, err)
+			return
+		}
+	}
+	dueDate := existing.DueDate
+	if strings.TrimSpace(req.DueDate) != "" {
+		dueDate, err = platform.ParseDate(req.DueDate)
+		if err != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("dueDate harus YYYY-MM-DD"))
+			return
+		}
+	}
+	totalStr := strings.TrimSpace(req.TotalAmount)
+	if totalStr == "" {
+		totalStr = platform.FormatNumeric(existing.TotalAmount, 4)
+	}
+	totalNum, lines, _, err := buildAndValidateLines(existing.OrganizationID, user, totalStr, req.Lines)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var soRef *string
+	if v := strings.TrimSpace(req.SalesOrderRef); v != "" {
+		soRef = &v
+	} else {
+		soRef = existing.SalesOrderRef
+	}
+
+	nextVer, err := s.repo.UpdateDraftWithLines(r.Context(), scope, ardb.UpdateDraftInvoiceParams{
+		ID:            existing.ID,
+		InvoiceDate:   existing.InvoiceDate,
+		RowVersion:    rowVer,
+		CustomerID:    customerID,
+		DueDate:       dueDate,
+		CurrencyCode:  strings.ToUpper(deflt(req.CurrencyCode, existing.CurrencyCode)),
+		TotalAmount:   totalNum,
+		SalesOrderRef: soRef,
+		UpdatedBy:     &user,
+	}, lines)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	httpx.WriteIDResponse(w, http.StatusOK, nextVer, map[string]any{
+		"id":         existing.ID,
+		"rowVersion": nextVer,
+	})
+}
+
+type creditNoteReq struct {
+	CreditNoteNo string `json:"creditNoteNo,omitempty"`
+	Amount       string `json:"amount"`
+	Reason       string `json:"reason"`
+}
+
+func (s *Server) creditNote(w http.ResponseWriter, r *http.Request) {
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := httpx.RequirePermission(r, "ar:write"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	user, err := httpx.RequireUser(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+
+	var req creditNoteReq
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
+		return
+	}
+	defer release()
+
+	amtNum, err := platform.ParseNumeric(req.Amount)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.BadRequest("amount tidak valid"))
+		return
+	}
+	amtRat := platform.NumericToRat(amtNum)
+	if amtRat == nil || amtRat.Sign() <= 0 {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVALID_AMOUNT", "credit note amount harus > 0"))
+		return
+	}
+
+	inv, err := s.repo.GetByID(r.Context(), scope, id)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	if inv.Status != "Issued" && inv.Status != "PartiallyPaid" && inv.Status != "Overdue" {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVALID_STATUS", "credit note hanya berlaku untuk invoice Issued, PartiallyPaid, atau Overdue"))
+		return
+	}
+	outRat := platform.NumericToRat(inv.OutstandingAmount)
+	if outRat == nil || amtRat.Cmp(outRat) > 0 {
+		httpx.WriteError(w, r, httpx.Unprocessable("CREDIT_NOTE_EXCEEDS_OUTSTANDING", "jumlah credit note melebihi sisa tagihan (outstanding)"))
+		return
+	}
+
+	remaining := new(big.Rat).Sub(outRat, amtRat)
+	cnNo := strings.TrimSpace(req.CreditNoteNo)
+	if cnNo == "" {
+		cnNo = "CN-" + inv.InvoiceNo
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"invoiceId":      inv.ID,
+		"invoiceNo":      inv.InvoiceNo,
+		"creditNoteNo":   cnNo,
+		"customerId":     inv.CustomerID,
+		"currencyCode":   inv.CurrencyCode,
+		"creditAmount":   amtRat.FloatString(4),
+		"remainingAfter": remaining.FloatString(4),
+		"reason":         strings.TrimSpace(req.Reason),
+		"actorId":        user,
+	})
+
+	updated, err := s.repo.ApplyCreditNoteAndEmit(r.Context(), scope, ardb.ApplyReceiptToInvoiceParams{
+		ID:          inv.ID,
+		InvoiceDate: inv.InvoiceDate,
+		UpdatedBy:   &user,
+		PaidAmount:  amtNum,
+	}, ardb.InsertOutboxParams{
+		AggregateType:  "CustomerInvoice",
+		AggregateID:    inv.ID,
+		EventType:      "ar.credit_note.issued",
+		Payload:        payload,
+		OrganizationID: inv.OrganizationID,
+		CorrelationID:  httpx.CorrelationUUID(r),
+	})
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusCreated, inv.RowVersion+1, map[string]any{
+		"invoiceId":         inv.ID,
+		"creditNoteNo":      cnNo,
+		"creditAmount":      amtRat.FloatString(4),
+		"outstandingAmount": platform.FormatNumeric(updated.OutstandingAmount, 4),
+		"status":            updated.Status,
+	})
+}
+
+type writeOffReq struct {
+	Reason string `json:"reason"`
+}
+
+func (s *Server) writeOff(w http.ResponseWriter, r *http.Request) {
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := requireARApprove(r); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	user, err := httpx.RequireUser(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	rowVer, err := httpx.IfMatch(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+
+	var req writeOffReq
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
+		return
+	}
+	defer release()
+
+	if strings.TrimSpace(req.Reason) == "" {
+		httpx.WriteError(w, r, httpx.BadRequest("reason wajib diisi untuk write-off piutang"))
+		return
+	}
+	inv, err := s.repo.GetByID(r.Context(), scope, id)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	if inv.Status != "Issued" && inv.Status != "PartiallyPaid" && inv.Status != "Overdue" {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVALID_STATUS", "write-off hanya berlaku untuk invoice Issued, PartiallyPaid, atau Overdue"))
+		return
+	}
+	outRat := platform.NumericToRat(inv.OutstandingAmount)
+	if outRat == nil || outRat.Sign() <= 0 {
+		httpx.WriteError(w, r, httpx.Unprocessable("NOTHING_TO_WRITEOFF", "invoice tidak memiliki sisa piutang untuk di-write-off"))
+		return
+	}
+
+	payload, _ := json.Marshal(map[string]any{
+		"invoiceId":      inv.ID,
+		"invoiceNo":      inv.InvoiceNo,
+		"customerId":     inv.CustomerID,
+		"currencyCode":   inv.CurrencyCode,
+		"writeOffAmount": outRat.FloatString(4),
+		"reason":         strings.TrimSpace(req.Reason),
+		"actorId":        user,
+	})
+	n, err := s.repo.WriteOffAndEmit(r.Context(), scope, ardb.WriteOffInvoiceParams{
+		ID:          inv.ID,
+		InvoiceDate: inv.InvoiceDate,
+		RowVersion:  rowVer,
+		UpdatedBy:   &user,
+	}, ardb.InsertOutboxParams{
+		AggregateType:  "CustomerInvoice",
+		AggregateID:    inv.ID,
+		EventType:      "ar.invoice.written_off",
+		Payload:        payload,
+		OrganizationID: inv.OrganizationID,
+		CorrelationID:  httpx.CorrelationUUID(r),
+	})
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	if n == 0 {
+		httpx.WriteError(w, r, httpx.Conflict("VERSION_CONFLICT", "rowVersion tidak cocok atau invoice sudah lunas/dibatalkan"))
+		return
+	}
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, rowVer+1, map[string]any{
+		"invoiceId":      inv.ID,
+		"writeOffAmount": outRat.FloatString(4),
+		"status":         "Cancelled",
+		"writtenOff":     true,
+	})
 }

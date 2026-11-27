@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,17 +31,26 @@ type Store interface {
 }
 
 type Server struct {
-	repo Store
-	idem *httpx.IdemStore
+	repo      Store
+	idem      *httpx.IdemStore
+	recMu     sync.RWMutex
+	recurring map[uuid.UUID][]recurringTemplateDTO
 }
 
 func NewServer(repo Store) *Server {
-	return &Server{repo: repo, idem: httpx.NewIdemStore()}
+	return &Server{
+		repo:      repo,
+		idem:      httpx.NewIdemStore(),
+		recurring: make(map[uuid.UUID][]recurringTemplateDTO),
+	}
 }
 
 func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /journal-entries", s.create)
 	mux.HandleFunc("GET /journal-entries", s.list)
+	mux.HandleFunc("POST /journal-entries/fx-revaluation", s.fxRevaluation)
+	mux.HandleFunc("POST /journal-entries/recurring", s.createRecurringTemplate)
+	mux.HandleFunc("GET /journal-entries/recurring", s.listRecurringTemplates)
 	mux.HandleFunc("GET /journal-entries/{id}", s.get)
 	mux.HandleFunc("PUT /journal-entries/{id}", s.update)
 	mux.HandleFunc("DELETE /journal-entries/{id}", s.deleteDraft)

@@ -129,6 +129,21 @@ func (f *fakeTreasuryStore) ReconcileBankAccountAndEmit(_ context.Context, _ []u
 	}}, nil
 }
 
+func (f *fakeTreasuryStore) ManualReconcileAndEmit(_ context.Context, _ []uuid.UUID, bankID, lineID, payID uuid.UUID, action, reason string, _, _ uuid.UUID) error {
+	payload, _ := json.Marshal(map[string]any{
+		"mode": "manual", "action": action, "bankAccountId": bankID,
+		"statementLineId": lineID, "paymentId": payID, "reason": reason,
+	})
+	evType := "treasury.payment.reconciled"
+	if action == "unmatch" {
+		evType = "treasury.payment.unreconciled"
+	}
+	f.settledEvents = append(f.settledEvents, treasurydb.InsertOutboxParams{
+		AggregateType: "payment", AggregateID: payID, EventType: evType, Payload: payload,
+	})
+	return nil
+}
+
 func authHeaders(perms string) map[string]string {
 	return map[string]string{
 		"X-Org-Scope":   "00000000-0000-0000-0000-000000000001",

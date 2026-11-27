@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -63,6 +64,9 @@ func (s *stubStore) CreateLedger(_ context.Context, _ []uuid.UUID, _ coadb.Creat
 func (s *stubStore) ListLedgersWithCount(_ context.Context, _ []uuid.UUID, _, _ int32) ([]coadb.ListLedgersRow, int64, error) {
 	return nil, 0, nil
 }
+func (s *stubStore) UpdateLedger(_ context.Context, _ []uuid.UUID, _ coadb.UpdateLedgerParams) (int32, error) {
+	return 2, nil
+}
 func (s *stubStore) CreateFiscalCalendar(_ context.Context, _ []uuid.UUID, _ coadb.CreateFiscalCalendarParams) (coadb.CreateFiscalCalendarRow, error) {
 	return coadb.CreateFiscalCalendarRow{ID: uuid.New(), RowVersion: 1}, nil
 }
@@ -74,6 +78,9 @@ func (s *stubStore) CreateFiscalYear(_ context.Context, _ []uuid.UUID, _ coadb.C
 }
 func (s *stubStore) ListFiscalYearsWithCount(_ context.Context, _ []uuid.UUID, _, _ int32) ([]coadb.ListFiscalYearsRow, int64, error) {
 	return nil, 0, nil
+}
+func (s *stubStore) UpdateFiscalYear(_ context.Context, _ []uuid.UUID, _ coadb.UpdateFiscalYearParams) (int32, error) {
+	return 2, nil
 }
 func (s *stubStore) CreateFiscalPeriod(_ context.Context, _ []uuid.UUID, _ coadb.CreateFiscalPeriodParams) (coadb.CreateFiscalPeriodRow, error) {
 	return coadb.CreateFiscalPeriodRow{ID: uuid.New(), Status: "Open", RowVersion: 1}, nil
@@ -136,6 +143,68 @@ func TestCOAEndpointsAndPeriodTransitions(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || rec.Header().Get("ETag") != `"2"` {
 		t.Fatalf("close failed: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAccountHierarchyAndMetadataUpdates(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	rootID := uuid.New()
+	childID := uuid.New()
+
+	store := &stubStore{
+		accounts: []coadb.ListAccountsRow{
+			{ID: rootID, Code: "1000", Name: "Assets", AccountType: "Asset", AllowPosting: false, RowVersion: 1},
+			{ID: childID, Code: "1100", Name: "Cash", AccountType: "Asset", ParentID: &rootID, AllowPosting: true, RowVersion: 1},
+		},
+		total: 2,
+	}
+	mux := http.NewServeMux()
+	NewServer(store).Register(mux)
+	h := httpx.Middleware(mux)
+
+	// 1. GET /accounts/hierarchy nests 1100 under 1000
+	req := httptest.NewRequest(http.MethodGet, "/accounts/hierarchy", nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-Permissions", "coa:read")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("hierarchy got %d: %s", rec.Code, rec.Body.String())
+	}
+	var tree struct {
+		Data       []accountTreeNode `json:"data"`
+		TotalNodes int               `json:"totalNodes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &tree); err != nil {
+		t.Fatal(err)
+	}
+	if tree.TotalNodes != 2 || len(tree.Data) != 1 || len(tree.Data[0].Children) != 1 || tree.Data[0].Children[0].Code != "1100" {
+		t.Fatalf("unexpected hierarchy tree: %+v", tree)
+	}
+
+	// 2. PUT /ledgers/{id} with If-Match
+	req = httptest.NewRequest(http.MethodPut, "/ledgers/"+uuid.NewString(), strings.NewReader(`{"code":"PRIMARY","ledgerType":"Primary","currencyCode":"IDR"}`))
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-User-Id", userID.String())
+	req.Header.Set("X-Permissions", "coa:write")
+	req.Header.Set("If-Match", `"1"`)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Header().Get("ETag") != `"2"` {
+		t.Fatalf("PUT ledger got %d ETag=%q body=%s", rec.Code, rec.Header().Get("ETag"), rec.Body.String())
+	}
+
+	// 3. PUT /fiscal-years/{id} with If-Match
+	req = httptest.NewRequest(http.MethodPut, "/fiscal-years/"+uuid.NewString(), strings.NewReader(`{"name":"FY 2026","startDate":"2026-01-01","endDate":"2026-12-31","status":"Open"}`))
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-User-Id", userID.String())
+	req.Header.Set("X-Permissions", "coa:write")
+	req.Header.Set("If-Match", `"1"`)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Header().Get("ETag") != `"2"` {
+		t.Fatalf("PUT fiscal-year got %d ETag=%q body=%s", rec.Code, rec.Header().Get("ETag"), rec.Body.String())
 	}
 }
 

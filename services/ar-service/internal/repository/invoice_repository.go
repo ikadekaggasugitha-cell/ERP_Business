@@ -80,6 +80,73 @@ type SettlementAllocation struct {
 	AllocatedAmount pgtype.Numeric
 }
 
+// UpdateDraftWithLines updates an unpaid Draft/Issued AR invoice and optionally replaces its lines.
+func (r *InvoiceRepository) UpdateDraftWithLines(
+	ctx context.Context, scope []uuid.UUID,
+	hdr ardb.UpdateDraftInvoiceParams, lines []ardb.CreateInvoiceLineParams,
+) (int32, error) {
+	var nextVer int32
+	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		var e error
+		nextVer, e = q.UpdateDraftInvoice(ctx, hdr)
+		if e != nil {
+			return e
+		}
+		if len(lines) > 0 {
+			if e = q.DeleteInvoiceLines(ctx, ardb.DeleteInvoiceLinesParams{
+				ArInvoiceID: hdr.ID,
+				InvoiceDate: hdr.InvoiceDate,
+			}); e != nil {
+				return e
+			}
+			for i := range lines {
+				lines[i].ArInvoiceID = hdr.ID
+				lines[i].InvoiceDate = hdr.InvoiceDate
+				if e = q.CreateInvoiceLine(ctx, lines[i]); e != nil {
+					return e
+				}
+			}
+		}
+		return nil
+	})
+	return nextVer, err
+}
+
+// ApplyCreditNoteAndEmit reduces an AR invoice's outstanding amount and enqueues ar.credit_note.issued atomically.
+func (r *InvoiceRepository) ApplyCreditNoteAndEmit(
+	ctx context.Context, scope []uuid.UUID, arg ardb.ApplyReceiptToInvoiceParams, ev ardb.InsertOutboxParams,
+) (ardb.ApplyReceiptToInvoiceRow, error) {
+	var out ardb.ApplyReceiptToInvoiceRow
+	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		var e error
+		out, e = q.ApplyReceiptToInvoice(ctx, arg)
+		if e != nil {
+			return e
+		}
+		return q.InsertOutbox(ctx, ev)
+	})
+	return out, err
+}
+
+// WriteOffAndEmit writes off an unpaid AR invoice and enqueues ar.invoice.written_off atomically.
+func (r *InvoiceRepository) WriteOffAndEmit(
+	ctx context.Context, scope []uuid.UUID, arg ardb.WriteOffInvoiceParams, ev ardb.InsertOutboxParams,
+) (int64, error) {
+	var n int64
+	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		var e error
+		n, e = q.WriteOffInvoice(ctx, arg)
+		if e != nil || n == 0 {
+			return e
+		}
+		return q.InsertOutbox(ctx, ev)
+	})
+	return n, err
+}
+
 // ConsumePaymentSettled idempotently allocates a settled treasury receipt to AR invoices
 // and emits ar.invoice.paid when an invoice becomes Paid.
 func (r *InvoiceRepository) ConsumePaymentSettled(

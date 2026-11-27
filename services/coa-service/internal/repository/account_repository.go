@@ -232,6 +232,16 @@ func (r *AccountRepository) ListLedgersWithCount(ctx context.Context, scope []uu
 	return rows, total, err
 }
 
+func (r *AccountRepository) UpdateLedger(ctx context.Context, scope []uuid.UUID, arg coadb.UpdateLedgerParams) (int32, error) {
+	var nextVer int32
+	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		var e error
+		nextVer, e = r.q.WithTx(tx).UpdateLedger(ctx, arg)
+		return e
+	})
+	return nextVer, err
+}
+
 func (r *AccountRepository) CreateFiscalCalendar(ctx context.Context, scope []uuid.UUID, arg coadb.CreateFiscalCalendarParams) (coadb.CreateFiscalCalendarRow, error) {
 	var out coadb.CreateFiscalCalendarRow
 	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
@@ -280,6 +290,16 @@ func (r *AccountRepository) ListFiscalYearsWithCount(ctx context.Context, scope 
 		return e
 	})
 	return rows, total, err
+}
+
+func (r *AccountRepository) UpdateFiscalYear(ctx context.Context, scope []uuid.UUID, arg coadb.UpdateFiscalYearParams) (int32, error) {
+	var nextVer int32
+	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		var e error
+		nextVer, e = r.q.WithTx(tx).UpdateFiscalYear(ctx, arg)
+		return e
+	})
+	return nextVer, err
 }
 
 func (r *AccountRepository) CreateFiscalPeriod(ctx context.Context, scope []uuid.UUID, arg coadb.CreateFiscalPeriodParams) (coadb.CreateFiscalPeriodRow, error) {

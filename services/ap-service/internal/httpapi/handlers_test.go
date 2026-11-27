@@ -73,6 +73,11 @@ func (s *stubStore) RecordAndEmit(_ context.Context, _ []uuid.UUID, _ apdb.Recor
 	return 1, nil
 }
 
+func (s *stubStore) ApplyDebitNoteAndEmit(_ context.Context, _ []uuid.UUID, _ apdb.ApplyPaymentToInvoiceParams, ev apdb.InsertOutboxParams) (int64, error) {
+	s.outbox = ev
+	return 1, nil
+}
+
 func TestAPInvoiceLifecycleValidationAndRBAC(t *testing.T) {
 	orgID := uuid.New()
 	userID := uuid.New()
@@ -162,6 +167,88 @@ func TestAPInvoiceLifecycleValidationAndRBAC(t *testing.T) {
 	}
 	if rDel := do(http.MethodDelete, "/vendor-invoices/"+created.ID, "", "ap:write", "", `"1"`); rDel.Code != http.StatusNoContent {
 		t.Fatalf("expected 204 delete, got %d", rDel.Code)
+	}
+}
+
+func TestAPAgingAndDebitNote(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	vendorID := uuid.New()
+	asOf := time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC)
+	mkAmt := func(s string) pgtype.Numeric { n, _ := platform.ParseNumeric(s); return n }
+	mkDate := func(daysAgo int) pgtype.Date {
+		return pgtype.Date{Time: asOf.AddDate(0, 0, -daysAgo), Valid: true}
+	}
+
+	invID := uuid.New()
+	store := &stubStore{
+		inv: apdb.ApApInvoice{
+			ID:                invID,
+			OrganizationID:    orgID,
+			InvoiceNo:         "AP-100",
+			VendorID:          vendorID,
+			InvoiceDate:       mkDate(20),
+			DueDate:           mkDate(10),
+			CurrencyCode:      "IDR",
+			TotalAmount:       mkAmt("500.0000"),
+			OutstandingAmount: mkAmt("500.0000"),
+			Status:            "Recorded",
+			RowVersion:        1,
+		},
+		list: []apdb.ListInvoicesRow{
+			{ID: uuid.New(), Status: "Recorded", DueDate: mkDate(-5), OutstandingAmount: mkAmt("100.0000")},  // current
+			{ID: uuid.New(), Status: "Recorded", DueDate: mkDate(15), OutstandingAmount: mkAmt("200.0000")},  // 1-30
+			{ID: uuid.New(), Status: "Recorded", DueDate: mkDate(45), OutstandingAmount: mkAmt("300.0000")},  // 31-60
+			{ID: uuid.New(), Status: "Recorded", DueDate: mkDate(75), OutstandingAmount: mkAmt("400.0000")},  // 61-90
+			{ID: uuid.New(), Status: "Recorded", DueDate: mkDate(120), OutstandingAmount: mkAmt("500.0000")}, // 90+
+			{ID: uuid.New(), Status: "Paid", DueDate: mkDate(120), OutstandingAmount: mkAmt("999.0000")},     // excluded
+		},
+	}
+
+	mux := http.NewServeMux()
+	NewServer(store).Register(mux)
+	h := httpx.Middleware(mux)
+
+	// 1. Aging buckets
+	req := httptest.NewRequest(http.MethodGet, "/vendor-invoices/aging?asOfDate=2026-11-24", nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-Permissions", "ap:read")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("aging got %d: %s", rec.Code, rec.Body.String())
+	}
+	var ag map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &ag)
+	if ag["current"] != "100.0000" || ag["days1To30"] != "200.0000" || ag["days31To60"] != "300.0000" ||
+		ag["days61To90"] != "400.0000" || ag["days90Plus"] != "500.0000" || ag["totalOutstanding"] != "1500.0000" {
+		t.Fatalf("unexpected aging buckets: %+v", ag)
+	}
+
+	// 2. Debit note exceeding outstanding -> 422
+	dnOver := httptest.NewRequest(http.MethodPost, "/vendor-invoices/"+invID.String()+"/debit-note", strings.NewReader(`{"amount":"600.0000","reason":"return"}`))
+	dnOver.Header.Set("X-Organization-Id", orgID.String())
+	dnOver.Header.Set("X-User-Id", userID.String())
+	dnOver.Header.Set("X-Permissions", "ap:write")
+	dnOverRec := httptest.NewRecorder()
+	h.ServeHTTP(dnOverRec, dnOver)
+	if dnOverRec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for debit note > outstanding, got %d", dnOverRec.Code)
+	}
+
+	// 3. Valid debit note -> 201 + outbox event ap.debit_note.issued
+	dnOK := httptest.NewRequest(http.MethodPost, "/vendor-invoices/"+invID.String()+"/debit-note", strings.NewReader(`{"amount":"150.0000","reason":"damaged goods"}`))
+	dnOK.Header.Set("X-Organization-Id", orgID.String())
+	dnOK.Header.Set("X-User-Id", userID.String())
+	dnOK.Header.Set("X-Permissions", "ap:write")
+	dnOK.Header.Set("Idempotency-Key", "dn-key-1")
+	dnOKRec := httptest.NewRecorder()
+	h.ServeHTTP(dnOKRec, dnOK)
+	if dnOKRec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for valid debit note, got %d: %s", dnOKRec.Code, dnOKRec.Body.String())
+	}
+	if store.outbox.EventType != "ap.debit_note.issued" {
+		t.Fatalf("expected ap.debit_note.issued, got %q", store.outbox.EventType)
 	}
 }
 

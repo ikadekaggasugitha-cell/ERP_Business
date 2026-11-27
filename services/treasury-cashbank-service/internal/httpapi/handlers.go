@@ -36,6 +36,7 @@ type Store interface {
 	CreateStatementLinesBatch(ctx context.Context, scope []uuid.UUID, lines []treasurydb.CreateBankStatementLineParams) ([]uuid.UUID, int32, error)
 	ListStatementLinesWithCount(ctx context.Context, scope []uuid.UUID, arg treasurydb.ListBankStatementLinesParams) ([]treasurydb.ListBankStatementLinesRow, int64, error)
 	ReconcileBankAccountAndEmit(ctx context.Context, scope []uuid.UUID, bankAccountID, actorID, correlationID uuid.UUID) ([]repository.ReconcileMatch, error)
+	ManualReconcileAndEmit(ctx context.Context, scope []uuid.UUID, bankAccountID, statementLineID, paymentID uuid.UUID, action, reason string, actorID, correlationID uuid.UUID) error
 }
 
 type Server struct {
@@ -52,6 +53,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /bank-accounts", s.listBankAccounts)
 	mux.HandleFunc("GET /bank-accounts/{id}", s.getBankAccount)
 	mux.HandleFunc("POST /bank-accounts/{id}/reconcile", s.reconcileBankAccount)
+	mux.HandleFunc("POST /bank-accounts/{id}/reconcile/manual", s.manualReconcileBankAccount)
+	mux.HandleFunc("POST /bank-accounts/{id}/statements/import-csv", s.importBankStatementCSV)
+	mux.HandleFunc("GET /cash-position", s.cashPosition)
 
 	mux.HandleFunc("POST /payments", s.createPayment)
 	mux.HandleFunc("GET /payments", s.listPayments)

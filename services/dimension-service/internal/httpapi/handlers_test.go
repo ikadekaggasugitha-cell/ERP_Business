@@ -27,6 +27,18 @@ func (m *mockStore) GetCostCenter(_ context.Context, _ []uuid.UUID, id uuid.UUID
 	return dimensiondb.CcCostCenter{ID: id, Code: "CC-100", Name: "Ops", Status: "Active", RowVersion: 3}, nil
 }
 
+func (m *mockStore) UpdateCostCenter(_ context.Context, _ []uuid.UUID, _ dimensiondb.UpdateCostCenterParams, _ uuid.UUID) (int32, error) {
+	return 4, nil
+}
+
+func (m *mockStore) GetProfitCenter(_ context.Context, _ []uuid.UUID, id uuid.UUID) (dimensiondb.PcProfitCenter, error) {
+	return dimensiondb.PcProfitCenter{ID: id, Code: "PC-100", Name: "Sales", Status: "Active", RowVersion: 1}, nil
+}
+
+func (m *mockStore) GetAllocationRule(_ context.Context, _ []uuid.UUID, id uuid.UUID) (dimensiondb.CcCostAllocationRule, error) {
+	return dimensiondb.CcCostAllocationRule{ID: id, Name: "Overhead", IsActive: true, RowVersion: 1}, nil
+}
+
 func (m *mockStore) CreateCostCenter(_ context.Context, _ []uuid.UUID, a dimensiondb.CreateCostCenterParams, _ uuid.UUID) (dimensiondb.CreateCostCenterRow, error) {
 	m.createdCC = &a
 	return dimensiondb.CreateCostCenterRow{ID: uuid.New(), RowVersion: 1}, nil
@@ -208,5 +220,44 @@ func TestExecuteAllocationAndAssignments(t *testing.T) {
 	rec = do(h, "POST", "/profit-center-assignments", `{"profitCenterId":"`+pcID+`","organizationRef":"`+orgRef+`"}`, "dimension:write", nil)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create pc assignment want 201 got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDimensionSystemOrgReadVisibilityAndWriteGuard(t *testing.T) {
+	// mockStore returns OrganizationID = uuid.Nil (platform.SystemOrgID) by default on GetCostCenter/GetProfitCenter/GetAllocationRule.
+	h := newMux(&mockStore{})
+	id := uuid.NewString()
+
+	// 1. Read of system-org cost center succeeds for regular tenant reader
+	rec := do(h, "GET", "/cost-centers/"+id, "", "dimension:read", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 reading system-org cost center, got %d: %s", rec.Code, rec.Body)
+	}
+
+	// 2. Non-SYSTEM_ADMIN PUT & DELETE on system-org cost center, profit center, and allocation rule must return 403
+	putCC := do(h, "PUT", "/cost-centers/"+id, `{"name":"Hack","effectiveFrom":"2026-01-01"}`, "dimension:write", map[string]string{"If-Match": `"1"`})
+	if putCC.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 updating system-org cost center, got %d: %s", putCC.Code, putCC.Body)
+	}
+	delCC := do(h, "DELETE", "/cost-centers/"+id, "", "dimension:write", map[string]string{"If-Match": `"1"`})
+	if delCC.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 deleting system-org cost center, got %d: %s", delCC.Code, delCC.Body)
+	}
+	delPC := do(h, "DELETE", "/profit-centers/"+id, "", "dimension:write", map[string]string{"If-Match": `"1"`})
+	if delPC.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 deleting system-org profit center, got %d: %s", delPC.Code, delPC.Body)
+	}
+	delAR := do(h, "DELETE", "/allocation-rules/"+id, "", "dimension:write", map[string]string{"If-Match": `"1"`})
+	if delAR.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 deleting system-org allocation rule, got %d: %s", delAR.Code, delAR.Body)
+	}
+
+	// 3. SYSTEM_ADMIN is allowed to update system-org cost center
+	putAdmin := do(h, "PUT", "/cost-centers/"+id, `{"name":"Global Corp","effectiveFrom":"2026-01-01"}`, "dimension:write", map[string]string{
+		"If-Match": `"1"`,
+		"X-Roles":  "SYSTEM_ADMIN",
+	})
+	if putAdmin.Code != http.StatusOK {
+		t.Fatalf("expected 200 for SYSTEM_ADMIN updating system-org cost center, got %d: %s", putAdmin.Code, putAdmin.Body)
 	}
 }

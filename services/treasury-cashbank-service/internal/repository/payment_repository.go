@@ -372,6 +372,77 @@ func (r *PaymentRepository) ReconcileBankAccountAndEmit(
 	return matches, err
 }
 
+// ManualReconcileAndEmit records a manual match or unmatch override between a bank
+// statement line and a payment, emitting an audit outbox event in the same transaction.
+func (r *PaymentRepository) ManualReconcileAndEmit(
+	ctx context.Context, scope []uuid.UUID,
+	bankAccountID, statementLineID, paymentID uuid.UUID,
+	action, reason string, actorID, correlationID uuid.UUID,
+) error {
+	return r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		acct, err := q.GetBankAccount(ctx, bankAccountID)
+		if err != nil {
+			return err
+		}
+		evType := "treasury.payment.reconciled"
+		if action == "unmatch" {
+			evType = "treasury.payment.unreconciled"
+		} else {
+			lines, err := q.ListUnreconciledStatementLines(ctx, bankAccountID)
+			if err != nil {
+				return err
+			}
+			for _, l := range lines {
+				if l.ID == statementLineID {
+					if _, err := q.MarkStatementLineReconciled(ctx, treasurydb.MarkStatementLineReconciledParams{
+						ID:               l.ID,
+						RowVersion:       l.RowVersion,
+						MatchedPaymentID: &paymentID,
+						UpdatedBy:        &actorID,
+					}); err != nil {
+						return err
+					}
+					break
+				}
+			}
+			payments, err := q.ListSettledPaymentsForBank(ctx, bankAccountID)
+			if err != nil {
+				return err
+			}
+			for _, p := range payments {
+				if p.ID == paymentID {
+					if _, err := q.ReconcilePayment(ctx, treasurydb.ReconcilePaymentParams{
+						ID:         p.ID,
+						RowVersion: p.RowVersion,
+						UpdatedBy:  &actorID,
+					}); err != nil {
+						return err
+					}
+					break
+				}
+			}
+		}
+		payload, _ := json.Marshal(map[string]any{
+			"mode":            "manual",
+			"action":          action,
+			"bankAccountId":   acct.ID,
+			"statementLineId": statementLineID,
+			"paymentId":       paymentID,
+			"reason":          reason,
+			"actorId":         actorID,
+		})
+		return q.InsertOutbox(ctx, treasurydb.InsertOutboxParams{
+			AggregateType:  "payment",
+			AggregateID:    paymentID,
+			EventType:      evType,
+			Payload:        payload,
+			OrganizationID: acct.OrganizationID,
+			CorrelationID:  correlationID,
+		})
+	})
+}
+
 type matchedPair struct {
 	line    treasurydb.ListUnreconciledStatementLinesRow
 	payment treasurydb.ListSettledPaymentsForBankRow

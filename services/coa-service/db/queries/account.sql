@@ -156,6 +156,16 @@ SELECT COUNT(*)
 FROM fin.ledger
 WHERE deleted_at IS NULL;
 
+-- name: UpdateLedger :one
+UPDATE fin.ledger
+SET code = $3,
+    ledger_type = $4,
+    currency_code = $5,
+    updated_by = $6
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
+RETURNING row_version;
+
 -- name: CreateFiscalCalendar :one
 INSERT INTO fin.fiscal_calendar (organization_id, code, name, period_type, created_by)
 VALUES ($1, $2, $3, $4, $5)
@@ -189,6 +199,17 @@ LIMIT $1 OFFSET $2;
 SELECT COUNT(*)
 FROM fin.fiscal_year
 WHERE deleted_at IS NULL;
+
+-- name: UpdateFiscalYear :one
+UPDATE fin.fiscal_year
+SET name = $3,
+    start_date = $4,
+    end_date = $5,
+    status = $6,
+    updated_by = $7
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
+RETURNING row_version;
 
 -- name: CreateFiscalPeriod :one
 INSERT INTO fin.fiscal_period (organization_id, fiscal_year_id, period_no, start_date, end_date, status, created_by)

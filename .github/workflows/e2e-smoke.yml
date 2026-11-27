@@ -1,6 +1,9 @@
 name: e2e-smoke
 
 on:
+  schedule:
+    # Nightly run at 19:00 UTC (02:00 WIB)
+    - cron: "0 19 * * *"
   workflow_dispatch:
 
 jobs:
@@ -10,8 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Bring up full stack (30 DBs, Redpanda, 22 services + gateway)
+      - name: Bring up full stack (30 DBs, Redpanda, 30 microservices + api-gateway)
         run: docker compose up -d --build
 
-      - name: Run smoke test (104 checks)
+      - name: Run smoke test (120+ checks across Steps 1–15)
         run: bash deploy/smoke-test.sh
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose logs --tail=100

@@ -3,11 +3,14 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"math/big"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -42,8 +45,11 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /tax-codes", s.listCodes)
 	mux.HandleFunc("POST /tax-invoices", s.createTxn)
 	mux.HandleFunc("GET /tax-invoices", s.listTxn)
+	mux.HandleFunc("GET /tax-invoices/export/efaktur", s.exportEfakturCSV)
+	mux.HandleFunc("GET /tax-invoices/spt-ppn", s.sptPPN)
 	mux.HandleFunc("GET /tax-invoices/{id}", s.getTxn)
 	mux.HandleFunc("POST /tax-invoices/{id}/report", s.reportEfaktur)
+	mux.HandleFunc("POST /withholding-tax/calculate", s.calculateWithholdingTax)
 }
 
 type taxCodeReq struct {
@@ -473,4 +479,252 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func sanitizeCSVCell(v string) string {
+	if v == "" {
+		return v
+	}
+	if _, ok := new(big.Rat).SetString(v); ok {
+		return v
+	}
+	switch v[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + v
+	}
+	return v
+}
+
+// exportEfakturCSV exports DJP e-Faktur CSV (FK header + OF item lines) safely neutralized against CSV formula injection.
+func (s *Server) exportEfakturCSV(w http.ResponseWriter, r *http.Request) {
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := httpx.RequirePermission(r, "tax:read"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	statusFilter := strings.TrimSpace(r.URL.Query().Get("efakturStatus"))
+	rows, _, err := s.repo.ListTxnWithCount(r.Context(), scope, statusFilter, 10000, 0)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+
+	now := time.Now().UTC()
+	var buf bytes.Buffer
+	cw := csv.NewWriter(&buf)
+	_ = cw.Write([]string{"FK", "KD_JENIS_TRANSAKSI", "FG_PENGGANTI", "NOMOR_FAKTUR", "MASA_PAJAK", "TAHUN_PAJAK", "TANGGAL_FAKTUR", "REFERENSI", "JUMLAH_DPP", "JUMLAH_PPN", "STATUS_EFAKTUR"})
+	_ = cw.Write([]string{"OF", "KODE_OBJEK", "NAMA", "HARGA_SATUAN", "JUMLAH_BARANG", "HARGA_TOTAL", "DISKON", "DPP", "PPN", "TARIF_PPNBM", "PPNBM"})
+
+	for _, t := range rows {
+		dpp := platform.FormatNumeric(t.BaseAmount, 4)
+		ppn := platform.FormatNumeric(t.TaxAmount, 4)
+		efNo := deref(t.EfakturNo)
+		efStatus := deref(t.EfakturStatus)
+		_ = cw.Write([]string{
+			"FK",
+			"01",
+			"0",
+			sanitizeCSVCell(efNo),
+			now.Format("01"),
+			now.Format("2006"),
+			now.Format("02/01/2006"),
+			sanitizeCSVCell(t.SourceDocumentRef),
+			dpp,
+			ppn,
+			sanitizeCSVCell(efStatus),
+		})
+		_ = cw.Write([]string{
+			"OF",
+			sanitizeCSVCell(t.TaxCodeID.String()),
+			sanitizeCSVCell("Supply " + t.SourceDocumentRef),
+			dpp,
+			"1",
+			dpp,
+			"0",
+			dpp,
+			ppn,
+			"0",
+			"0",
+		})
+	}
+	cw.Flush()
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="efaktur-`+now.Format("2006-01")+`.csv"`)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buf.Bytes())
+}
+
+// sptPPN aggregates SPT Masa PPN (Pajak Keluaran, Pajak Masukan, Kurang/Lebih Bayar) using *big.Rat.
+func (s *Server) sptPPN(w http.ResponseWriter, r *http.Request) {
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := httpx.RequirePermission(r, "tax:read"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	codes, _, err := s.repo.ListTaxCodesWithCount(r.Context(), scope, 1000, 0)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+	codeTypeByID := make(map[uuid.UUID]string, len(codes))
+	for _, c := range codes {
+		codeTypeByID[c.ID] = strings.ToUpper(strings.TrimSpace(c.TaxType + " " + c.Code))
+	}
+
+	rows, _, err := s.repo.ListTxnWithCount(r.Context(), scope, "", 10000, 0)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.MapDBError(err, ""))
+		return
+	}
+
+	keluaran := new(big.Rat)
+	masukan := new(big.Rat)
+	for _, t := range rows {
+		amt := platform.NumericToRat(t.TaxAmount)
+		if amt == nil {
+			continue
+		}
+		meta := codeTypeByID[t.TaxCodeID]
+		refUpper := strings.ToUpper(strings.TrimSpace(t.SourceDocumentRef))
+		isInput := strings.Contains(meta, "INPUT") || strings.Contains(meta, "MASUKAN") || strings.Contains(meta, "VAT_IN") ||
+			strings.HasPrefix(refUpper, "AP-") || strings.HasPrefix(refUpper, "PI-")
+		if isInput {
+			masukan.Add(masukan, amt)
+		} else {
+			keluaran.Add(keluaran, amt)
+		}
+	}
+	netPayable := new(big.Rat).Sub(keluaran, masukan)
+
+	period := strings.TrimSpace(r.URL.Query().Get("period"))
+	if period == "" {
+		period = time.Now().UTC().Format("2006-01")
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"period":          period,
+		"pajakKeluaran":   keluaran.FloatString(4),
+		"pajakMasukan":    masukan.FloatString(4),
+		"kurangLebihBayar": netPayable.FloatString(4),
+		"invoiceCount":    len(rows),
+	})
+}
+
+type withholdingCalcReq struct {
+	TaxType     string `json:"taxType"`               // PPH21, PPH23, PPH26, PPH4_2
+	Category    string `json:"category,omitempty"`    // e.g. SERVICES, DIVIDEND, RENT, CONSTRUCTION, UMKM
+	GrossAmount string `json:"grossAmount"`
+	HasNPWP     *bool  `json:"hasNpwp,omitempty"`     // default true; false triggers statutory non-NPWP surcharge
+	CustomRate  string `json:"customRate,omitempty"`  // optional percentage override (e.g. "2.00")
+}
+
+// calculateWithholdingTax computes Indonesian PPh 21 / 23 / 26 / 4(2) withholding via *big.Rat.
+func (s *Server) calculateWithholdingTax(w http.ResponseWriter, r *http.Request) {
+	if _, err := httpx.RequireScope(r); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := httpx.RequirePermission(r, "tax:read"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var req withholdingCalcReq
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+
+	grossNum, err := platform.ParseNumeric(req.GrossAmount)
+	if err != nil {
+		httpx.WriteError(w, r, httpx.BadRequest("grossAmount tidak valid"))
+		return
+	}
+	gross := platform.NumericToRat(grossNum)
+	if gross == nil || gross.Sign() <= 0 {
+		httpx.WriteError(w, r, httpx.Unprocessable("INVALID_AMOUNT", "grossAmount harus > 0"))
+		return
+	}
+
+	hasNPWP := true
+	if req.HasNPWP != nil {
+		hasNPWP = *req.HasNPWP
+	}
+
+	taxType := strings.ToUpper(strings.TrimSpace(req.TaxType))
+	cat := strings.ToUpper(strings.TrimSpace(req.Category))
+	var baseRatePct *big.Rat
+	surchargeMultiplier := big.NewRat(1, 1)
+
+	if strings.TrimSpace(req.CustomRate) != "" {
+		crNum, err := platform.ParseNumeric(req.CustomRate)
+		if err != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("customRate tidak valid"))
+			return
+		}
+		baseRatePct = platform.NumericToRat(crNum)
+		if baseRatePct == nil || baseRatePct.Sign() < 0 || baseRatePct.Cmp(big.NewRat(100, 1)) > 0 {
+			httpx.WriteError(w, r, httpx.Unprocessable("INVALID_RATE", "customRate harus antara 0 dan 100"))
+			return
+		}
+	} else {
+		switch taxType {
+		case "PPH21", "PPH_21":
+			taxType = "PPH21"
+			baseRatePct = big.NewRat(5, 1) // Tier 1 statutory 5%
+			if !hasNPWP {
+				surchargeMultiplier = big.NewRat(120, 100) // +20% non-NPWP surcharge
+			}
+		case "PPH23", "PPH_23":
+			taxType = "PPH23"
+			switch cat {
+			case "DIVIDEND", "ROYALTY", "INTEREST", "PRIZE":
+				baseRatePct = big.NewRat(15, 1)
+			default:
+				baseRatePct = big.NewRat(2, 1) // Services / rent of equipment
+			}
+			if !hasNPWP {
+				surchargeMultiplier = big.NewRat(2, 1) // +100% non-NPWP surcharge
+			}
+		case "PPH26", "PPH_26":
+			taxType = "PPH26"
+			baseRatePct = big.NewRat(20, 1) // Non-resident 20%
+		case "PPH4_2", "PPH4(2)", "PPH_4_2":
+			taxType = "PPH4_2"
+			switch cat {
+			case "CONSTRUCTION":
+				baseRatePct = big.NewRat(2, 1)
+			case "UMKM":
+				baseRatePct = big.NewRat(1, 2) // 0.5%
+			default:
+				baseRatePct = big.NewRat(10, 1) // Property rent 10%
+			}
+		default:
+			httpx.WriteError(w, r, httpx.BadRequest("taxType harus salah satu dari PPH21, PPH23, PPH26, PPH4_2"))
+			return
+		}
+	}
+
+	effectiveRatePct := new(big.Rat).Mul(baseRatePct, surchargeMultiplier)
+	withheld := new(big.Rat).Mul(gross, effectiveRatePct)
+	withheld.Quo(withheld, big.NewRat(100, 1))
+	netAmount := new(big.Rat).Sub(gross, withheld)
+
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"taxType":             taxType,
+		"category":            cat,
+		"hasNpwp":             hasNPWP,
+		"grossAmount":         gross.FloatString(4),
+		"baseRatePercent":     baseRatePct.FloatString(4),
+		"effectiveRatePercent": effectiveRatePct.FloatString(4),
+		"withholdingAmount":   withheld.FloatString(4),
+		"netAmount":           netAmount.FloatString(4),
+	})
 }

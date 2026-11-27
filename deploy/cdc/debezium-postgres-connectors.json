@@ -1,0 +1,191 @@
+{
+  "connectors": [
+    {
+      "name": "erp-cdc-gl-postgres",
+      "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "plugin.name": "pgoutput",
+        "database.hostname": "erp-postgres-rw.erp-platform.svc.cluster.local",
+        "database.port": "5432",
+        "database.user": "${file:/opt/kafka/external-configuration/db-creds/user}",
+        "database.password": "${file:/opt/kafka/external-configuration/db-creds/password}",
+        "database.dbname": "gl_db",
+        "database.sslmode": "require",
+        "topic.prefix": "erp.cdc.gl",
+        "slot.name": "debezium_gl_slot",
+        "publication.name": "debezium_gl_pub",
+        "schema.include.list": "gl",
+        "table.include.list": "gl.journal_entry,gl.journal_line,gl.outbox",
+        "decimal.handling.mode": "string",
+        "time.precision.mode": "iso_string",
+        "tombstones.on.delete": "false",
+        "transforms": "outbox",
+        "transforms.outbox.type": "io.debezium.transforms.outbox.EventRouter",
+        "transforms.outbox.route.by.field": "event_type",
+        "transforms.outbox.route.topic.replacement": "erp.${routedByValue}.v1",
+        "transforms.outbox.table.field.event.id": "id",
+        "transforms.outbox.table.field.event.key": "aggregate_id",
+        "transforms.outbox.table.field.event.payload": "payload",
+        "transforms.outbox.predicate": "isOutbox",
+        "predicates": "isOutbox",
+        "predicates.isOutbox.type": "org.apache.kafka.connect.transforms.predicates.TopicNameMatches",
+        "predicates.isOutbox.pattern": ".*\\.outbox$"
+      }
+    },
+    {
+      "name": "erp-cdc-sales-postgres",
+      "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "plugin.name": "pgoutput",
+        "database.hostname": "erp-postgres-rw.erp-platform.svc.cluster.local",
+        "database.port": "5432",
+        "database.user": "${file:/opt/kafka/external-configuration/db-creds/user}",
+        "database.password": "${file:/opt/kafka/external-configuration/db-creds/password}",
+        "database.dbname": "sales_db",
+        "database.sslmode": "require",
+        "topic.prefix": "erp.cdc.sales",
+        "slot.name": "debezium_sales_slot",
+        "publication.name": "debezium_sales_pub",
+        "schema.include.list": "so",
+        "table.include.list": "so.sales_order,so.sales_order_line,so.outbox",
+        "decimal.handling.mode": "string",
+        "time.precision.mode": "iso_string",
+        "tombstones.on.delete": "false"
+      }
+    },
+    {
+      "name": "erp-cdc-inventory-postgres",
+      "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "plugin.name": "pgoutput",
+        "database.hostname": "erp-postgres-rw.erp-platform.svc.cluster.local",
+        "database.port": "5432",
+        "database.user": "${file:/opt/kafka/external-configuration/db-creds/user}",
+        "database.password": "${file:/opt/kafka/external-configuration/db-creds/password}",
+        "database.dbname": "inventory_db",
+        "database.sslmode": "require",
+        "topic.prefix": "erp.cdc.inventory",
+        "slot.name": "debezium_inventory_slot",
+        "publication.name": "debezium_inventory_pub",
+        "schema.include.list": "inv",
+        "table.include.list": "inv.stock_balance,inv.stock_movement,inv.outbox",
+        "decimal.handling.mode": "string",
+        "time.precision.mode": "iso_string",
+        "tombstones.on.delete": "false"
+      }
+    },
+    {
+      "name": "erp-cdc-core-dims-postgres",
+      "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "plugin.name": "pgoutput",
+        "database.hostname": "erp-postgres-rw.erp-platform.svc.cluster.local",
+        "database.port": "5432",
+        "database.user": "${file:/opt/kafka/external-configuration/db-creds/user}",
+        "database.password": "${file:/opt/kafka/external-configuration/db-creds/password}",
+        "database.dbname": "org_db",
+        "database.sslmode": "require",
+        "topic.prefix": "erp.cdc.org",
+        "slot.name": "debezium_org_slot",
+        "publication.name": "debezium_org_pub",
+        "schema.include.list": "org",
+        "table.include.list": "org.organization,org.organization_closure",
+        "decimal.handling.mode": "string",
+        "time.precision.mode": "iso_string",
+        "tombstones.on.delete": "false"
+      }
+    },
+    {
+      "name": "erp-cdc-extended-postgres",
+      "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "plugin.name": "pgoutput",
+        "database.hostname": "erp-postgres-rw.erp-platform.svc.cluster.local",
+        "database.port": "5432",
+        "database.user": "${file:/opt/kafka/external-configuration/db-creds/user}",
+        "database.password": "${file:/opt/kafka/external-configuration/db-creds/password}",
+        "database.dbname": "fixedasset_db",
+        "database.sslmode": "require",
+        "topic.prefix": "erp.cdc.fixedasset",
+        "slot.name": "debezium_fixedasset_slot",
+        "publication.name": "debezium_fixedasset_pub",
+        "schema.include.list": "fa",
+        "table.include.list": "fa.fixed_asset,fa.depreciation_schedule",
+        "decimal.handling.mode": "string",
+        "time.precision.mode": "iso_string",
+        "tombstones.on.delete": "false"
+      }
+    },
+    {
+      "name": "erp-cdc-budget-postgres",
+      "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "plugin.name": "pgoutput",
+        "database.hostname": "erp-postgres-rw.erp-platform.svc.cluster.local",
+        "database.port": "5432",
+        "database.user": "${file:/opt/kafka/external-configuration/db-creds/user}",
+        "database.password": "${file:/opt/kafka/external-configuration/db-creds/password}",
+        "database.dbname": "budget_db",
+        "database.sslmode": "require",
+        "topic.prefix": "erp.cdc.budget",
+        "slot.name": "debezium_budget_slot",
+        "publication.name": "debezium_budget_pub",
+        "schema.include.list": "bud",
+        "table.include.list": "bud.budget,bud.budget_line,bud.budget_commitment",
+        "decimal.handling.mode": "string",
+        "time.precision.mode": "iso_string",
+        "tombstones.on.delete": "false"
+      }
+    },
+    {
+      "name": "erp-cdc-project-postgres",
+      "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "plugin.name": "pgoutput",
+        "database.hostname": "erp-postgres-rw.erp-platform.svc.cluster.local",
+        "database.port": "5432",
+        "database.user": "${file:/opt/kafka/external-configuration/db-creds/user}",
+        "database.password": "${file:/opt/kafka/external-configuration/db-creds/password}",
+        "database.dbname": "project_db",
+        "database.sslmode": "require",
+        "topic.prefix": "erp.cdc.project",
+        "slot.name": "debezium_project_slot",
+        "publication.name": "debezium_project_pub",
+        "schema.include.list": "prj",
+        "table.include.list": "prj.project,prj.project_budget,prj.project_cost,prj.project_billing",
+        "decimal.handling.mode": "string",
+        "time.precision.mode": "iso_string",
+        "tombstones.on.delete": "false"
+      }
+    },
+    {
+      "name": "erp-cdc-crm-postgres",
+      "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "plugin.name": "pgoutput",
+        "database.hostname": "erp-postgres-rw.erp-platform.svc.cluster.local",
+        "database.port": "5432",
+        "database.user": "${file:/opt/kafka/external-configuration/db-creds/user}",
+        "database.password": "${file:/opt/kafka/external-configuration/db-creds/password}",
+        "database.dbname": "crm_db",
+        "database.sslmode": "require",
+        "topic.prefix": "erp.cdc.crm",
+        "slot.name": "debezium_crm_slot",
+        "publication.name": "debezium_crm_pub",
+        "schema.include.list": "crm",
+        "table.include.list": "crm.opportunity,crm.lead",
+        "decimal.handling.mode": "string",
+        "time.precision.mode": "iso_string",
+        "tombstones.on.delete": "false"
+      }
+    }
+  ]
+}

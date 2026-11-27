@@ -20,31 +20,33 @@ Platform ERP mengadopsi arsitektur **Domain-Driven Microservices** yang terdesen
                                               ▼ HTTPS / REST / SSE       ▼ HTTPS / REST
                                ┌────────────────────────────────────────────────────────┐
                                │             API GATEWAY & SECURITY LAYER               │
-                               │  Go API Gateway / Kong (:8000, JWT/OIDC, RBAC, SSE)    │
+                               │  Kong 3.x + Go api-gateway (:8000, OIDC/JWKS, 3-Tier   │
+                               │  Admin RBAC, HMAC Trust, SSE, OpenAPI 3.1)             │
                                └──────────────────────────┬─────────────────────────────┘
                                                           ▼ REST / mTLS
      ┌────────────────────────────────────────────────────┴──────────────────────────────────────────────────────┐
-     │                                 22 GO MICROSERVICES BACKEND (Go 1.23+)                                    │
+     │                                 30 GO MICROSERVICES BACKEND (Go 1.23+)                                    │
      │  ┌───────────────────────┐  ┌───────────────────────┐  ┌───────────────────────┐  ┌────────────────────┐  │
      │  │   Financial Domain    │  │  Core & Localization  │  │   Operational Domain  │  │  HR/Payroll Domain │  │
      │  │  gl, ap, ar, coa, tax,│  │  user, security, org, │  │ procurement, inventory│  │    hr, payroll     │  │
-     │  │  treasury, currency,  │  │  masterdata, workflow,│  │  manufacturing, sales │  │                    │  │
-     │  │  dimension            │  │  localization         │  │                       │  │                    │  │
+     │  │  treasury, currency,  │  │  masterdata, workflow,│  │  manufacturing, sales,│  │                    │  │
+     │  │  dimension, fixedasset│  │  localization, crm    │  │  project, asset, mnt  │  │                    │  │
+     │  │  budget, close, cons  │  │                       │  │                       │  │                    │  │
      │  └───────────┬───────────┘  └───────────┬───────────┘  └───────────┬───────────┘  └─────────┬──────────┘  │
      └──────────────┼──────────────────────────┼──────────────────────────┼────────────────────────┼─────────────┘
                     │ (Transactional Outbox)   │ (Transactional Outbox)   │ (Outbox)               │ (Outbox)
                     ▼                          ▼                          ▼                        ▼
      ┌───────────────────────────────────────────────────────────────────────────────────────────────────────────┐
      │                            EVENT STREAMING BACKBONE (Apache Kafka / Redpanda)                             │
-     │  Topics: 40 Redpanda domain event topics (Apicurio Registry: Avro/Protobuf Schema Governance)             │
+     │  Topics: 58+ Redpanda/Kafka domain event topics (Debezium CDC + DLQ Replay + Schema Governance)           │
      │  Delivery: Selective Exactly-Once (EOS: GL, Payment, Stock, Invoice) | At-Least-Once + Idempotency        │
      └──────────────────────────────┬──────────────────────────────────────────┬─────────────────────────────────┘
                                     │ Subscribe                                │ Subscribe
                                     ▼                                          ▼
      ┌──────────────────────────────────────────────────┐      ┌─────────────────────────────────────────────────┐
      │          READ MODEL & AUDIT CONSUMERS            │      │        ANALYTIC DATA LAKEHOUSE (CORTEX V7)      │
-     │  audit-service (immutable audit_log)             │      │  Replicated SAP DDIC Tables (BKPF, BSEG, ACDOCA)│
-     │  reporting-service (CQRS gl_balance_snapshot)    │      │  Dataform Models: 32 Datasets & 4 Assertions    │
+     │  audit-service (immutable audit_log)             │      │  Replicated SAP DDIC Tables + Debezium CDC      │
+     │  reporting-service (CQRS + Financial Statements) │      │  Dataform: 36 Datasets, 6 Assertions, 35 Decls  │
      └──────────────────────────────────────────────────┘      └─────────────────────────────────────────────────┘
 ```
 
@@ -63,12 +65,12 @@ Platform ERP mengadopsi arsitektur **Domain-Driven Microservices** yang terdesen
 | **Connection Pooler** | PgBouncer | 1.23+ | Transaction pooling untuk melayani hingga 10.000 koneksi klien konkuren. |
 | **Event Broker** | Apache Kafka (KRaft) / Redpanda | 3.8+ | Streaming backbone (58 Redpanda domain event topics) dengan jaminan order per partition key (`organizationId:aggregateId`). |
 | **Schema Governance** | Apicurio Registry | v2.5+ | Registrasi skema Avro/Protobuf dengan kompatibilitas `BACKWARD`. |
-| **API Gateway** | Go `api-gateway` (:8000) / Kong Gateway | 3.6+ | JWT/OIDC token enforcement, RBAC scope injection, SSE event streaming, routing path-based `/api/v1`. |
-| **Frontend Presentation** | Decoupled SPA (React 19 + Vite + TanStack Router & TanStack Query v5) | Latest | Antarmuka transaksi backoffice interaktif kaya data (Zustand & Tailwind CSS v4). |
+| **API Gateway** | Go `api-gateway` (:8000) + Kong 3.x (`deploy/kong/kong.yml`) | 3.6+ | OIDC/JWKS & JWT enforcement, 3-Tier Admin RBAC (`HOLDING_ADMIN` → `SUBSIDIARY_ADMIN` → `BRANCH_ADMIN`), HMAC trust headers, SSE streaming, OpenAPI 3.1 (`/openapi.yaml`). |
+| **Frontend Presentation** | Decoupled SPA (React 19 + Vite + TanStack Router & TanStack Query v5) | Latest | Antarmuka transaksi backoffice interaktif kaya data (Zustand & Tailwind CSS v4) mencakup seluruh domain inti & 10 layanan extended. |
 | **Browser Companion** | Chrome Extension | Manifest V3 | Otomasi pengisian portal pajak (e-Faktur), rekonsiliasi bank, dan quick approvals. |
-| **Enterprise Analytics** | Cortex Framework V7 + Dataform | V7 / v3.1.5 | Integrasi tabel SAP DDIC, star-schema reporting (36 datasets, 6 assertions, 36 declarations), dan multi-country consolidation. |
-| **Observability** | OpenTelemetry + Prometheus + Grafana | Latest | Tracing terdistribusi (`X-Correlation-Id`), metrik latensi/SLA, dan log JSON terpusat. |
-| **Container & Orchestration**| Docker + Kubernetes (Self-Managed) | K8s 1.30+ | Operator-based deployment (Strimzi untuk Kafka, CloudNativePG untuk PostgreSQL). |
+| **Enterprise Analytics** | Cortex Framework V7 + Dataform + Debezium CDC (`deploy/cdc/`) | V7 / v3.1.5 | Integrasi tabel SAP DDIC + Debezium/BigQuery CDC, star-schema reporting (36 datasets, 6 assertions, 35 declarations), dan multi-country consolidation. |
+| **Observability** | OpenTelemetry + Prometheus + Grafana (`deploy/observability/`) | Latest | Tracing terdistribusi W3C `traceparent` + OTLP collector, metrik RED/outbox/SLA, alert rules, dan log JSON terpusat. |
+| **Container & Orchestration**| Docker + Kubernetes/Kustomize (`deploy/k8s/`) | K8s 1.30+ | Operator-based deployment (Strimzi untuk Kafka, CloudNativePG + PgBouncer untuk PostgreSQL, ExternalSecrets/Vault, default-deny NetworkPolicies, non-root pods, HPA/PDB). |
 
 ---
 
@@ -77,7 +79,7 @@ Platform ERP mengadopsi arsitektur **Domain-Driven Microservices** yang terdesen
 | URL / Host | Komponen / Aplikasi | Tujuan & Audiens | Protokol / Auth |
 |---|---|---|---|
 | `app.erp.example` | Decoupled SPA Backoffice (`React 19 + Vite + TanStack`) | Antarmuka utama staf akuntansi, purchasing, warehouse, dan HR. | HTTPS / OIDC Bearer Token |
-| `api.erp.example/api/v1` | `api-gateway` (:8000) / Kong API Gateway | Endpoint publik/klien tunggal untuk seluruh 22 Go microservices & SSE stream. | HTTPS / OAuth2 JWT Scope |
+| `api.erp.example/api/v1` | `api-gateway` (:8000) / Kong API Gateway | Endpoint publik/klien tunggal untuk seluruh 30 Go microservices, OpenAPI 3.1 & SSE stream. | HTTPS / OIDC JWKS + 3-Tier RBAC |
 | `admin.erp.example` | Platform Admin Portal | Konfigurasi struktur organisasi, tenancy, role permission, dan fitur. | HTTPS / Multi-Factor Auth |
 | `chrome-extension://<id>` | Enterprise Companion Extension | Panel persetujuan cepat (Side Panel), bridge scanner gudang, dan e-Faktur helper. | Chrome MV3 / PKCE Token |
 | `reporting.erp.example` | Analytics & BI Dashboard | Dashboard eksekutif bervolume tinggi berbasis Cortex Data Products. | HTTPS / OIDC Role-Based |
@@ -128,12 +130,13 @@ Seluruh 10 layanan extended (`SVC-020` s.d. `SVC-029`) kini telah diimplementasi
 
 ## 5. Database Schema & Partitioning Summary
 
-Platform mengelola **30 PostgreSQL databases** terisolasi (22 database layanan aktif + 8 database domain lanjutan yang telah dimigrasikan dan di-hardening). Standar partisi dan keamanan:
+Platform mengelola **30 PostgreSQL databases** terisolasi (seluruh 30 database layanan aktif — 29 database berpartisi + `reporting_db`, dengan 15 database ter-seed termasuk `user_db`). Standar partisi dan keamanan:
 - **Tabel Hiper-Skala Berpartisi Bulanan (RANGE by Date)**:
   - `gl.journal_entry` & `gl.journal_line` (kunci: `posting_date`)
+  - `ap.ap_invoice` & `ar.ar_invoice` (kunci: `invoice_date`)
   - `inv.stock_movement` (kunci: `movement_date`)
   - `audit.audit_log` (kunci: `occurred_at`)
-  - `<schema>.outbox` pada seluruh 20 service produsen (kunci: `created_at`)
+  - `<schema>.outbox` pada seluruh 28 service produsen (kunci: `created_at`)
 - **Row-Level Security (RLS)**:
   - Seluruh tabel operasional dan master di 30 PostgreSQL databases menerapkan RLS berbasis `app.org_scope`.
   - Akses non-owner dilarang bypass RLS; data di luar izin scope otomatis menghasilkan `404 Not Found`.

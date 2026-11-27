@@ -51,6 +51,20 @@ func (s *stubStore) MarkPaid(_ context.Context, _ []uuid.UUID, _ ardb.MarkInvoic
 func (s *stubStore) DeleteDraft(_ context.Context, _ []uuid.UUID, _ ardb.DeleteDraftInvoiceParams) (int64, error) {
 	return 1, nil
 }
+func (s *stubStore) UpdateDraftWithLines(_ context.Context, _ []uuid.UUID, _ ardb.UpdateDraftInvoiceParams, _ []ardb.CreateInvoiceLineParams) (int32, error) {
+	return 2, nil
+}
+func (s *stubStore) ApplyCreditNoteAndEmit(_ context.Context, _ []uuid.UUID, arg ardb.ApplyReceiptToInvoiceParams, ev ardb.InsertOutboxParams) (ardb.ApplyReceiptToInvoiceRow, error) {
+	s.outbox = ev
+	rem, _ := platform.ParseNumeric("350.0000")
+	return ardb.ApplyReceiptToInvoiceRow{
+		ID: arg.ID, OutstandingAmount: rem, Status: "PartiallyPaid",
+	}, nil
+}
+func (s *stubStore) WriteOffAndEmit(_ context.Context, _ []uuid.UUID, _ ardb.WriteOffInvoiceParams, ev ardb.InsertOutboxParams) (int64, error) {
+	s.outbox = ev
+	return 1, nil
+}
 
 func TestARInvoiceValidationAndEventEnrichment(t *testing.T) {
 	orgID := uuid.New()
@@ -144,6 +158,97 @@ func TestARInvoiceValidationAndEventEnrichment(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on approved pay by different user, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestARAgingUpdateCreditNoteAndWriteOff(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	custID := uuid.New()
+	invID := uuid.New()
+	asOf := time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC)
+	mkAmt := func(s string) pgtype.Numeric { n, _ := platform.ParseNumeric(s); return n }
+	mkDate := func(daysAgo int) pgtype.Date {
+		return pgtype.Date{Time: asOf.AddDate(0, 0, -daysAgo), Valid: true}
+	}
+
+	store := &stubStore{
+		inv: ardb.ArArInvoice{
+			ID:                invID,
+			OrganizationID:    orgID,
+			InvoiceNo:         "AR-200",
+			CustomerID:        custID,
+			InvoiceDate:       mkDate(20),
+			DueDate:           mkDate(10),
+			CurrencyCode:      "IDR",
+			TotalAmount:       mkAmt("500.0000"),
+			OutstandingAmount: mkAmt("500.0000"),
+			Status:            "Issued",
+			RowVersion:        1,
+		},
+		list: []ardb.ListInvoicesRow{
+			{ID: uuid.New(), Status: "Issued", DueDate: mkDate(-2), OutstandingAmount: mkAmt("100.0000")},
+			{ID: uuid.New(), Status: "Issued", DueDate: mkDate(20), OutstandingAmount: mkAmt("200.0000")},
+			{ID: uuid.New(), Status: "Overdue", DueDate: mkDate(50), OutstandingAmount: mkAmt("300.0000")},
+			{ID: uuid.New(), Status: "Overdue", DueDate: mkDate(80), OutstandingAmount: mkAmt("400.0000")},
+			{ID: uuid.New(), Status: "Overdue", DueDate: mkDate(110), OutstandingAmount: mkAmt("500.0000")},
+		},
+	}
+
+	mux := http.NewServeMux()
+	NewServer(store).Register(mux)
+	h := httpx.Middleware(mux)
+
+	// 1. Aging
+	req := httptest.NewRequest(http.MethodGet, "/customer-invoices/aging?asOfDate=2026-11-24", nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-Permissions", "ar:read")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("aging got %d: %s", rec.Code, rec.Body.String())
+	}
+	var ag map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &ag)
+	if ag["totalOutstanding"] != "1500.0000" || ag["days90Plus"] != "500.0000" {
+		t.Fatalf("unexpected AR aging: %+v", ag)
+	}
+
+	// 2. PUT /customer-invoices/{id}
+	putReq := httptest.NewRequest(http.MethodPut, "/customer-invoices/"+invID.String(), strings.NewReader(`{"dueDate":"2026-12-31","totalAmount":"500.0000"}`))
+	putReq.Header.Set("X-Organization-Id", orgID.String())
+	putReq.Header.Set("X-User-Id", userID.String())
+	putReq.Header.Set("X-Permissions", "ar:write")
+	putReq.Header.Set("If-Match", `"1"`)
+	putRec := httptest.NewRecorder()
+	h.ServeHTTP(putRec, putReq)
+	if putRec.Code != http.StatusOK {
+		t.Fatalf("PUT customer-invoice got %d: %s", putRec.Code, putRec.Body.String())
+	}
+
+	// 3. POST /customer-invoices/{id}/credit-note
+	cnReq := httptest.NewRequest(http.MethodPost, "/customer-invoices/"+invID.String()+"/credit-note", strings.NewReader(`{"amount":"150.0000","reason":"discount"}`))
+	cnReq.Header.Set("X-Organization-Id", orgID.String())
+	cnReq.Header.Set("X-User-Id", userID.String())
+	cnReq.Header.Set("X-Permissions", "ar:write")
+	cnReq.Header.Set("Idempotency-Key", "cn-1")
+	cnRec := httptest.NewRecorder()
+	h.ServeHTTP(cnRec, cnReq)
+	if cnRec.Code != http.StatusCreated || store.outbox.EventType != "ar.credit_note.issued" {
+		t.Fatalf("credit-note got %d ev=%q body=%s", cnRec.Code, store.outbox.EventType, cnRec.Body.String())
+	}
+
+	// 4. POST /customer-invoices/{id}/write-off
+	woReq := httptest.NewRequest(http.MethodPost, "/customer-invoices/"+invID.String()+"/write-off", strings.NewReader(`{"reason":"insolvent customer"}`))
+	woReq.Header.Set("X-Organization-Id", orgID.String())
+	woReq.Header.Set("X-User-Id", userID.String())
+	woReq.Header.Set("X-Permissions", "ar.approve")
+	woReq.Header.Set("If-Match", `"1"`)
+	woReq.Header.Set("Idempotency-Key", "wo-1")
+	woRec := httptest.NewRecorder()
+	h.ServeHTTP(woRec, woReq)
+	if woRec.Code != http.StatusOK || store.outbox.EventType != "ar.invoice.written_off" {
+		t.Fatalf("write-off got %d ev=%q body=%s", woRec.Code, store.outbox.EventType, woRec.Body.String())
 	}
 }
 

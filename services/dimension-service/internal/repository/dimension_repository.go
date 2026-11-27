@@ -32,12 +32,20 @@ func NewDimensionRepository(db *platform.DB) *DimensionRepository {
 	return &DimensionRepository{db: db, q: q}
 }
 
-// withOrgTx fails closed on an empty scope and runs fn inside an RLS-scoped tx.
+// withOrgTx fails closed on an empty tenant scope and runs fn inside a tenant-only write RLS tx.
 func (r *DimensionRepository) withOrgTx(ctx context.Context, scope []uuid.UUID, fn func(pgx.Tx) error) error {
 	if len(scope) == 0 {
 		return errors.New("org scope must not be empty")
 	}
-	return r.db.WithOrgScope(ctx, scope, fn)
+	return r.db.WithTenantWriteScope(ctx, scope, fn)
+}
+
+// withOrgReadTx includes platform.SystemOrgID in the RLS read scope so global seeded dimensions remain visible.
+func (r *DimensionRepository) withOrgReadTx(ctx context.Context, scope []uuid.UUID, fn func(pgx.Tx) error) error {
+	if len(scope) == 0 {
+		return errors.New("org scope must not be empty")
+	}
+	return r.db.WithOrgReadScope(ctx, scope, fn)
 }
 
 func emit(ctx context.Context, q *dimensiondb.Queries, aggType, eventType string, id, org, corr uuid.UUID, payload map[string]any) error {
@@ -75,7 +83,7 @@ func (r *DimensionRepository) CreateCostCenter(ctx context.Context, scope []uuid
 
 func (r *DimensionRepository) GetCostCenter(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (dimensiondb.CcCostCenter, error) {
 	var out dimensiondb.CcCostCenter
-	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+	err := r.withOrgReadTx(ctx, scope, func(tx pgx.Tx) error {
 		var e error
 		out, e = r.q.WithTx(tx).GetCostCenter(ctx, id)
 		if errors.Is(e, pgx.ErrNoRows) {
@@ -89,7 +97,7 @@ func (r *DimensionRepository) GetCostCenter(ctx context.Context, scope []uuid.UU
 func (r *DimensionRepository) ListCostCenters(ctx context.Context, scope []uuid.UUID, status *string, limit, offset int32) ([]dimensiondb.CcCostCenter, int64, error) {
 	var rows []dimensiondb.CcCostCenter
 	var total int64
-	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+	err := r.withOrgReadTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if total, e = q.CountCostCenters(ctx, status); e != nil {
@@ -192,7 +200,7 @@ func (r *DimensionRepository) CreateProfitCenter(ctx context.Context, scope []uu
 
 func (r *DimensionRepository) GetProfitCenter(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (dimensiondb.PcProfitCenter, error) {
 	var out dimensiondb.PcProfitCenter
-	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+	err := r.withOrgReadTx(ctx, scope, func(tx pgx.Tx) error {
 		var e error
 		out, e = r.q.WithTx(tx).GetProfitCenter(ctx, id)
 		if errors.Is(e, pgx.ErrNoRows) {
@@ -206,7 +214,7 @@ func (r *DimensionRepository) GetProfitCenter(ctx context.Context, scope []uuid.
 func (r *DimensionRepository) ListProfitCenters(ctx context.Context, scope []uuid.UUID, status *string, limit, offset int32) ([]dimensiondb.PcProfitCenter, int64, error) {
 	var rows []dimensiondb.PcProfitCenter
 	var total int64
-	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+	err := r.withOrgReadTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if total, e = q.CountProfitCenters(ctx, status); e != nil {
@@ -377,7 +385,7 @@ func (r *DimensionRepository) CreateAllocationRule(ctx context.Context, scope []
 
 func (r *DimensionRepository) GetAllocationRule(ctx context.Context, scope []uuid.UUID, id uuid.UUID) (dimensiondb.CcCostAllocationRule, error) {
 	var out dimensiondb.CcCostAllocationRule
-	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+	err := r.withOrgReadTx(ctx, scope, func(tx pgx.Tx) error {
 		var e error
 		out, e = r.q.WithTx(tx).GetAllocationRule(ctx, id)
 		if errors.Is(e, pgx.ErrNoRows) {
@@ -391,7 +399,7 @@ func (r *DimensionRepository) GetAllocationRule(ctx context.Context, scope []uui
 func (r *DimensionRepository) ListAllocationRules(ctx context.Context, scope []uuid.UUID, limit, offset int32) ([]dimensiondb.CcCostAllocationRule, int64, error) {
 	var rows []dimensiondb.CcCostAllocationRule
 	var total int64
-	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+	err := r.withOrgReadTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if total, e = q.CountAllocationRules(ctx); e != nil {
@@ -498,7 +506,7 @@ func (r *DimensionRepository) CreateCostCenterAssignment(ctx context.Context, sc
 func (r *DimensionRepository) ListCostCenterAssignments(ctx context.Context, scope []uuid.UUID, costCenterID *uuid.UUID, limit, offset int32) ([]dimensiondb.CcCostCenterAssignment, int64, error) {
 	var rows []dimensiondb.CcCostCenterAssignment
 	var total int64
-	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+	err := r.withOrgReadTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if total, e = q.CountCostCenterAssignments(ctx, costCenterID); e != nil {
@@ -542,7 +550,7 @@ func (r *DimensionRepository) CreateProfitCenterAssignment(ctx context.Context, 
 func (r *DimensionRepository) ListProfitCenterAssignments(ctx context.Context, scope []uuid.UUID, profitCenterID *uuid.UUID, limit, offset int32) ([]dimensiondb.PcProfitCenterAssignment, int64, error) {
 	var rows []dimensiondb.PcProfitCenterAssignment
 	var total int64
-	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+	err := r.withOrgReadTx(ctx, scope, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
 		var e error
 		if total, e = q.CountProfitCenterAssignments(ctx, profitCenterID); e != nil {

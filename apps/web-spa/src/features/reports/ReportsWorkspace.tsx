@@ -55,8 +55,163 @@ import {
   type ReportsTrialBalanceDto,
   type SalesSummaryDto,
 } from './reports-types';
+import {
+  buildFinancialStatementCsvUrl,
+  useFinancialStatementQuery,
+  type FinancialStatementKind,
+  type FinancialStatementResponse,
+} from './reports-api';
 
-type ReportTab = 'gl-snapshots' | 'sales-summaries' | 'inventory-positions' | 'trial-balance';
+type ReportTab =
+  | 'gl-snapshots'
+  | 'sales-summaries'
+  | 'inventory-positions'
+  | 'trial-balance'
+  | 'income-statement'
+  | 'balance-sheet'
+  | 'cash-flow';
+
+function FinancialStatementView({
+  kind,
+  title,
+  data,
+  isLoading,
+  error,
+  onRetry,
+  fallbackCurrency,
+  locale,
+  isId,
+}: {
+  kind: FinancialStatementKind;
+  title: string;
+  data?: FinancialStatementResponse;
+  isLoading: boolean;
+  error: unknown;
+  onRetry: () => void;
+  fallbackCurrency: string;
+  locale: 'id' | 'en';
+  isId: boolean;
+}) {
+  if (isLoading) return <CardSkeleton />;
+  if (error) return <ErrorState error={error} onRetry={onRetry} />;
+  if (!data || data.sections.length === 0) {
+    return (
+      <EmptyState
+        title={isId ? `Belum ada data ${title}` : `No ${title} data available`}
+        description={
+          isId
+            ? 'Posting jurnal pada Buku Besar terlebih dahulu untuk menghasilkan laporan keuangan.'
+            : 'Post journal entries in General Ledger to generate structured financial statements.'
+        }
+      />
+    );
+  }
+
+  const ccy = data.currency || fallbackCurrency;
+  const csvUrl = buildFinancialStatementCsvUrl(kind);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">{title}</h2>
+            {typeof data.isBalanced === 'boolean' ? (
+              <StatusBadge
+                status={data.isBalanced ? 'POSTED' : 'REJECTED'}
+                label={
+                  data.isBalanced
+                    ? isId
+                      ? 'Seimbang'
+                      : 'Balanced'
+                    : isId
+                      ? 'Tidak Seimbang'
+                      : 'Out of Balance'
+                }
+              />
+            ) : null}
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {data.period ? `${isId ? 'Periode' : 'Period'}: ${data.period}` : null}
+            {data.period && data.asOfDate ? ' · ' : null}
+            {data.asOfDate ? `${isId ? 'Per tanggal' : 'As of'}: ${data.asOfDate}` : null}
+            {' · '}
+            <span className="font-mono">{ccy}</span>
+          </p>
+        </div>
+
+        <a
+          href={csvUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+        >
+          <Download className="h-3.5 w-3.5" />
+          <span>{isId ? 'Ekspor CSV (?format=csv)' : 'Export CSV (?format=csv)'}</span>
+        </a>
+      </div>
+
+      <div className="space-y-3">
+        {data.sections.map((section) => (
+          <section
+            key={section.code}
+            className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-800/40">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                {section.name}
+              </span>
+              <span className="font-mono text-xs font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                {formatCurrency(section.subtotal, ccy, locale)}
+              </span>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-800/70">
+              {section.items.length === 0 ? (
+                <div className="px-4 py-3 text-xs text-slate-500">
+                  {isId ? 'Tidak ada akun pada bagian ini.' : 'No accounts in this section.'}
+                </div>
+              ) : (
+                section.items.map((item) => (
+                  <div
+                    key={`${section.code}-${item.accountCode}`}
+                    className="flex items-center justify-between gap-4 px-4 py-2 text-xs"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="font-mono text-slate-500 shrink-0">{item.accountCode}</span>
+                      <span className="truncate font-medium text-slate-800 dark:text-slate-200">
+                        {item.accountName}
+                      </span>
+                    </div>
+                    <span className="font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100 shrink-0">
+                      {formatCurrency(item.amount, ccy, locale)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      {Object.keys(data.totals ?? {}).length > 0 ? (
+        <div className="rounded-xl border border-brand-200 bg-brand-50/50 p-4 dark:border-brand-900/60 dark:bg-brand-950/30">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {Object.entries(data.totals).map(([key, val]) => (
+              <div key={key} className="space-y-0.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  {key.replace(/([A-Z])/g, ' $1').trim()}
+                </p>
+                <p className="font-mono text-sm font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                  {formatCurrency(val, ccy, locale)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 interface ChartTooltipEntry<T> {
   payload?: T;
@@ -248,6 +403,22 @@ export function ReportsWorkspace() {
       setSelectedTbPeriodId(openPeriod.id);
     }
   }, [selectedTbPeriodId, periods]);
+
+  const incomeStatementQuery = useFinancialStatementQuery(
+    orgId,
+    'income-statement',
+    canReadReporting && activeTab === 'income-statement'
+  );
+  const balanceSheetQuery = useFinancialStatementQuery(
+    orgId,
+    'balance-sheet',
+    canReadReporting && activeTab === 'balance-sheet'
+  );
+  const cashFlowQuery = useFinancialStatementQuery(
+    orgId,
+    'cash-flow',
+    canReadReporting && activeTab === 'cash-flow'
+  );
 
   const trialBalanceQuery = useQuery({
     queryKey: ['gl-balances', 'reports-tb', orgId, selectedTbLedgerId, selectedTbPeriodId],
@@ -645,6 +816,15 @@ export function ReportsWorkspace() {
           </TabsTrigger>
           <TabsTrigger value="trial-balance">
             {isId ? 'Neraca Saldo' : 'Trial Balance'}
+          </TabsTrigger>
+          <TabsTrigger value="income-statement">
+            {isId ? 'Laba Rugi (P&L)' : 'Income Statement (P&L)'}
+          </TabsTrigger>
+          <TabsTrigger value="balance-sheet">
+            {isId ? 'Neraca' : 'Balance Sheet'}
+          </TabsTrigger>
+          <TabsTrigger value="cash-flow">
+            {isId ? 'Arus Kas' : 'Cash Flow'}
           </TabsTrigger>
         </TabsList>
 
@@ -1131,6 +1311,72 @@ export function ReportsWorkspace() {
                 />
               )}
             </>
+          )}
+        </TabsContent>
+
+        {/* Tab 5: Income Statement (P&L) */}
+        <TabsContent value="income-statement" className="space-y-4">
+          {!canReadReporting ? (
+            <ErrorState
+              title={isId ? 'Izin Pelaporan Diperlukan' : 'Reporting Permission Required'}
+              message={isId ? 'Dibutuhkan izin reporting.read.' : 'Requires reporting.read permission.'}
+            />
+          ) : (
+            <FinancialStatementView
+              kind="income-statement"
+              title={isId ? 'Laporan Laba Rugi (P&L)' : 'Income Statement (P&L)'}
+              data={incomeStatementQuery.data}
+              isLoading={incomeStatementQuery.isLoading}
+              error={incomeStatementQuery.error}
+              onRetry={() => void incomeStatementQuery.refetch()}
+              fallbackCurrency={baseCurrency}
+              locale={locale}
+              isId={isId}
+            />
+          )}
+        </TabsContent>
+
+        {/* Tab 6: Balance Sheet */}
+        <TabsContent value="balance-sheet" className="space-y-4">
+          {!canReadReporting ? (
+            <ErrorState
+              title={isId ? 'Izin Pelaporan Diperlukan' : 'Reporting Permission Required'}
+              message={isId ? 'Dibutuhkan izin reporting.read.' : 'Requires reporting.read permission.'}
+            />
+          ) : (
+            <FinancialStatementView
+              kind="balance-sheet"
+              title={isId ? 'Laporan Posisi Keuangan (Neraca)' : 'Balance Sheet'}
+              data={balanceSheetQuery.data}
+              isLoading={balanceSheetQuery.isLoading}
+              error={balanceSheetQuery.error}
+              onRetry={() => void balanceSheetQuery.refetch()}
+              fallbackCurrency={baseCurrency}
+              locale={locale}
+              isId={isId}
+            />
+          )}
+        </TabsContent>
+
+        {/* Tab 7: Cash Flow */}
+        <TabsContent value="cash-flow" className="space-y-4">
+          {!canReadReporting ? (
+            <ErrorState
+              title={isId ? 'Izin Pelaporan Diperlukan' : 'Reporting Permission Required'}
+              message={isId ? 'Dibutuhkan izin reporting.read.' : 'Requires reporting.read permission.'}
+            />
+          ) : (
+            <FinancialStatementView
+              kind="cash-flow"
+              title={isId ? 'Laporan Arus Kas' : 'Cash Flow Statement'}
+              data={cashFlowQuery.data}
+              isLoading={cashFlowQuery.isLoading}
+              error={cashFlowQuery.error}
+              onRetry={() => void cashFlowQuery.refetch()}
+              fallbackCurrency={baseCurrency}
+              locale={locale}
+              isId={isId}
+            />
           )}
         </TabsContent>
       </Tabs>

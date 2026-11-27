@@ -1296,3 +1296,74 @@ func (q *Queries) UpdateFiscalPeriodStatus(ctx context.Context, arg UpdateFiscal
 	err := row.Scan(&row_version)
 	return row_version, err
 }
+
+const updateFiscalYear = `-- name: UpdateFiscalYear :one
+UPDATE fin.fiscal_year
+SET name = $3,
+    start_date = $4,
+    end_date = $5,
+    status = $6,
+    updated_by = $7
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
+RETURNING row_version
+`
+
+type UpdateFiscalYearParams struct {
+	ID         uuid.UUID   `json:"id"`
+	RowVersion int32       `json:"row_version"`
+	Name       string      `json:"name"`
+	StartDate  pgtype.Date `json:"start_date"`
+	EndDate    pgtype.Date `json:"end_date"`
+	Status     string      `json:"status"`
+	UpdatedBy  *uuid.UUID  `json:"updated_by"`
+}
+
+func (q *Queries) UpdateFiscalYear(ctx context.Context, arg UpdateFiscalYearParams) (int32, error) {
+	row := q.db.QueryRow(ctx, updateFiscalYear,
+		arg.ID,
+		arg.RowVersion,
+		arg.Name,
+		arg.StartDate,
+		arg.EndDate,
+		arg.Status,
+		arg.UpdatedBy,
+	)
+	var row_version int32
+	err := row.Scan(&row_version)
+	return row_version, err
+}
+
+const updateLedger = `-- name: UpdateLedger :one
+UPDATE fin.ledger
+SET code = $3,
+    ledger_type = $4,
+    currency_code = $5,
+    updated_by = $6
+WHERE id = $1 AND row_version = $2 AND deleted_at IS NULL
+  AND organization_id <> '00000000-0000-0000-0000-000000000000'::uuid
+RETURNING row_version
+`
+
+type UpdateLedgerParams struct {
+	ID           uuid.UUID  `json:"id"`
+	RowVersion   int32      `json:"row_version"`
+	Code         string     `json:"code"`
+	LedgerType   string     `json:"ledger_type"`
+	CurrencyCode string     `json:"currency_code"`
+	UpdatedBy    *uuid.UUID `json:"updated_by"`
+}
+
+func (q *Queries) UpdateLedger(ctx context.Context, arg UpdateLedgerParams) (int32, error) {
+	row := q.db.QueryRow(ctx, updateLedger,
+		arg.ID,
+		arg.RowVersion,
+		arg.Code,
+		arg.LedgerType,
+		arg.CurrencyCode,
+		arg.UpdatedBy,
+	)
+	var row_version int32
+	err := row.Scan(&row_version)
+	return row_version, err
+}

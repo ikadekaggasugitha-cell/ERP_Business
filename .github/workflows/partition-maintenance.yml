@@ -44,13 +44,26 @@ jobs:
           curl -fsSL https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz
           sudo mv migrate /usr/local/bin/
 
-      - name: Migrate sample partitioned DBs and run partition maintenance
+      - name: Migrate all 29 partitioned DBs and run partition maintenance (+future & detach)
         run: |
-          for db in gl_db ap_db ar_db audit_db inventory_db fixedasset_db budget_db project_db; do
+          psql -h localhost -U postgres -d postgres -f db/ops/roles.sql
+          ALL_PARTITIONED_DBS=(
+            gl_db ap_db ar_db coa_db tax_db treasury_db user_db security_db
+            masterdata_db org_db workflow_db procurement_db inventory_db
+            manufacturing_db sales_db hr_db payroll_db audit_db currency_db
+            asset_db budget_db consolidation_db crm_db dimension_db
+            financialclose_db fixedasset_db localization_db maintenance_db project_db
+          )
+          for db in "${ALL_PARTITIONED_DBS[@]}"; do
             psql -h localhost -U postgres -d postgres -c "CREATE DATABASE $db"
             migrate -path "db/migrations/$db" -database "postgres://postgres:postgres@localhost:5432/$db?sslmode=disable" up
+            psql -h localhost -U postgres -d "$db" -f db/ops/apply_grants.sql
           done
           MONTHS_AHEAD="${{ inputs.months_ahead || '6' }}" DRY_RUN="${{ inputs.dry_run || 'false' }}" bash deploy/maintain-partitions.sh
+
+      - name: Validate FK-safe DETACH_KEEP_MONTHS across all 29 partitioned DBs
+        run: |
+          MONTHS_AHEAD="6" DETACH_KEEP_MONTHS="12" DRY_RUN="false" bash deploy/maintain-partitions.sh
 
   run-live-maintenance:
     runs-on: ubuntu-latest

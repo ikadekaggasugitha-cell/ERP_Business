@@ -35,6 +35,15 @@ func TestRouterMatchAndStripPrefix(t *testing.T) {
 	if _, ok := router.Match("/api/v1/exchange-rate-types"); !ok {
 		t.Fatal("expected match for /api/v1/exchange-rate-types")
 	}
+	if _, ok := router.Match("/api/v1/financial-statements/income-statement"); !ok {
+		t.Fatal("expected match for /api/v1/financial-statements/income-statement")
+	}
+	if _, ok := router.Match("/api/v1/withholding-tax/calculate"); !ok {
+		t.Fatal("expected match for /api/v1/withholding-tax/calculate")
+	}
+	if _, ok := router.Match("/api/v1/cash-position"); !ok {
+		t.Fatal("expected match for /api/v1/cash-position")
+	}
 	if _, ok := router.Match("/api/v1/unknown-resource"); ok {
 		t.Fatal("unexpected match for /api/v1/unknown-resource")
 	}

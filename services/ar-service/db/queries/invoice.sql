@@ -94,6 +94,27 @@ UPDATE ar.ar_invoice
 SET status = 'Cancelled', deleted_at = now(), updated_by = $4
 WHERE id = $1 AND invoice_date = $2 AND status = 'Draft' AND row_version = $3 AND deleted_at IS NULL;
 
+-- name: DeleteInvoiceLines :exec
+DELETE FROM ar.ar_invoice_line
+WHERE ar_invoice_id = $1 AND invoice_date = $2;
+
+-- name: UpdateDraftInvoice :one
+UPDATE ar.ar_invoice
+SET customer_id = $4,
+    due_date = $5,
+    currency_code = $6,
+    total_amount = $7,
+    outstanding_amount = $7,
+    sales_order_ref = $8,
+    updated_by = $9
+WHERE id = $1 AND invoice_date = $2 AND status IN ('Draft', 'Issued') AND outstanding_amount = total_amount AND row_version = $3 AND deleted_at IS NULL
+RETURNING row_version;
+
+-- name: WriteOffInvoice :execrows
+UPDATE ar.ar_invoice
+SET status = 'Cancelled', outstanding_amount = 0, updated_by = $4
+WHERE id = $1 AND invoice_date = $2 AND status IN ('Issued', 'PartiallyPaid', 'Overdue') AND row_version = $3 AND deleted_at IS NULL;
+
 -- name: InsertOutbox :exec
 INSERT INTO ar.outbox (aggregate_type, aggregate_id, event_type, payload, organization_id, correlation_id)
 VALUES ($1, $2, $3, $4, $5, $6);
