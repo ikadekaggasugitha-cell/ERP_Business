@@ -134,10 +134,10 @@ func TestFinancialStatementsAndCSVExport(t *testing.T) {
 	}
 
 	// 4. Formula injection guard
-	if got := sanitizeCSVCell("=CMD|'/C calc'!A0"); got != "'=CMD|'/C calc'!A0" {
+	if got := httpx.SanitizeCSVCell("=CMD|'/C calc'!A0"); got != "'=CMD|'/C calc'!A0" {
 		t.Fatalf("formula injection not neutralized: %q", got)
 	}
-	if got := sanitizeCSVCell("-500.0000"); got != "-500.0000" {
+	if got := httpx.SanitizeCSVCell("-500.0000"); got != "-500.0000" {
 		t.Fatalf("negative decimal should be preserved: %q", got)
 	}
 }

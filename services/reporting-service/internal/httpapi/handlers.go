@@ -455,19 +455,19 @@ func writeStatementResponse(w http.ResponseWriter, r *http.Request, resp financi
 		for _, sec := range resp.Sections {
 			for _, item := range sec.Items {
 				_ = cw.Write([]string{
-					sanitizeCSVCell(sec.Name),
-					sanitizeCSVCell(item.AccountCode),
-					sanitizeCSVCell(item.AccountName),
-					sanitizeCSVCell(item.Amount),
-					sanitizeCSVCell(resp.Currency),
+					httpx.SanitizeCSVCell(sec.Name),
+					httpx.SanitizeCSVCell(item.AccountCode),
+					httpx.SanitizeCSVCell(item.AccountName),
+					httpx.SanitizeCSVCell(item.Amount),
+					httpx.SanitizeCSVCell(resp.Currency),
 				})
 			}
 			_ = cw.Write([]string{
-				sanitizeCSVCell(sec.Name + " Subtotal"),
+				httpx.SanitizeCSVCell(sec.Name + " Subtotal"),
 				"",
 				"",
-				sanitizeCSVCell(sec.Subtotal),
-				sanitizeCSVCell(resp.Currency),
+				httpx.SanitizeCSVCell(sec.Subtotal),
+				httpx.SanitizeCSVCell(resp.Currency),
 			})
 		}
 		totalKeys := make([]string, 0, len(resp.Totals))
@@ -476,7 +476,7 @@ func writeStatementResponse(w http.ResponseWriter, r *http.Request, resp financi
 		}
 		sort.Strings(totalKeys)
 		for _, k := range totalKeys {
-			_ = cw.Write([]string{"TOTAL", sanitizeCSVCell(k), "", sanitizeCSVCell(resp.Totals[k]), sanitizeCSVCell(resp.Currency)})
+			_ = cw.Write([]string{"TOTAL", httpx.SanitizeCSVCell(k), "", httpx.SanitizeCSVCell(resp.Totals[k]), httpx.SanitizeCSVCell(resp.Currency)})
 		}
 		cw.Flush()
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
@@ -486,20 +486,4 @@ func writeStatementResponse(w http.ResponseWriter, r *http.Request, resp financi
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
-}
-
-// sanitizeCSVCell neutralizes spreadsheet formula injection (=, +, -, @, tab, CR)
-// while preserving negative numeric strings (e.g. "-500.0000").
-func sanitizeCSVCell(v string) string {
-	if v == "" {
-		return v
-	}
-	if _, ok := new(big.Rat).SetString(v); ok {
-		return v
-	}
-	switch v[0] {
-	case '=', '+', '-', '@', '\t', '\r':
-		return "'" + v
-	}
-	return v
 }

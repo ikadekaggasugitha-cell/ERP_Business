@@ -251,4 +251,3 @@ func TestARAgingUpdateCreditNoteAndWriteOff(t *testing.T) {
 		t.Fatalf("write-off got %d ev=%q body=%s", woRec.Code, store.outbox.EventType, woRec.Body.String())
 	}
 }
-

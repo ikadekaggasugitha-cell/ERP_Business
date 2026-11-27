@@ -382,20 +382,6 @@ func (h *Handler) handlePostRun(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteIDResponse(w, http.StatusOK, detail.RowVersion, detail)
 }
 
-func sanitizeCSVCell(v string) string {
-	if v == "" {
-		return v
-	}
-	if _, ok := new(big.Rat).SetString(v); ok {
-		return v
-	}
-	switch v[0] {
-	case '=', '+', '-', '@', '\t', '\r':
-		return "'" + v
-	}
-	return v
-}
-
 func parseRatOrZero(s string) *big.Rat {
 	if r, ok := new(big.Rat).SetString(strings.TrimSpace(s)); ok {
 		return r
@@ -443,13 +429,13 @@ func (h *Handler) handleExportBankCSV(w http.ResponseWriter, r *http.Request) {
 		netRat := parseRatOrZero(res.NetAmount)
 		totalNet.Add(totalNet, netRat)
 		_ = cw.Write([]string{
-			sanitizeCSVCell(detail.RunNo),
+			httpx.SanitizeCSVCell(detail.RunNo),
 			period,
 			bankFmt,
 			res.EmployeeID.String(),
 			"IDR",
 			netRat.FloatString(2),
-			sanitizeCSVCell("Payroll " + detail.RunNo + " " + period),
+			httpx.SanitizeCSVCell("Payroll " + detail.RunNo + " " + period),
 		})
 	}
 	_ = cw.Write([]string{"TOTAL", period, bankFmt, fmt.Sprintf("%d", len(detail.Results)), "IDR", totalNet.FloatString(2), ""})
@@ -494,7 +480,7 @@ func (h *Handler) handleExportEbupotCSV(w http.ResponseWriter, r *http.Request) 
 		_ = cw.Write([]string{
 			fmt.Sprintf("%02d", detail.PeriodMonth),
 			fmt.Sprintf("%04d", detail.PeriodYear),
-			sanitizeCSVCell(detail.RunNo),
+			httpx.SanitizeCSVCell(detail.RunNo),
 			res.EmployeeID.String(),
 			"21-100-01",
 			parseRatOrZero(res.GrossAmount).FloatString(4),

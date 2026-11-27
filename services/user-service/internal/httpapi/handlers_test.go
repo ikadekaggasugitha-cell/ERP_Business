@@ -179,4 +179,3 @@ func TestUserEndpointsRBACCRUDDisableAndRoles(t *testing.T) {
 		t.Fatalf("expected 204 on remove role, got %d", rr.Code)
 	}
 }
-

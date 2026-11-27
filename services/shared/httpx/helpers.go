@@ -3,6 +3,7 @@ package httpx
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -30,9 +32,62 @@ func CorrelationUUID(r *http.Request) uuid.UUID {
 func ParseUUIDParam(field, raw string) (uuid.UUID, error) {
 	u, err := uuid.Parse(strings.TrimSpace(raw))
 	if err != nil {
-		return uuid.Nil, BadRequest(field + " tidak valid", Detail{Field: field, Issue: "must be valid UUID"})
+		return uuid.Nil, BadRequest(field+" tidak valid", Detail{Field: field, Issue: "must be valid UUID"})
 	}
 	return u, nil
+}
+
+// ParsePathUUID parses a required Go 1.22+ ServeMux path parameter as a UUID.
+func ParsePathUUID(r *http.Request, param string) (uuid.UUID, error) {
+	return ParseUUIDParam(param, r.PathValue(param))
+}
+
+// SanitizeCSVCell neutralizes spreadsheet formula injection (=, +, -, @, tab, CR)
+// while preserving valid negative decimal numbers (e.g. -125000.00).
+func SanitizeCSVCell(v string) string {
+	if v == "" {
+		return ""
+	}
+	if v[0] == '-' {
+		if _, err := strconv.ParseFloat(v, 64); err == nil {
+			return v
+		}
+	}
+	switch v[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + v
+	}
+	return v
+}
+
+// WriteCSV writes sanitized CSV rows with standard UTF-8 CSV and attachment headers.
+func WriteCSV(w http.ResponseWriter, filename string, headers []string, rows [][]string) error {
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	if strings.TrimSpace(filename) != "" {
+		w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	}
+	w.WriteHeader(http.StatusOK)
+	cw := csv.NewWriter(w)
+	if len(headers) > 0 {
+		safeHeaders := make([]string, len(headers))
+		for i, h := range headers {
+			safeHeaders[i] = SanitizeCSVCell(h)
+		}
+		if err := cw.Write(safeHeaders); err != nil {
+			return err
+		}
+	}
+	for _, row := range rows {
+		safeRow := make([]string, len(row))
+		for i, cell := range row {
+			safeRow[i] = SanitizeCSVCell(cell)
+		}
+		if err := cw.Write(safeRow); err != nil {
+			return err
+		}
+	}
+	cw.Flush()
+	return cw.Error()
 }
 
 // DecodeJSONIdempotent reads the raw body once so the caller can hash it for

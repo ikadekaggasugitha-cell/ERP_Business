@@ -36,7 +36,7 @@ func TestTreasuryExportDisbursementCSV(t *testing.T) {
 	}
 
 	// Formula injection neutralization check
-	if got := safeCSVCell("=SUM(A1:A2)"); got != "'=SUM(A1:A2)" {
+	if got := httpx.SanitizeCSVCell("=SUM(A1:A2)"); got != "'=SUM(A1:A2)" {
 		t.Fatalf("expected formula neutralization, got %q", got)
 	}
 

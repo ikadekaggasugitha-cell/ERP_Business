@@ -237,17 +237,6 @@ func parseAuditListFilter(r *http.Request, limit, offset int32) (repository.List
 	return filter, nil
 }
 
-func sanitizeCSVCell(v string) string {
-	if v == "" {
-		return v
-	}
-	switch v[0] {
-	case '=', '+', '-', '@', '\t', '\r':
-		return "'" + v
-	}
-	return v
-}
-
 func (s *Server) exportAuditEvents(w http.ResponseWriter, r *http.Request) {
 	scope, err := httpx.RequireScope(r)
 	if err != nil {
@@ -296,8 +285,8 @@ func (s *Server) exportAuditEvents(w http.ResponseWriter, r *http.Request) {
 				row.OccurredAt.Time.UTC().Format(time.RFC3339),
 				row.OrganizationID.String(),
 				actor,
-				sanitizeCSVCell(row.Action),
-				sanitizeCSVCell(row.EntityType),
+				httpx.SanitizeCSVCell(row.Action),
+				httpx.SanitizeCSVCell(row.EntityType),
 				entID,
 				row.CorrelationID.String(),
 			})

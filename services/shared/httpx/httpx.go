@@ -339,6 +339,17 @@ func Middleware(next http.Handler) http.Handler {
 		}
 
 		ctx := context.WithValue(r.Context(), correlationKey, cid)
+		if !strings.Contains(r.URL.Path, "/stream") {
+			timeoutSec := 30
+			if rawTO := strings.TrimSpace(os.Getenv("HTTP_REQUEST_TIMEOUT_SECONDS")); rawTO != "" {
+				if parsed, err := strconv.Atoi(rawTO); err == nil && parsed > 0 {
+					timeoutSec = parsed
+				}
+			}
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
+			defer cancel()
+		}
 		ctx = telemetry.WithTraceContext(ctx, childTC)
 		ctx, span := telemetry.StartSpan(ctx, r.Method+" "+r.URL.Path, 2, parentTC.SpanID)
 		if span != nil {

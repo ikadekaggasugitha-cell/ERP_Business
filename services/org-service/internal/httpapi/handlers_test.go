@@ -57,18 +57,18 @@ func (f *fakeOrgStore) CreateAndEmit(_ context.Context, _ []uuid.UUID, _ orgdb.C
 func (f *fakeOrgStore) GetWithHierarchy(_ context.Context, scope []uuid.UUID, id uuid.UUID) (orgdb.OrgOrganization, []orgdb.ListOrganizationDescendantsRow, error) {
 	dt, _ := platform.ParseDate("2026-01-01")
 	return orgdb.OrgOrganization{
-			ID:                 id,
-			OrganizationID:     scope[0],
-			Code:               "PT-HOLD",
-			Name:               "Holding",
-			OrganizationTypeID: uuid.MustParse("10000000-0000-0000-0000-000000000040"),
-			Path:               "/PT-HOLD",
-			Status:             "Draft",
-			EffectiveFrom:      dt,
-			RowVersion:         1,
-		}, []orgdb.ListOrganizationDescendantsRow{
-			{ID: id, Code: "PT-HOLD", Name: "Holding", Path: "/PT-HOLD", Status: "Draft", Depth: 0, RowVersion: 1},
-		}, nil
+		ID:                 id,
+		OrganizationID:     scope[0],
+		Code:               "PT-HOLD",
+		Name:               "Holding",
+		OrganizationTypeID: uuid.MustParse("10000000-0000-0000-0000-000000000040"),
+		Path:               "/PT-HOLD",
+		Status:             "Draft",
+		EffectiveFrom:      dt,
+		RowVersion:         1,
+	}, []orgdb.ListOrganizationDescendantsRow{
+		{ID: id, Code: "PT-HOLD", Name: "Holding", Path: "/PT-HOLD", Status: "Draft", Depth: 0, RowVersion: 1},
+	}, nil
 }
 
 func (f *fakeOrgStore) ListWithCount(_ context.Context, scope []uuid.UUID, _ orgdb.ListOrganizationsParams) ([]orgdb.ListOrganizationsRow, int64, error) {
@@ -153,4 +153,3 @@ func TestOrgEndpointsHierarchyActivateAndChildrenGuard(t *testing.T) {
 		t.Fatalf("expected 204 when no children, got %d", rr.Code)
 	}
 }
-

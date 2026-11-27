@@ -551,4 +551,3 @@ func TestExchangeRatesEndpoints(t *testing.T) {
 		}
 	})
 }
-

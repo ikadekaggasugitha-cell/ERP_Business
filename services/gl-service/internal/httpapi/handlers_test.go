@@ -278,5 +278,3 @@ func TestBuildLineParamsValidationAndFXFunctionalAmount(t *testing.T) {
 		t.Fatalf("functionalAmount = %s, want 1585000.0000", got)
 	}
 }
-
-

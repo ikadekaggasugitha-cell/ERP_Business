@@ -278,4 +278,3 @@ func TestHRCRUDMaskingBlindLookupAndRBAC(t *testing.T) {
 		t.Fatalf("list attendance got %d: %s", listAttRec.Code, listAttRec.Body.String())
 	}
 }
-

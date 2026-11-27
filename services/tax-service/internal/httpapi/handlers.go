@@ -481,20 +481,6 @@ func deref(s *string) string {
 	return *s
 }
 
-func sanitizeCSVCell(v string) string {
-	if v == "" {
-		return v
-	}
-	if _, ok := new(big.Rat).SetString(v); ok {
-		return v
-	}
-	switch v[0] {
-	case '=', '+', '-', '@', '\t', '\r':
-		return "'" + v
-	}
-	return v
-}
-
 // exportEfakturCSV exports DJP e-Faktur CSV (FK header + OF item lines) safely neutralized against CSV formula injection.
 func (s *Server) exportEfakturCSV(w http.ResponseWriter, r *http.Request) {
 	scope, err := httpx.RequireScope(r)
@@ -528,19 +514,19 @@ func (s *Server) exportEfakturCSV(w http.ResponseWriter, r *http.Request) {
 			"FK",
 			"01",
 			"0",
-			sanitizeCSVCell(efNo),
+			httpx.SanitizeCSVCell(efNo),
 			now.Format("01"),
 			now.Format("2006"),
 			now.Format("02/01/2006"),
-			sanitizeCSVCell(t.SourceDocumentRef),
+			httpx.SanitizeCSVCell(t.SourceDocumentRef),
 			dpp,
 			ppn,
-			sanitizeCSVCell(efStatus),
+			httpx.SanitizeCSVCell(efStatus),
 		})
 		_ = cw.Write([]string{
 			"OF",
-			sanitizeCSVCell(t.TaxCodeID.String()),
-			sanitizeCSVCell("Supply " + t.SourceDocumentRef),
+			httpx.SanitizeCSVCell(t.TaxCodeID.String()),
+			httpx.SanitizeCSVCell("Supply " + t.SourceDocumentRef),
 			dpp,
 			"1",
 			dpp,

@@ -207,4 +207,3 @@ func TestAccountHierarchyAndMetadataUpdates(t *testing.T) {
 		t.Fatalf("PUT fiscal-year got %d ETag=%q body=%s", rec.Code, rec.Header().Get("ETag"), rec.Body.String())
 	}
 }
-

@@ -12,17 +12,6 @@ import (
 	"github.com/sinergiinvestasiproperti/erp/services/treasury-cashbank-service/internal/treasurydb"
 )
 
-func safeCSVCell(s string) string {
-	if s == "" {
-		return ""
-	}
-	switch s[0] {
-	case '=', '+', '-', '@', '\t', '\r':
-		return "'" + s
-	}
-	return s
-}
-
 func (s *Server) exportDisbursement(w http.ResponseWriter, r *http.Request) {
 	if err := httpx.RequirePermission(r, "treasury:read"); err != nil {
 		httpx.WriteError(w, r, err)
@@ -67,12 +56,12 @@ func (s *Server) exportDisbursement(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = cw.Write([]string{
 			format,
-			safeCSVCell(p.PaymentNo),
+			httpx.SanitizeCSVCell(p.PaymentNo),
 			platform.FormatDate(p.PaymentDate),
 			p.BankAccountID.String(),
 			platform.FormatNumeric(p.Amount, 4),
-			safeCSVCell(p.Status),
-			safeCSVCell(extRef),
+			httpx.SanitizeCSVCell(p.Status),
+			httpx.SanitizeCSVCell(extRef),
 		})
 	}
 	cw.Flush()

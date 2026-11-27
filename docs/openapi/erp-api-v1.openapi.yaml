@@ -118,7 +118,7 @@ components:
           type: array
           items: { type: object }
         page:
-          $ref: '#/components/schemas/PageMeta'
+          $ref: "#/components/schemas/PageMeta"
     ErrorResponse:
       type: object
       description: Standard httpx.ErrorResponse envelope across all 30 services and api-gateway.
@@ -139,12 +139,25 @@ components:
       properties:
         username: { type: string }
         password: { type: string, format: password }
-        idToken: { type: string, description: "OIDC ID/Access JWT when DEV_AUTH_MODE=false" }
+        idToken:
+          {
+            type: string,
+            description: "OIDC ID/Access JWT when DEV_AUTH_MODE=false",
+          }
         organizationId: { type: string, format: uuid }
         orgCode: { type: string }
     LoginResponse:
       type: object
-      required: [token, refreshToken, streamTicket, expiresIn, user, activeOrg, organizations]
+      required:
+        [
+          token,
+          refreshToken,
+          streamTicket,
+          expiresIn,
+          user,
+          activeOrg,
+          organizations,
+        ]
       properties:
         token: { type: string }
         refreshToken: { type: string }
@@ -160,32 +173,32 @@ components:
       required: [accountId, debit, credit]
       properties:
         accountId: { type: string, format: uuid }
-        debit: { $ref: '#/components/schemas/DecimalString' }
-        credit: { $ref: '#/components/schemas/DecimalString' }
+        debit: { $ref: "#/components/schemas/DecimalString" }
+        credit: { $ref: "#/components/schemas/DecimalString" }
         description: { type: string }
     JournalEntryCreate:
       type: object
       required: [fiscalPeriodId, entryDate, currencyCode, lines]
       properties:
         fiscalPeriodId: { type: string, format: uuid }
-        entryDate: { $ref: '#/components/schemas/DateString' }
+        entryDate: { $ref: "#/components/schemas/DateString" }
         currencyCode: { type: string, example: "IDR" }
-        exchangeRate: { $ref: '#/components/schemas/DecimalString' }
+        exchangeRate: { $ref: "#/components/schemas/DecimalString" }
         description: { type: string }
         lines:
           type: array
           minItems: 2
-          items: { $ref: '#/components/schemas/JournalEntryLine' }
+          items: { $ref: "#/components/schemas/JournalEntryLine" }
     InvoiceCreate:
       type: object
       required: [invoiceNo, invoiceDate, dueDate, currencyCode, subtotalAmount]
       properties:
         invoiceNo: { type: string }
-        invoiceDate: { $ref: '#/components/schemas/DateString' }
-        dueDate: { $ref: '#/components/schemas/DateString' }
+        invoiceDate: { $ref: "#/components/schemas/DateString" }
+        dueDate: { $ref: "#/components/schemas/DateString" }
         currencyCode: { type: string, example: "IDR" }
-        subtotalAmount: { $ref: '#/components/schemas/DecimalString' }
-        taxAmount: { $ref: '#/components/schemas/DecimalString' }
+        subtotalAmount: { $ref: "#/components/schemas/DecimalString" }
+        taxAmount: { $ref: "#/components/schemas/DecimalString" }
     PaymentCreate:
       type: object
       required: [paymentNo, paymentType, bankAccountId, amount]
@@ -193,8 +206,8 @@ components:
         paymentNo: { type: string }
         paymentType: { type: string, enum: [Outgoing, Incoming] }
         bankAccountId: { type: string, format: uuid }
-        amount: { $ref: '#/components/schemas/DecimalString' }
-        paymentDate: { $ref: '#/components/schemas/DateString' }
+        amount: { $ref: "#/components/schemas/DecimalString" }
+        paymentDate: { $ref: "#/components/schemas/DateString" }
 
   responses:
     StandardError:
@@ -202,7 +215,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: "#/components/schemas/ErrorResponse"
 
 paths:
   # ---- Health & Metadata ----
@@ -212,22 +225,22 @@ paths:
       security: []
       summary: Liveness probe
       responses:
-        '200': { description: OK }
+        "200": { description: OK }
   /readyz:
     get:
       tags: [Auth]
       security: []
       summary: Readiness probe (verifies Kafka broker connectivity)
       responses:
-        '200': { description: Ready }
-        '503': { $ref: '#/components/responses/StandardError' }
+        "200": { description: Ready }
+        "503": { $ref: "#/components/responses/StandardError" }
   /openapi.yaml:
     get:
       tags: [Auth]
       security: []
       summary: Canonical OpenAPI 3.1 specification
       responses:
-        '200':
+        "200":
           description: OpenAPI YAML document
           content:
             application/yaml:
@@ -243,14 +256,14 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/LoginRequest' }
+            schema: { $ref: "#/components/schemas/LoginRequest" }
       responses:
-        '200':
+        "200":
           description: Authenticated session with access token, refresh token, and stream ticket
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/LoginResponse' }
-        '401': { $ref: '#/components/responses/StandardError' }
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "401": { $ref: "#/components/responses/StandardError" }
   /api/v1/auth/refresh:
     post:
       tags: [Auth]
@@ -264,27 +277,27 @@ paths:
               properties:
                 refreshToken: { type: string }
       responses:
-        '200': { description: Rotated tokens }
-        '401': { $ref: '#/components/responses/StandardError' }
+        "200": { description: Rotated tokens }
+        "401": { $ref: "#/components/responses/StandardError" }
   /api/v1/auth/logout:
     post:
       tags: [Auth]
       summary: Revoke active JWT (jti denylist) and clear session cookies
       responses:
-        '204': { description: Logged out }
+        "204": { description: Logged out }
   /api/v1/auth/me:
     get:
       tags: [Auth]
       summary: Return authenticated caller identity, admin tier, and visible organizations
       responses:
-        '200': { description: Current session profile }
-        '401': { $ref: '#/components/responses/StandardError' }
+        "200": { description: Current session profile }
+        "401": { $ref: "#/components/responses/StandardError" }
   /api/v1/auth/stream-ticket:
     post:
       tags: [Auth]
       summary: Issue short-lived (60s) SSE stream ticket
       responses:
-        '200': { description: Stream ticket }
+        "200": { description: Stream ticket }
   /api/v1/stream/events:
     get:
       tags: [Auth]
@@ -297,7 +310,7 @@ paths:
           in: query
           schema: { type: string, format: uuid }
       responses:
-        '200':
+        "200":
           description: text/event-stream
 
   # ---- Core Finance (9 Services) ----
@@ -306,25 +319,33 @@ paths:
       tags: [Core Finance]
       summary: List GL journal entries
       parameters:
-        - $ref: '#/components/parameters/OrganizationIdHeader'
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/SizeParam'
+        - $ref: "#/components/parameters/OrganizationIdHeader"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/SizeParam"
       responses:
-        '200': { description: Paginated journal entries, content: { application/json: { schema: { $ref: '#/components/schemas/ListEnvelope' } } } }
+        "200":
+          {
+            description: Paginated journal entries,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/ListEnvelope" } },
+              },
+          }
     post:
       tags: [Core Finance]
       summary: Create draft GL journal entry
       parameters:
-        - $ref: '#/components/parameters/OrganizationIdHeader'
-        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: "#/components/parameters/OrganizationIdHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/JournalEntryCreate' }
+            schema: { $ref: "#/components/schemas/JournalEntryCreate" }
       responses:
-        '201': { description: Created draft journal entry (with ETag) }
-        '409': { $ref: '#/components/responses/StandardError' }
+        "201": { description: Created draft journal entry (with ETag) }
+        "409": { $ref: "#/components/responses/StandardError" }
   /api/v1/journal-entries/{id}/post:
     post:
       tags: [Core Finance]
@@ -334,115 +355,115 @@ paths:
           in: path
           required: true
           schema: { type: string, format: uuid }
-        - $ref: '#/components/parameters/IfMatchHeader'
+        - $ref: "#/components/parameters/IfMatchHeader"
       responses:
-        '200': { description: Posted }
-        '422': { $ref: '#/components/responses/StandardError' }
+        "200": { description: Posted }
+        "422": { $ref: "#/components/responses/StandardError" }
   /api/v1/trial-balance:
     get:
       tags: [Core Finance]
       summary: General Ledger Trial Balance in functional currency
       responses:
-        '200': { description: Trial balance rows }
+        "200": { description: Trial balance rows }
   /api/v1/accounts:
     get:
       tags: [Core Finance]
       summary: List Chart of Accounts (coa-service)
       responses:
-        '200': { description: Accounts list }
+        "200": { description: Accounts list }
     post:
       tags: [Core Finance]
       summary: Create GL account
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
       responses:
-        '201': { description: Created }
+        "201": { description: Created }
   /api/v1/fiscal-periods:
     get:
       tags: [Core Finance]
       summary: List fiscal periods
       responses:
-        '200': { description: Fiscal periods }
+        "200": { description: Fiscal periods }
   /api/v1/vendor-invoices:
     get:
       tags: [Core Finance]
       summary: List AP vendor invoices (ap-service)
       responses:
-        '200': { description: Vendor invoices }
+        "200": { description: Vendor invoices }
     post:
       tags: [Core Finance]
       summary: Create draft vendor invoice
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/InvoiceCreate' }
+            schema: { $ref: "#/components/schemas/InvoiceCreate" }
       responses:
-        '201': { description: Created }
+        "201": { description: Created }
   /api/v1/customer-invoices:
     get:
       tags: [Core Finance]
       summary: List AR customer invoices (ar-service)
       responses:
-        '200': { description: Customer invoices }
+        "200": { description: Customer invoices }
     post:
       tags: [Core Finance]
       summary: Create customer invoice
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/InvoiceCreate' }
+            schema: { $ref: "#/components/schemas/InvoiceCreate" }
       responses:
-        '201': { description: Created }
+        "201": { description: Created }
   /api/v1/tax-invoices:
     get:
       tags: [Core Finance]
       summary: List e-Faktur tax invoices (tax-service)
       responses:
-        '200': { description: Tax invoices }
+        "200": { description: Tax invoices }
     post:
       tags: [Core Finance]
       summary: Create tax invoice
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
       responses:
-        '201': { description: Created }
+        "201": { description: Created }
   /api/v1/payments:
     get:
       tags: [Core Finance]
       summary: List treasury payments (treasury-cashbank-service)
       responses:
-        '200': { description: Payments }
+        "200": { description: Payments }
     post:
       tags: [Core Finance]
       summary: Create draft payment with optional invoice allocations
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/PaymentCreate' }
+            schema: { $ref: "#/components/schemas/PaymentCreate" }
       responses:
-        '201': { description: Created }
+        "201": { description: Created }
   /api/v1/currencies:
     get:
       tags: [Core Finance]
       summary: List ISO-4217 currencies (currency-service)
       responses:
-        '200': { description: Currencies }
+        "200": { description: Currencies }
   /api/v1/exchange-rates/convert:
     post:
       tags: [Core Finance]
       summary: Convert amount via direct, inverse, or USD-anchored triangulation
       responses:
-        '200': { description: Converted DecimalString result }
+        "200": { description: Converted DecimalString result }
   /api/v1/gl-balance-snapshots:
     get:
       tags: [Core Finance]
       summary: List GL balance snapshots (reporting-service)
       responses:
-        '200': { description: Snapshots }
+        "200": { description: Snapshots }
   /api/v1/audit-events:
     get:
       tags: [Core Finance]
@@ -467,225 +488,225 @@ paths:
           in: query
           schema: { type: string, format: uuid }
       responses:
-        '200': { description: Audit events }
+        "200": { description: Audit events }
 
   # ---- Operations (4 Services) ----
   /api/v1/purchase-orders:
     get:
       tags: [Operations]
       summary: List purchase orders (procurement-service)
-      responses: { '200': { description: Purchase orders } }
+      responses: { "200": { description: Purchase orders } }
     post:
       tags: [Operations]
       summary: Create purchase order
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/warehouses:
     get:
       tags: [Operations]
       summary: List warehouses & inventory (inventory-service)
-      responses: { '200': { description: Warehouses } }
+      responses: { "200": { description: Warehouses } }
     post:
       tags: [Operations]
       summary: Create warehouse
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/work-orders:
     get:
       tags: [Operations]
       summary: List manufacturing work orders (manufacturing-service)
-      responses: { '200': { description: Work orders } }
+      responses: { "200": { description: Work orders } }
     post:
       tags: [Operations]
       summary: Create work order
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/sales-orders:
     get:
       tags: [Operations]
       summary: List sales orders (sales-service)
-      responses: { '200': { description: Sales orders } }
+      responses: { "200": { description: Sales orders } }
     post:
       tags: [Operations]
       summary: Create sales order
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
 
   # ---- HR & Payroll (2 Services) ----
   /api/v1/employees:
     get:
       tags: [HR & Payroll]
       summary: List employees (hr-service)
-      responses: { '200': { description: Employees } }
+      responses: { "200": { description: Employees } }
     post:
       tags: [HR & Payroll]
       summary: Create employee record (AES-256-GCM PII encrypted)
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/payroll-runs:
     get:
       tags: [HR & Payroll]
       summary: List payroll runs (payroll-service, PPh 21 & BPJS)
-      responses: { '200': { description: Payroll runs } }
+      responses: { "200": { description: Payroll runs } }
     post:
       tags: [HR & Payroll]
       summary: Create payroll run
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
 
   # ---- Administration (5 Services) ----
   /api/v1/organizations:
     get:
       tags: [Administration]
       summary: List organizational hierarchy nodes (org-service)
-      responses: { '200': { description: Organizations } }
+      responses: { "200": { description: Organizations } }
     post:
       tags: [Administration]
       summary: Create organization node (enforces tiered admin delegation)
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/users:
     get:
       tags: [Administration]
       summary: List user accounts (user-service)
-      responses: { '200': { description: Users } }
+      responses: { "200": { description: Users } }
     post:
       tags: [Administration]
       summary: Provision user account
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/roles:
     get:
       tags: [Administration]
       summary: List RBAC roles & permissions (security-service)
-      responses: { '200': { description: Roles } }
+      responses: { "200": { description: Roles } }
     post:
       tags: [Administration]
       summary: Create custom role
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/parties:
     get:
       tags: [Administration]
       summary: List masterdata parties — vendors & customers (masterdata-service)
-      responses: { '200': { description: Parties } }
+      responses: { "200": { description: Parties } }
     post:
       tags: [Administration]
       summary: Create party
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/workflow-instances:
     get:
       tags: [Administration]
       summary: List multi-step approval workflow instances (workflow-service)
-      responses: { '200': { description: Workflow instances } }
+      responses: { "200": { description: Workflow instances } }
     post:
       tags: [Administration]
       summary: Start approval workflow instance (enforces SoD)
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
 
   # ---- 10 Extended Enterprise Services ----
   /api/v1/fixed-assets:
     get:
       tags: [Extended Enterprise]
       summary: List fixed assets & depreciation schedules (fixedasset-service)
-      responses: { '200': { description: Fixed assets } }
+      responses: { "200": { description: Fixed assets } }
     post:
       tags: [Extended Enterprise]
       summary: Acquire fixed asset
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/cost-centers:
     get:
       tags: [Extended Enterprise]
       summary: List cost centers & accounting dimensions (dimension-service)
-      responses: { '200': { description: Cost centers } }
+      responses: { "200": { description: Cost centers } }
     post:
       tags: [Extended Enterprise]
       summary: Create cost center
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/budgets:
     get:
       tags: [Extended Enterprise]
       summary: List budgets & commitments (budget-service)
-      responses: { '200': { description: Budgets } }
+      responses: { "200": { description: Budgets } }
     post:
       tags: [Extended Enterprise]
       summary: Create budget
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/closing-runs:
     get:
       tags: [Extended Enterprise]
       summary: List financial close runs & period statuses (financialclose-service)
-      responses: { '200': { description: Closing runs } }
+      responses: { "200": { description: Closing runs } }
     post:
       tags: [Extended Enterprise]
       summary: Start period closing run
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/consolidation-runs:
     get:
       tags: [Extended Enterprise]
       summary: List multi-entity consolidation runs (consolidation-service)
-      responses: { '200': { description: Consolidation runs } }
+      responses: { "200": { description: Consolidation runs } }
     post:
       tags: [Extended Enterprise]
       summary: Create consolidation run (requires HOLDING_ADMIN / Head Office tier)
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/projects:
     get:
       tags: [Extended Enterprise]
       summary: List projects, WBS, budgets, and costs (project-service)
-      responses: { '200': { description: Projects } }
+      responses: { "200": { description: Projects } }
     post:
       tags: [Extended Enterprise]
       summary: Create project
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/operational-assets:
     get:
       tags: [Extended Enterprise]
       summary: List operational assets & movements (asset-service)
-      responses: { '200': { description: Operational assets } }
+      responses: { "200": { description: Operational assets } }
     post:
       tags: [Extended Enterprise]
       summary: Register operational asset
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/maintenance-work-orders:
     get:
       tags: [Extended Enterprise]
       summary: List maintenance work orders & preventive schedules (maintenance-service)
-      responses: { '200': { description: Maintenance work orders } }
+      responses: { "200": { description: Maintenance work orders } }
     post:
       tags: [Extended Enterprise]
       summary: Create maintenance work order
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/crm/leads:
     get:
       tags: [Extended Enterprise]
       summary: List CRM leads & sales pipeline (crm-service)
-      responses: { '200': { description: CRM leads } }
+      responses: { "200": { description: CRM leads } }
     post:
       tags: [Extended Enterprise]
       summary: Create CRM lead
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
   /api/v1/localization/languages:
     get:
       tags: [Extended Enterprise]
       summary: List languages, translation bundles, and locale formats (localization-service)
-      responses: { '200': { description: Languages } }
+      responses: { "200": { description: Languages } }
     post:
       tags: [Extended Enterprise]
       summary: Register language
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Created } }
 
   # ---- P1 / P2 / P3 Core Finance, Compliance & Analytics Endpoints ----
   /api/v1/financial-statements/income-statement:
@@ -693,150 +714,227 @@ paths:
       tags: [Core Finance]
       summary: Generate Income Statement — Revenue, COGS, Gross Profit, OpEx, Net Income (reporting-service)
       parameters:
-        - { name: fiscalPeriodId, in: query, schema: { type: string, format: uuid } }
-        - { name: format, in: query, schema: { type: string, enum: [json, csv] } }
-      responses: { '200': { description: Income Statement (JSON or formula-safe CSV) } }
+        - {
+            name: fiscalPeriodId,
+            in: query,
+            schema: { type: string, format: uuid },
+          }
+        - {
+            name: format,
+            in: query,
+            schema: { type: string, enum: [json, csv] },
+          }
+      responses:
+        { "200": { description: Income Statement (JSON or formula-safe CSV) } }
   /api/v1/financial-statements/balance-sheet:
     get:
       tags: [Core Finance]
       summary: Generate Balance Sheet — Assets, Liabilities, Equity + Current Period Net Income & isBalanced check (reporting-service)
       parameters:
-        - { name: fiscalPeriodId, in: query, schema: { type: string, format: uuid } }
-        - { name: format, in: query, schema: { type: string, enum: [json, csv] } }
-      responses: { '200': { description: Balance Sheet (JSON or formula-safe CSV) } }
+        - {
+            name: fiscalPeriodId,
+            in: query,
+            schema: { type: string, format: uuid },
+          }
+        - {
+            name: format,
+            in: query,
+            schema: { type: string, enum: [json, csv] },
+          }
+      responses:
+        { "200": { description: Balance Sheet (JSON or formula-safe CSV) } }
   /api/v1/financial-statements/cash-flow:
     get:
       tags: [Core Finance]
       summary: Generate Cash Flow Statement — Operating, Investing, Financing & netCashChange (reporting-service)
       parameters:
-        - { name: fiscalPeriodId, in: query, schema: { type: string, format: uuid } }
-        - { name: format, in: query, schema: { type: string, enum: [json, csv] } }
-      responses: { '200': { description: Cash Flow Statement (JSON or formula-safe CSV) } }
+        - {
+            name: fiscalPeriodId,
+            in: query,
+            schema: { type: string, format: uuid },
+          }
+        - {
+            name: format,
+            in: query,
+            schema: { type: string, enum: [json, csv] },
+          }
+      responses:
+        {
+          "200":
+            { description: Cash Flow Statement (JSON or formula-safe CSV) },
+        }
   /api/v1/accounts/hierarchy:
     get:
       tags: [Core Finance]
       summary: Retrieve nested Chart of Accounts tree hierarchy (coa-service)
-      responses: { '200': { description: Hierarchical CoA tree } }
+      responses: { "200": { description: Hierarchical CoA tree } }
   /api/v1/journal-entries/fx-revaluation:
     post:
       tags: [Core Finance]
       summary: Compute unrealized FX gain/loss via exact fixed-point arithmetic and create Draft FX_Revaluation journal (gl-service)
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: FX revaluation draft journal created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses:
+        { "201": { description: FX revaluation draft journal created } }
   /api/v1/journal-entries/recurring:
     get:
       tags: [Core Finance]
       summary: List Monthly/Quarterly recurring journal templates (gl-service)
-      responses: { '200': { description: Recurring journal templates } }
+      responses: { "200": { description: Recurring journal templates } }
     post:
       tags: [Core Finance]
       summary: Create recurring journal template with optional immediate Draft generation (gl-service)
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Recurring template created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Recurring template created } }
   /api/v1/vendor-invoices/aging:
     get:
       tags: [Core Finance]
       summary: AP aging report across current, 1-30, 31-60, 61-90, and 90+ day buckets (ap-service)
-      responses: { '200': { description: AP aging buckets } }
+      responses: { "200": { description: AP aging buckets } }
   /api/v1/vendor-invoices/{id}/debit-note:
     post:
       tags: [Core Finance]
       summary: Issue AP debit note reducing vendor invoice outstanding amount and emitting ap.debit_note.issued (ap-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
-      responses: { '200': { description: Debit note applied } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - { $ref: "#/components/parameters/IdempotencyKeyHeader" }
+      responses: { "200": { description: Debit note applied } }
   /api/v1/customer-invoices/aging:
     get:
       tags: [Core Finance]
       summary: AR aging report across current, 1-30, 31-60, 61-90, and 90+ day buckets (ar-service)
-      responses: { '200': { description: AR aging buckets } }
+      responses: { "200": { description: AR aging buckets } }
   /api/v1/customer-invoices/{id}:
     put:
       tags: [Core Finance]
       summary: Update unpaid Draft/Issued customer invoice with optimistic locking (ar-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { $ref: '#/components/parameters/IfMatchHeader' }
-      responses: { '200': { description: Customer invoice updated } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - { $ref: "#/components/parameters/IfMatchHeader" }
+      responses: { "200": { description: Customer invoice updated } }
   /api/v1/customer-invoices/{id}/credit-note:
     post:
       tags: [Core Finance]
       summary: Issue AR credit note reducing customer invoice outstanding amount and emitting ar.credit_note.issued (ar-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
-      responses: { '200': { description: Credit note applied } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - { $ref: "#/components/parameters/IdempotencyKeyHeader" }
+      responses: { "200": { description: Credit note applied } }
   /api/v1/customer-invoices/{id}/write-off:
     post:
       tags: [Core Finance]
       summary: Write off unpaid customer invoice as bad debt and emit ar.invoice.written_off (ar-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
-      responses: { '200': { description: Customer invoice written off } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - { $ref: "#/components/parameters/IdempotencyKeyHeader" }
+      responses: { "200": { description: Customer invoice written off } }
   /api/v1/tax-invoices/export/efaktur:
     get:
       tags: [Core Finance]
       summary: Export DJP e-Faktur FK/OF CSV batch (tax-service)
-      responses: { '200': { description: DJP e-Faktur CSV } }
+      responses: { "200": { description: DJP e-Faktur CSV } }
   /api/v1/tax-returns/spt-ppn:
     get:
       tags: [Core Finance]
       summary: Compute monthly SPT Masa PPN (Output VAT, Input VAT, Net VAT Payable/Overpaid) (tax-service)
       parameters:
-        - { name: period, in: query, schema: { type: string, example: "2026-11" } }
-      responses: { '200': { description: SPT Masa PPN summary } }
+        - {
+            name: period,
+            in: query,
+            schema: { type: string, example: "2026-11" },
+          }
+      responses: { "200": { description: SPT Masa PPN summary } }
   /api/v1/withholding-tax/calculate:
     post:
       tags: [Core Finance]
       summary: Calculate Indonesian withholding tax — PPh 21, PPh 23, PPh 26, PPh 4(2) — via exact fixed-point arithmetic (tax-service)
-      responses: { '200': { description: Withholding tax calculation } }
+      responses: { "200": { description: Withholding tax calculation } }
   /api/v1/bank-accounts/{id}/statements/import-csv:
     post:
       tags: [Core Finance]
       summary: Import BCA/Mandiri/generic CSV or MT940 bank statements into fixed-point statement lines (treasury-cashbank-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
-      responses: { '201': { description: Bank statement lines imported } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - { $ref: "#/components/parameters/IdempotencyKeyHeader" }
+      responses: { "201": { description: Bank statement lines imported } }
   /api/v1/bank-accounts/{id}/reconcile/manual:
     post:
       tags: [Core Finance]
       summary: Manually match or unmatch a bank statement line with audit outbox emission (treasury-cashbank-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
-      responses: { '200': { description: Manual reconciliation applied } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - { $ref: "#/components/parameters/IdempotencyKeyHeader" }
+      responses: { "200": { description: Manual reconciliation applied } }
   /api/v1/cash-position:
     get:
       tags: [Core Finance]
       summary: Multi-currency settled/pending cash position and 30/60/90-day cashflow forecast (treasury-cashbank-service)
-      responses: { '200': { description: Cash position and forecast } }
+      responses: { "200": { description: Cash position and forecast } }
   /api/v1/payments/export/disbursement:
     get:
       tags: [Core Finance]
       summary: Export batch bank disbursement CSV — BIFAST, LLG, SKN (treasury-cashbank-service)
       parameters:
-        - { name: format, in: query, schema: { type: string, enum: [BIFAST, LLG, SKN], default: BIFAST } }
-      responses: { '200': { description: Bank disbursement CSV } }
+        - {
+            name: format,
+            in: query,
+            schema: { type: string, enum: [BIFAST, LLG, SKN], default: BIFAST },
+          }
+      responses: { "200": { description: Bank disbursement CSV } }
   /api/v1/audit-events/export:
     get:
       tags: [Core Finance]
       summary: Export filtered immutable audit log events in CSV or JSON format (audit-service)
       parameters:
-        - { name: format, in: query, schema: { type: string, enum: [csv, json], default: json } }
+        - {
+            name: format,
+            in: query,
+            schema: { type: string, enum: [csv, json], default: json },
+          }
         - { name: from, in: query, schema: { type: string, format: date-time } }
         - { name: to, in: query, schema: { type: string, format: date-time } }
         - { name: entityType, in: query, schema: { type: string } }
         - { name: action, in: query, schema: { type: string } }
-        - { name: correlationId, in: query, schema: { type: string, format: uuid } }
-      responses: { '200': { description: Audit events export } }
+        - {
+            name: correlationId,
+            in: query,
+            schema: { type: string, format: uuid },
+          }
+      responses: { "200": { description: Audit events export } }
   /api/v1/audit-events/verify-chain:
     get:
       tags: [Core Finance]
       summary: Verify deterministic SHA-256 tamper-evident hash chain over org-scoped audit_log rows (audit-service)
-      responses: { '200': { description: Chain integrity report } }
+      responses: { "200": { description: Chain integrity report } }
 
   # ---- P2 / P3 Operations, HR & Payroll Endpoints ----
   /api/v1/purchase-orders/{id}/three-way-match:
@@ -844,140 +942,206 @@ paths:
       tags: [Operations]
       summary: Validate PO vs Goods Receipt vs AP Invoice quantity and unit-price tolerances (procurement-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-      responses: { '200': { description: Three-way match result and variances } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      responses:
+        { "200": { description: Three-way match result and variances } }
   /api/v1/goods-receipts/{id}/return-to-vendor:
     post:
       tags: [Operations]
       summary: Record return-to-vendor against a goods receipt (procurement-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
-      responses: { '201': { description: Return-to-vendor recorded } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - { $ref: "#/components/parameters/IdempotencyKeyHeader" }
+      responses: { "201": { description: Return-to-vendor recorded } }
   /api/v1/sales-quotations:
     get:
       tags: [Operations]
       summary: List sales quotations (sales-service)
-      responses: { '200': { description: Sales quotations } }
+      responses: { "200": { description: Sales quotations } }
     post:
       tags: [Operations]
       summary: Create sales quotation (sales-service)
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Sales quotation created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Sales quotation created } }
   /api/v1/sales-quotations/{id}/convert:
     post:
       tags: [Operations]
       summary: Convert sales quotation into a Draft Sales Order (sales-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
-      responses: { '201': { description: Sales order created from quotation } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - { $ref: "#/components/parameters/IdempotencyKeyHeader" }
+      responses: { "201": { description: Sales order created from quotation } }
   /api/v1/mrp-plan:
     post:
       tags: [Operations]
       summary: Run Material Requirements Planning (MRP) BOM explosion & net material shortage calculation (manufacturing-service)
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '200': { description: MRP plan and net requirements } }
-  /api/v1/work-orders/{id}/variance:
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "200": { description: MRP plan and net requirements } }
+  /api/v1/work-orders/{id}/cost-variance:
     get:
       tags: [Operations]
       summary: Compute Work Order standard vs actual cost variance analysis (manufacturing-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-      responses: { '200': { description: Work order cost variance } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      responses: { "200": { description: Work order cost variance } }
   /api/v1/payroll-runs/{id}/export/bank-csv:
     get:
       tags: [HR & Payroll]
       summary: Export BCA/Mandiri/BI-FAST payroll bank disbursement CSV (payroll-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-      responses: { '200': { description: Payroll bank disbursement CSV } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      responses: { "200": { description: Payroll bank disbursement CSV } }
   /api/v1/payroll-runs/{id}/export/ebupot:
     get:
       tags: [HR & Payroll]
       summary: Export DJP e-Bupot 1721-A1 CSV for payroll run (payroll-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-      responses: { '200': { description: DJP e-Bupot 1721-A1 CSV } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      responses: { "200": { description: DJP e-Bupot 1721-A1 CSV } }
   /api/v1/leave-requests:
     get:
       tags: [HR & Payroll]
       summary: List employee leave requests (hr-service)
-      responses: { '200': { description: Leave requests } }
+      responses: { "200": { description: Leave requests } }
     post:
       tags: [HR & Payroll]
       summary: Submit employee leave request (hr-service)
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Leave request created } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Leave request created } }
   /api/v1/leave-requests/{id}/approve:
     post:
       tags: [HR & Payroll]
       summary: Approve employee leave request (hr-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
-      responses: { '200': { description: Leave request approved } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - { $ref: "#/components/parameters/IdempotencyKeyHeader" }
+      responses: { "200": { description: Leave request approved } }
   /api/v1/attendance-logs:
     get:
       tags: [HR & Payroll]
       summary: List employee attendance check-in/check-out logs (hr-service)
-      responses: { '200': { description: Attendance logs } }
+      responses: { "200": { description: Attendance logs } }
     post:
       tags: [HR & Payroll]
       summary: Record employee attendance log (hr-service)
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '201': { description: Attendance log recorded } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "201": { description: Attendance log recorded } }
 
   # ---- P2 / P3 Extended Enterprise Endpoints ----
   /api/v1/fixed-assets/depreciate-batch:
     post:
       tags: [Extended Enterprise]
       summary: Run monthly batch depreciation across all Active fixed assets in org scope (fixedasset-service)
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKeyHeader' }]
-      responses: { '200': { description: Batch depreciation summary } }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKeyHeader" }]
+      responses: { "200": { description: Batch depreciation summary } }
   /api/v1/fixed-assets/{id}/transfer:
     post:
       tags: [Extended Enterprise]
       summary: Transfer fixed asset between organizations/locations/cost centers with audit outbox event (fixedasset-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
-      responses: { '200': { description: Fixed asset transferred } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - { $ref: "#/components/parameters/IdempotencyKeyHeader" }
+      responses: { "200": { description: Fixed asset transferred } }
   /api/v1/fixed-assets/{id}/revalue:
     post:
       tags: [Extended Enterprise]
       summary: Revalue fixed asset carrying amount under PSAK 16 / IAS 16 (fixedasset-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
-      responses: { '200': { description: Fixed asset revalued } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - { $ref: "#/components/parameters/IdempotencyKeyHeader" }
+      responses: { "200": { description: Fixed asset revalued } }
   /api/v1/consolidation-runs/{id}/generate-eliminations:
     post:
       tags: [Extended Enterprise]
       summary: Auto-generate intercompany elimination entries, NCI, and CTA for a consolidation run (consolidation-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
-      responses: { '200': { description: Eliminations generated } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - { $ref: "#/components/parameters/IdempotencyKeyHeader" }
+      responses: { "200": { description: Eliminations generated } }
   /api/v1/consolidation-runs/{id}/statements:
     get:
       tags: [Extended Enterprise]
       summary: Retrieve consolidated financial statements with intercompany eliminations, NCI, and CTA (consolidation-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-      responses: { '200': { description: Consolidated financial statements } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      responses: { "200": { description: Consolidated financial statements } }
   /api/v1/closing-runs/{id}/auto-reversals:
     post:
       tags: [Extended Enterprise]
       summary: Trigger accrual auto-reversal journals for the opening of the next fiscal period (financialclose-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { $ref: '#/components/parameters/IdempotencyKeyHeader' }
-      responses: { '200': { description: Auto-reversals generated } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+        - { $ref: "#/components/parameters/IdempotencyKeyHeader" }
+      responses: { "200": { description: Auto-reversals generated } }
   /api/v1/closing-runs/{id}/verify-subledgers:
     get:
       tags: [Extended Enterprise]
       summary: Verify AP, AR, Inventory, and Fixed Asset subledger reconciliation against GL control accounts (financialclose-service)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-      responses: { '200': { description: Subledger verification report } }
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      responses: { "200": { description: Subledger verification report } }

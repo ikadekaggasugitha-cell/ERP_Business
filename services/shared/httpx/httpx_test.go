@@ -315,3 +315,59 @@ func TestTieredAdminDelegationMatrix(t *testing.T) {
 		t.Fatal("non-admin must not delegate roles")
 	}
 }
+
+func TestSanitizeCSVCellAndWriteCSV(t *testing.T) {
+	if got := SanitizeCSVCell("-125000.50"); got != "-125000.50" {
+		t.Fatalf("expected valid negative decimal preserved, got %q", got)
+	}
+	for _, raw := range []string{"=CMD()", "+SUM(A1)", "-cmd", "@SUM(1)", "\tfoo"} {
+		if got := SanitizeCSVCell(raw); !strings.HasPrefix(got, "'") {
+			t.Fatalf("expected formula prefix neutralized for %q, got %q", raw, got)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	if err := WriteCSV(rec, "report.csv", []string{"Code", "Amount"}, [][]string{{"=evil", "-500.25"}}); err != nil {
+		t.Fatalf("WriteCSV error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "text/csv") {
+		t.Fatalf("unexpected content-type: %q", ct)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "'=evil,-500.25") {
+		t.Fatalf("unexpected CSV body: %q", body)
+	}
+}
+
+func TestMiddlewareSetsDefaultDeadlineAndParsePathUUID(t *testing.T) {
+	var hasDeadline bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /items/{id}", func(w http.ResponseWriter, r *http.Request) {
+		_, hasDeadline = r.Context().Deadline()
+		id, err := ParsePathUUID(r, "id")
+		if err != nil {
+			WriteError(w, r, err)
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]string{"id": id.String()})
+	})
+
+	h := Middleware(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/items/11111111-1111-1111-1111-111111111111", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !hasDeadline {
+		t.Fatalf("expected 200 and request deadline, got status=%d hasDeadline=%v", rec.Code, hasDeadline)
+	}
+
+	badReq := httptest.NewRequest(http.MethodGet, "/items/not-a-uuid", nil)
+	badRec := httptest.NewRecorder()
+	h.ServeHTTP(badRec, badReq)
+	if badRec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid path UUID, got %d", badRec.Code)
+	}
+}
