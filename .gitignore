@@ -5,13 +5,52 @@ dist/
 .pnpm-store/
 *.tsbuildinfo
 coverage/
+bin/
+*.exe
+*.out
+*.test
+*.coverprofile
+go.work
+go.work.sum
 
-# Environment & secrets
+# Testing & Playwright artifacts
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# Chrome extension packages
+*.zip
+*.crx
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Environment, secrets & local DB
 .env
 .env.*
 !.env.example
+*.key
+*.pem
+*.p12
+*.crt
+*.db
+*.sqlite
 
-# OS / editor / local tooling state
+# OS / editor / local AI tooling state
 .DS_Store
+._*
+Thumbs.db
 *.log
+tmp/
 .codebase-memory/
+.claude/
+.superpowers/
+.agents/teamwork/
+tasks/
+.cursor/
+.vscode/
+.idea/
