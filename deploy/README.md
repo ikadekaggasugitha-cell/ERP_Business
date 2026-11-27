@@ -34,6 +34,19 @@ Bring-up order (compose `depends_on`): `db(healthy) → bootstrap(30 DBs + roles
 - **Kong Gateway 3.x (`deploy/kong/kong.yml`)**: Declarative `_format_version: "3.0"` config with strict CORS, Redis-backed rate limiting, security response headers (HSTS/CSP/X-Frame-Options), `/openapi.yaml`, and SSE-safe `/api/v1/stream/events` (`response_buffering: false`).
 - **Observability (`deploy/observability/`)**: `prometheus.yml` (scrapes `api-gateway:8000` + all 30 microservices `/metrics`), `otel-collector.yaml` (OTLP gRPC/HTTP -> Tempo + Prometheus), `alert-rules.yml` (5xx >1%, P99 >500ms, outbox lag, DB pool saturation, CrashLoopBackOff), and `grafana-dashboard-erp.json`.
 
+## Pre-Deployment Gates
+
+```bash
+bash deploy/release-gate.sh prod      # fails on :latest, unset image tags, REPLACE_ME_DOMAIN, sslmode=disable
+bash deploy/verify-rls.sh             # RLS enforcement across all 30 databases (needs PG* env)
+```
+
+- **Images**: `release-images.yml` publishes `:<git-sha>` on every `main` push and `:<semver>` on `v*.*.*` tags. CI sets overlay tags with `kustomize edit set image`.
+- **Domains**: `*.REPLACE_ME_DOMAIN` in `deploy/k8s/base/ingress.yaml`, `api-gateway.yaml`, the staging overlay, and `deploy/kong/kong.yml` must be replaced before the first deployment.
+- **Kafka**: the cluster exposes TLS only (`9093`). Services read `KAFKA_TLS_ENABLED` and `KAFKA_TLS_CA_FILE`; Docker Compose keeps plaintext `broker:9092` for local development.
+- **Database TLS**: with `APP_ENV=production`, services refuse a DSN that allows plaintext.
+- **Security scans** (`security.yml`) are advisory; promote Critical/High to blocking after the first clean baseline.
+
 ## Services & ports (30 Go Microservices + `api-gateway`)
 
 | Domain | Service | Host Port | Emits / Role |

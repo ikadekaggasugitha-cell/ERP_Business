@@ -5,6 +5,7 @@ package eventbus
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,9 +49,26 @@ func CheckBrokers(ctx context.Context, brokers []string) error {
 		return nil
 	}
 	var lastErr error
+	tlsCfg, err := loadTLSConfig()
+	if err != nil {
+		return fmt.Errorf("kafka tls config: %w", err)
+	}
 	dialer := net.Dialer{Timeout: 2 * time.Second}
 	for _, b := range brokers {
-		conn, err := dialer.DialContext(ctx, "tcp", strings.TrimSpace(b))
+		addr := strings.TrimSpace(b)
+		var (
+			conn net.Conn
+			err  error
+		)
+		if tlsCfg != nil {
+			cfg := tlsCfg.Clone()
+			if host, _, splitErr := net.SplitHostPort(addr); splitErr == nil {
+				cfg.ServerName = host
+			}
+			conn, err = (&tls.Dialer{NetDialer: &dialer, Config: cfg}).DialContext(ctx, "tcp", addr)
+		} else {
+			conn, err = dialer.DialContext(ctx, "tcp", addr)
+		}
 		if err == nil {
 			_ = conn.Close()
 			return nil
@@ -69,6 +87,7 @@ func NewPublisher(brokers []string) *Publisher {
 		Addr:                   kafka.TCP(brokers...),
 		Balancer:               &kafka.Hash{}, // partition by key (organization/aggregate)
 		AllowAutoTopicCreation: true,
+		Transport:              newTransport(),
 		RequiredAcks:           kafka.RequireAll, // acks=all (SDD 6.3)
 		MaxAttempts:            5,
 		BatchSize:              1,
@@ -137,6 +156,7 @@ func NewConsumer(brokers []string, groupID string, topics []string) *Consumer {
 	return &Consumer{
 		r: kafka.NewReader(kafka.ReaderConfig{
 			Brokers:     brokers,
+			Dialer:      newDialer(),
 			GroupID:     groupID,
 			GroupTopics: topics,
 			MinBytes:    1,
@@ -146,6 +166,7 @@ func NewConsumer(brokers []string, groupID string, topics []string) *Consumer {
 			Addr:                   kafka.TCP(brokers...),
 			Balancer:               &kafka.Hash{},
 			AllowAutoTopicCreation: true,
+			Transport:              newTransport(),
 			RequiredAcks:           kafka.RequireAll,
 		},
 	}

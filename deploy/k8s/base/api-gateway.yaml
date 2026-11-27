@@ -49,11 +49,11 @@ spec:
             - name: DEV_AUTH_ALLOW_ANON
               value: "false"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: CORS_ALLOWED_ORIGINS
-              value: "https://app.erp.example"
+              value: "https://app.REPLACE_ME_DOMAIN"
             - name: CORS_ALLOW_CHROME_EXTENSIONS
               value: "false"
             - name: GATEWAY_HMAC_SECRET

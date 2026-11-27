@@ -1,0 +1,110 @@
+name: release-images
+
+# Every push to main builds immutable :<git-sha> images (staging).
+# A v* tag additionally publishes :<semver> (production). Nothing is deployed from here.
+on:
+  push:
+    branches: [main]
+    paths: ["services/**", "apps/web-spa/**", ".github/workflows/release-images.yml"]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-images-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/sinergiinvestasiproperti
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: web-spa, context: apps/web-spa, service: "" }
+          - { name: api-gateway, context: services, service: api-gateway }
+          - { name: gl-service, context: services, service: gl-service }
+          - { name: ap-service, context: services, service: ap-service }
+          - { name: audit-service, context: services, service: audit-service }
+          - { name: ar-service, context: services, service: ar-service }
+          - { name: coa-service, context: services, service: coa-service }
+          - { name: tax-service, context: services, service: tax-service }
+          - { name: treasury-cashbank-service, context: services, service: treasury-cashbank-service }
+          - { name: user-service, context: services, service: user-service }
+          - { name: security-service, context: services, service: security-service }
+          - { name: masterdata-service, context: services, service: masterdata-service }
+          - { name: org-service, context: services, service: org-service }
+          - { name: workflow-service, context: services, service: workflow-service }
+          - { name: procurement-service, context: services, service: procurement-service }
+          - { name: inventory-service, context: services, service: inventory-service }
+          - { name: manufacturing-service, context: services, service: manufacturing-service }
+          - { name: sales-service, context: services, service: sales-service }
+          - { name: hr-service, context: services, service: hr-service }
+          - { name: payroll-service, context: services, service: payroll-service }
+          - { name: reporting-service, context: services, service: reporting-service }
+          - { name: currency-service, context: services, service: currency-service }
+          - { name: dimension-service, context: services, service: dimension-service }
+          - { name: localization-service, context: services, service: localization-service }
+          - { name: fixedasset-service, context: services, service: fixedasset-service }
+          - { name: budget-service, context: services, service: budget-service }
+          - { name: financialclose-service, context: services, service: financialclose-service }
+          - { name: consolidation-service, context: services, service: consolidation-service }
+          - { name: project-service, context: services, service: project-service }
+          - { name: asset-service, context: services, service: asset-service }
+          - { name: maintenance-service, context: services, service: maintenance-service }
+          - { name: crm-service, context: services, service: crm-service }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/erp-${{ matrix.name }}
+          tags: |
+            type=sha,format=long,prefix=
+            type=semver,pattern={{version}}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.service != '' && 'services/Dockerfile' || 'apps/web-spa/Dockerfile' }}
+          build-args: ${{ matrix.service != '' && format('SERVICE={0}', matrix.service) || '' }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign image by digest (keyless)
+        run: cosign sign --yes "${REGISTRY}/erp-${{ matrix.name }}@${{ steps.build.outputs.digest }}"
+
+  # Advisory until a real domain is configured: the gate is expected to fail on REPLACE_ME_DOMAIN.
+  release-gate:
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render prod overlay with this build's tag and run the gate
+        run: |
+          cd deploy/k8s/overlays/prod
+          tag="${GITHUB_REF_NAME#v}"
+          [ "${GITHUB_REF_TYPE}" = "tag" ] || tag="${GITHUB_SHA}"
+          for img in $(grep -oE 'ghcr\.io/[^ ]+erp-[a-z-]+' kustomization.yaml | sort -u); do
+            kustomize edit set image "${img}=${img}:${tag}"
+          done
+          cd -
+          bash deploy/release-gate.sh prod

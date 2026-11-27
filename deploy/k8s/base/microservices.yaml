@@ -61,7 +61,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/gl_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -205,7 +205,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/ap_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -349,7 +349,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/audit_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -493,7 +493,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/ar_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -637,7 +637,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/coa_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -781,7 +781,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/tax_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -925,7 +925,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/treasury_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -1069,7 +1069,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/user_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -1213,7 +1213,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/security_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -1357,7 +1357,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/masterdata_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -1501,7 +1501,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/org_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -1645,7 +1645,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/workflow_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -1789,7 +1789,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/procurement_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -1933,7 +1933,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/inventory_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -2077,7 +2077,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/manufacturing_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -2221,7 +2221,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/sales_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -2365,7 +2365,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/hr_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -2519,7 +2519,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/payroll_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -2673,7 +2673,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/reporting_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -2817,7 +2817,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/currency_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -2961,7 +2961,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/fixedasset_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -3105,7 +3105,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/dimension_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -3249,7 +3249,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/budget_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -3393,7 +3393,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/financialclose_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -3537,7 +3537,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/consolidation_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -3681,7 +3681,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/project_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -3825,7 +3825,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/asset_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -3969,7 +3969,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/maintenance_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -4113,7 +4113,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/crm_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET
@@ -4257,7 +4257,7 @@ spec:
             - name: DATABASE_URL
               value: "postgres://$(ERP_APP_USER):$(ERP_APP_PASSWORD)@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/localization_db?sslmode=require"
             - name: KAFKA_BROKERS
-              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9092"
+              value: "erp-kafka-kafka-bootstrap.erp-platform.svc.cluster.local:9093"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://otel-collector.monitoring.svc.cluster.local:4318"
             - name: GATEWAY_HMAC_SECRET

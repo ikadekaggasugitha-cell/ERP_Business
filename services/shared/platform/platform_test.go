@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestDecimalParseFormatAndSum(t *testing.T) {
@@ -74,3 +75,30 @@ func TestClassifyPGErrorAndEmptyScope(t *testing.T) {
 	}
 }
 
+func TestRequireTLSInProduction(t *testing.T) {
+	cases := []struct {
+		name    string
+		env     string
+		dsn     string
+		wantErr bool
+	}{
+		{"dev allows disable", "development", "postgres://u@h:5432/db?sslmode=disable", false},
+		{"prod rejects disable", "production", "postgres://u@h:5432/db?sslmode=disable", true},
+		{"prod rejects prefer", "production", "postgres://u@h:5432/db?sslmode=prefer", true},
+		{"prod rejects allow", "production", "postgres://u@h:5432/db?sslmode=allow", true},
+		{"prod accepts require", "production", "postgres://u@h:5432/db?sslmode=require", false},
+		{"prod accepts verify-full", "production", "postgres://u@h:5432/db?sslmode=verify-full", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("APP_ENV", tc.env)
+			cfg, err := pgxpool.ParseConfig(tc.dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := requireTLSInProduction(cfg); (got != nil) != tc.wantErr {
+				t.Fatalf("wantErr=%v got=%v", tc.wantErr, got)
+			}
+		})
+	}
+}

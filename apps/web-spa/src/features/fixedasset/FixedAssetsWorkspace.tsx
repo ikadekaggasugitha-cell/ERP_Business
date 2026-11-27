@@ -77,7 +77,7 @@ export function FixedAssetsWorkspace() {
   const depreciate = useDepreciateAssetMutation();
   const dispose = useDisposeAssetMutation();
 
-  const assets = assetsQ.data?.items ?? [];
+  const assets = React.useMemo(() => assetsQ.data?.items ?? [], [assetsQ.data]);
   const categories = categoriesQ.data?.items ?? [];
 
   const totals = React.useMemo(() => {

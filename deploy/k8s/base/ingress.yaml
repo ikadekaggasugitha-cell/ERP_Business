@@ -1,0 +1,84 @@
+# Kong (ingress-kong namespace, see networkpolicies.yaml) is the single edge: ingress controller + API gateway.
+# Hosts carry the REPLACE_ME_DOMAIN marker; each overlay sets its own and deploy/release-gate.sh blocks
+# a release while the marker is still present.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: erp-edge
+  namespace: erp-platform
+  annotations:
+    kubernetes.io/ingress.class: kong
+    konghq.com/protocols: https
+    konghq.com/https-redirect-status-code: "308"
+    konghq.com/strip-path: "false"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: kong
+  tls:
+    - secretName: erp-edge-tls
+      hosts:
+        - app.REPLACE_ME_DOMAIN
+        - api.REPLACE_ME_DOMAIN
+  rules:
+    - host: app.REPLACE_ME_DOMAIN
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-spa
+                port:
+                  number: 8080
+    - host: api.REPLACE_ME_DOMAIN
+      http:
+        paths:
+          - path: /api/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8000
+---
+# SSE needs unbuffered responses and long timeouts; applied to the stream route only.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: erp-edge-sse
+  namespace: erp-platform
+  annotations:
+    kubernetes.io/ingress.class: kong
+    konghq.com/protocols: https
+    konghq.com/strip-path: "false"
+    konghq.com/override: erp-sse-buffering-off
+    konghq.com/read-timeout: "3600000"
+    konghq.com/write-timeout: "3600000"
+    konghq.com/connect-timeout: "5000"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: kong
+  tls:
+    - secretName: erp-edge-tls
+      hosts:
+        - api.REPLACE_ME_DOMAIN
+  rules:
+    - host: api.REPLACE_ME_DOMAIN
+      http:
+        paths:
+          - path: /api/v1/stream/events
+            pathType: Exact
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8000
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongIngress
+metadata:
+  name: erp-sse-buffering-off
+  namespace: erp-platform
+route:
+  response_buffering: false
+  request_buffering: false

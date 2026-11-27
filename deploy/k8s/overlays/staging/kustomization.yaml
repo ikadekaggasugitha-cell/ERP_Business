@@ -11,6 +11,72 @@ labels:
       app.kubernetes.io/environment: staging
     includeSelectors: false
 
+images:
+  - name: ghcr.io/sinergiinvestasiproperti/erp-ap-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-api-gateway
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-ar-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-asset-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-audit-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-budget-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-coa-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-consolidation-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-crm-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-currency-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-dimension-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-financialclose-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-fixedasset-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-gl-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-hr-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-inventory-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-localization-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-maintenance-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-manufacturing-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-masterdata-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-org-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-payroll-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-procurement-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-project-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-reporting-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-sales-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-security-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-tax-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-treasury-cashbank-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-user-service
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-web-spa
+    newTag: "0.0.0-unset"
+  - name: ghcr.io/sinergiinvestasiproperti/erp-workflow-service
+    newTag: "0.0.0-unset"
+
 patches:
   - target:
       kind: Namespace
@@ -47,3 +113,42 @@ patches:
       - op: replace
         path: /spec/replicas
         value: 1
+  - target:
+      kind: Ingress
+      name: erp-edge
+    patch: |-
+      - op: replace
+        path: /spec/tls/0/hosts
+        value: [app.staging.REPLACE_ME_DOMAIN, api.staging.REPLACE_ME_DOMAIN]
+      - op: replace
+        path: /spec/rules/0/host
+        value: app.staging.REPLACE_ME_DOMAIN
+      - op: replace
+        path: /spec/rules/1/host
+        value: api.staging.REPLACE_ME_DOMAIN
+  - target:
+      kind: Ingress
+      name: erp-edge-sse
+    patch: |-
+      - op: replace
+        path: /spec/tls/0/hosts
+        value: [api.staging.REPLACE_ME_DOMAIN]
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.staging.REPLACE_ME_DOMAIN
+  - target:
+      kind: Deployment
+      name: api-gateway
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: api-gateway
+      spec:
+        template:
+          spec:
+            containers:
+              - name: api-gateway
+                env:
+                  - name: CORS_ALLOWED_ORIGINS
+                    value: "https://app.staging.REPLACE_ME_DOMAIN"

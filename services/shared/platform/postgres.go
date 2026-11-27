@@ -71,6 +71,9 @@ func New(ctx context.Context, dsn string) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse dsn: %w", err)
 	}
+	if err := requireTLSInProduction(cfg); err != nil {
+		return nil, err
+	}
 	cfg.MaxConns = envInt32("DATABASE_MAX_OPEN_CONNS", 5)
 	cfg.MinConns = envInt32("DATABASE_MIN_CONNS", 1)
 	cfg.MaxConnLifetime = envDuration("DATABASE_CONN_MAX_LIFETIME", time.Hour)
@@ -86,6 +89,24 @@ func New(ctx context.Context, dsn string) (*DB, error) {
 	db := &DB{Pool: pool}
 	defaultDB.Store(db)
 	return db, nil
+}
+
+// requireTLSInProduction makes a production service refuse to start on a plaintext
+// database connection. The localhost sslmode=disable fallback baked into each
+// service main.go is therefore only usable outside APP_ENV=production.
+func requireTLSInProduction(cfg *pgxpool.Config) error {
+	if !strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production") {
+		return nil
+	}
+	if cfg.ConnConfig.TLSConfig == nil {
+		return errors.New("refusing plaintext database connection in production: set DATABASE_URL with sslmode=require or stricter")
+	}
+	for _, fb := range cfg.ConnConfig.Fallbacks {
+		if fb.TLSConfig == nil {
+			return errors.New("refusing database sslmode that allows plaintext fallback in production (use sslmode=require, verify-ca or verify-full)")
+		}
+	}
+	return nil
 }
 
 func envInt32(key string, fallback int32) int32 {

@@ -57,7 +57,7 @@ export function CrmWorkspace() {
   const transitionCase = useTransitionSupportCaseMutation();
 
   const leads = leadsQ.data?.items ?? [];
-  const opportunities = oppsQ.data?.items ?? [];
+  const opportunities = React.useMemo(() => oppsQ.data?.items ?? [], [oppsQ.data]);
   const segments = segsQ.data?.items ?? [];
   const cases = casesQ.data?.items ?? [];
 

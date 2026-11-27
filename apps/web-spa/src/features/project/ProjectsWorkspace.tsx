@@ -54,7 +54,7 @@ export function ProjectsWorkspace() {
   const approveBilling = useApproveProjectBillingMutation();
 
   const projects = projectsQ.data?.items ?? [];
-  const billings = billingsQ.data?.items ?? [];
+  const billings = React.useMemo(() => billingsQ.data?.items ?? [], [billingsQ.data]);
 
   const totalBilling = React.useMemo(
     () => billings.reduce((acc, b) => addDecimals(acc, b.amount, 4), '0'),

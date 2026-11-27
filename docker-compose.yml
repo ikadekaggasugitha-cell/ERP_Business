@@ -1,3 +1,5 @@
+# LOCAL DEVELOPMENT ONLY: credential defaults (postgres/app) and the plaintext Kafka listener
+# are for a laptop. Copy .env.example to .env to override. Production is deployed via deploy/k8s.
 name: erp-slice
 
 x-service-base: &service-base

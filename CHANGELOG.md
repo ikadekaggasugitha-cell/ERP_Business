@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (pre-deployment hardening)
+- **Release pipeline**: `.github/workflows/release-images.yml` builds and signs (Cosign keyless, provenance + SBOM) all 32 images to `ghcr.io/sinergiinvestasiproperti` with an immutable `:<git-sha>` tag on every `main` push and `:<semver>` on `v*.*.*` tags. New `apps/web-spa/Dockerfile` + `nginx.conf` (non-root, read-only rootfs, port 8080).
+- **Image pinning**: `staging`/`prod` overlays pin all 32 images (`0.0.0-unset` until CI sets the tag). `deploy/release-gate.sh` fails on `:latest`, unset tags, `REPLACE_ME_DOMAIN`, `erp.example`, or `sslmode=disable`.
+- **Edge**: `deploy/k8s/base/ingress.yaml` (Kong ingress class, TLS via cert-manager, unbuffered SSE route). Domains are `REPLACE_ME_DOMAIN` placeholders until a real domain exists.
+- **Go 1.25** across all 32 `go.mod`, `services/Dockerfile` (`golang:1.25-alpine`), and CI. `wget` package dropped from the runtime image.
+- **Kafka TLS-only**: removed the plain `9092` listener from the cluster and NetworkPolicies; every service/gateway uses `9093` with `KAFKA_TLS_ENABLED=true` and the Strimzi cluster CA mounted at `/etc/kafka/ca`. `services/shared/eventbus` gained opt-in TLS (fails closed on a bad CA). `docker-compose.yml` keeps plaintext `broker:9092` for local development.
+- **Production fail-fast**: `platform.New` refuses to start with `APP_ENV=production` unless the database DSN enforces TLS (`require`/`verify-*`).
+- Frontend: stabilised four `useMemo` dependency warnings (budget, crm, fixedasset, project workspaces).
+
+### Added (pre-deployment hardening)
+- `.github/workflows/security.yml`: govulncheck, `pnpm audit`, Trivy config + fs/secret scans. **Advisory** (non-blocking) until baseline findings are triaged.
+- `db/ops/verify_rls.sql` + `deploy/verify-rls.sh`: gate on non-bypass app roles, app not owning tables, RLS on every `organization_id` table (including new partitions), and no policy-less RLS tables.
+- `.env.example` for local development credentials.
+
 ### Added
 - **P1–P3 Enterprise Feature Completeness, Analytics & Operations**:
   - **Core Finance & Compliance (`reporting`, `ap`, `ar`, `tax`, `coa`, `gl`, `treasury`, `payroll`, `audit`)**: Structured Financial Statements (`GET /financial-statements/{income-statement,balance-sheet,cash-flow}` + CSV), AP/AR Aging & Debit/Credit Notes & Write-Offs, DJP e-Faktur CSV & SPT Masa PPN & Withholding Tax PPh 21/23/26/4(2) & e-Bupot 1721-A1 export, CoA hierarchy rollup, GL FX Revaluation & Recurring Journals, Treasury CSV import / manual reconcile / cash position / BI-FAST-LLG-SKN disbursement export, Payroll bank CSV export, and Audit CSV/JSON export + SHA-256 tamper-evident hash-chain verification.

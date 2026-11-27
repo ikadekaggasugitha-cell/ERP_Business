@@ -69,8 +69,8 @@ services:
       - name: cors
         config:
           origins:
-            - https://app.erp.example
-            - https://admin.erp.example
+            - https://app.REPLACE_ME_DOMAIN
+            - https://admin.REPLACE_ME_DOMAIN
           methods:
             - GET
             - POST
@@ -141,8 +141,8 @@ services:
       - name: cors
         config:
           origins:
-            - https://app.erp.example
-            - https://admin.erp.example
+            - https://app.REPLACE_ME_DOMAIN
+            - https://admin.REPLACE_ME_DOMAIN
           methods:
             - GET
             - OPTIONS
@@ -181,4 +181,4 @@ services:
               - "Strict-Transport-Security: max-age=63072000; includeSubDomains; preload"
               - "X-Content-Type-Options: nosniff"
               - "X-Frame-Options: DENY"
-              - "Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.erp.example; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+              - "Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.REPLACE_ME_DOMAIN; img-src 'self' data:; style-src 'self' 'unsafe-inline'"

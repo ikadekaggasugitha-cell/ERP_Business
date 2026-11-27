@@ -67,7 +67,7 @@ export function BudgetsWorkspace() {
 
   const budgets = budgetsQ.data?.items ?? [];
   const policies = policiesQ.data?.items ?? [];
-  const commitments = commitmentsQ.data?.items ?? [];
+  const commitments = React.useMemo(() => commitmentsQ.data?.items ?? [], [commitmentsQ.data]);
 
   const totalCommitted = React.useMemo(
     () => commitments.reduce((acc, c) => addDecimals(acc, c.committedAmount, 4), '0'),

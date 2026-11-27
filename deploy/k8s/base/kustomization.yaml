@@ -17,5 +17,38 @@ resources:
   - external-secrets.yaml
   - api-gateway.yaml
   - web-spa.yaml
+  - ingress.yaml
   - microservices.yaml
   - maintenance-cronjobs.yaml
+
+# Kafka is TLS-only (listener 9093). Every service/gateway trusts the Strimzi cluster CA.
+patches:
+  - target:
+      kind: Deployment
+      labelSelector: "app.kubernetes.io/component in (microservice,gateway)"
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes
+        value:
+          - name: kafka-cluster-ca
+            secret:
+              secretName: erp-kafka-cluster-ca-cert
+              items:
+                - key: ca.crt
+                  path: ca.crt
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts
+        value:
+          - name: kafka-cluster-ca
+            mountPath: /etc/kafka/ca
+            readOnly: true
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: KAFKA_TLS_ENABLED
+          value: "true"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: KAFKA_TLS_CA_FILE
+          value: /etc/kafka/ca/ca.crt

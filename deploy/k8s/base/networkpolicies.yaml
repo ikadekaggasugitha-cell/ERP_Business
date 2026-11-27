@@ -107,7 +107,7 @@ spec:
         - protocol: TCP
           port: 8080
 ---
-# Allow api-gateway egress -> microservices (:8080), Kafka (:9092/9093), OTel (:4318), Redis (:6379), OIDC HTTPS (:443)
+# Allow api-gateway egress -> microservices (:8080), Kafka (TLS :9093), OTel (:4318), Redis (:6379), OIDC HTTPS (:443)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -133,8 +133,6 @@ spec:
               strimzi.io/cluster: erp-kafka
       ports:
         - protocol: TCP
-          port: 9092
-        - protocol: TCP
           port: 9093
     - to:
         - namespaceSelector:
@@ -149,7 +147,7 @@ spec:
         - protocol: TCP
           port: 6379
 ---
-# Allow microservices egress -> PostgreSQL/PgBouncer (:5432), Kafka (:9092/9093), OTel (:4318)
+# Allow microservices egress -> PostgreSQL/PgBouncer (:5432), Kafka (TLS :9093), OTel (:4318)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -181,8 +179,6 @@ spec:
             matchLabels:
               strimzi.io/cluster: erp-kafka
       ports:
-        - protocol: TCP
-          port: 9092
         - protocol: TCP
           port: 9093
     - to:
@@ -221,7 +217,5 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
-        - protocol: TCP
-          port: 9092
         - protocol: TCP
           port: 9093
