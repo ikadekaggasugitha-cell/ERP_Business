@@ -105,7 +105,7 @@ Indonesian
 
 ## Privacy Policy
 
-**Privacy Policy URL**: `https://erp.sinergi.example.com/privacy-policy`
+**Privacy Policy URL**: `https://erp.sinergi.example.com/privacy`
 
 ### Ringkasan Kebijakan
 1. Seluruh pertukaran data hanya terjadi antara browser pengguna dan gateway ERP internal perusahaan (`api.erp.example`) via HTTPS.
@@ -144,5 +144,8 @@ Indonesian
 ## Review Notes
 
 ### Packaging Checklist
-- Jangan sertakan `CHROMEWEBSTORE.md`, `README.md`, `.git/`, atau `screenshots/` saat membuat arsip `.zip` untuk upload ke Chrome Web Store Developer Console.
-- Sebelum rilis produksi ke Chrome Web Store Enterprise, hapus origin `http://localhost:*` dari `host_permissions` atau dokumentasikan jika tetap dipertahankan untuk staging internal, serta tambahkan field `"key"` di `manifest.json` bila ingin ID ekstensi konsisten dengan konfigurasi OAuth Client `chrome.identity`.
+- Jalankan skrip produksi `node scripts/package-prod.mjs` untuk menghasilkan paket Chrome Web Store bersih tanpa `http://localhost:*` di `host_permissions` maupun `content_scripts[].matches`, sekaligus memvalidasi field wajib Manifest V3:
+  - Dry-run validasi: `node scripts/package-prod.mjs --dry-run`
+  - Build produksi (default origin `https://erp.sinergi.example.com/*`): `node scripts/package-prod.mjs --origin https://erp.sinergi.example.com/* --out dist-prod`
+- Skrip otomatis mengecualikan `CHROMEWEBSTORE.md`, `README.md`, `test/`, `scripts/`, `package.json`, `node_modules/`, `.git/`, dan `screenshots/` dari direktori output produksi sebelum diarsipkan ke `.zip` untuk upload ke Chrome Web Store Developer Console.
+- Tambahkan field `"key"` di `manifest.json` bila ingin ID ekstensi konsisten dengan konfigurasi OAuth Client `chrome.identity` (OIDC PKCE).

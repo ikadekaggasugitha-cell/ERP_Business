@@ -15,7 +15,14 @@ const stagingTables = [
   "stg_fixed_assets_cdc",
   "stg_budgets_cdc",
   "stg_projects_cdc",
-  "stg_crm_opportunities_cdc"
+  "stg_crm_opportunities_cdc",
+  "stg_ap_vendor_invoice_cdc",
+  "stg_ar_customer_invoice_cdc",
+  "stg_tax_invoice_cdc",
+  "stg_treasury_payment_cdc",
+  "stg_procurement_po_cdc",
+  "stg_manufacturing_wo_cdc",
+  "stg_payroll_run_cdc"
 ];
 
 stagingTables.forEach((tableName) => {

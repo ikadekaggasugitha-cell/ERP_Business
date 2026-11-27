@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sinergiinvestasiproperti/erp/services/procurement-service/internal/consumer"
 	"github.com/sinergiinvestasiproperti/erp/services/procurement-service/internal/httpapi"
 	"github.com/sinergiinvestasiproperti/erp/services/procurement-service/internal/mdcache"
 	"github.com/sinergiinvestasiproperti/erp/services/procurement-service/internal/repository"
@@ -35,6 +36,7 @@ func main() {
 	var wg sync.WaitGroup
 	var pub *eventbus.Publisher
 	var mdc *mdcache.Consumer
+	var wfc *consumer.Consumer
 	if len(brokers) > 0 {
 		pub = eventbus.NewPublisher(brokers)
 		wg.Add(1)
@@ -53,6 +55,16 @@ func main() {
 			log.Printf("procurement mdcache consumer <- kafka %v topics=%v", brokers, mdcache.Topics)
 			if err := mdc.Run(ctx); err != nil {
 				log.Printf("mdcache consumer stopped: %v", err)
+			}
+		}()
+
+		wfc = consumer.New(repo, brokers)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			log.Printf("procurement workflow consumer <- kafka %v topics=%v", brokers, consumer.Topics)
+			if err := wfc.Run(ctx); err != nil {
+				log.Printf("workflow consumer stopped: %v", err)
 			}
 		}()
 	}
@@ -81,6 +93,9 @@ func main() {
 		}
 		if mdc != nil {
 			_ = mdc.Close()
+		}
+		if wfc != nil {
+			_ = wfc.Close()
 		}
 	})
 }

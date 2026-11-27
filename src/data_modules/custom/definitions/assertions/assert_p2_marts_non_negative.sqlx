@@ -1,0 +1,46 @@
+config {
+  type: "assertion",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["assertion", "cortex_v7", "p2_marts"],
+  description: "Verify non-negative monetary and quantity metrics across all 7 P2 domain fact marts"
+}
+
+SELECT 'fact_ap_aging' AS mart, invoice_id AS record_id, 'negative_outstanding_or_total' AS violation
+FROM ${ref("fact_ap_aging")}
+WHERE total_amount_tc < 0 OR paid_amount_tc < 0 OR outstanding_amount_tc < 0
+
+UNION ALL
+
+SELECT 'fact_ar_aging' AS mart, invoice_id AS record_id, 'negative_outstanding_or_total' AS violation
+FROM ${ref("fact_ar_aging")}
+WHERE total_amount_tc < 0 OR paid_amount_tc < 0 OR outstanding_amount_tc < 0
+
+UNION ALL
+
+SELECT 'fact_tax_ppn' AS mart, tax_invoice_id AS record_id, 'negative_dpp_or_ppn' AS violation
+FROM ${ref("fact_tax_ppn")}
+WHERE dpp_amount < 0 OR ppn_amount < 0
+
+UNION ALL
+
+SELECT 'fact_cash_position' AS mart, payment_id AS record_id, 'negative_cash_flow' AS violation
+FROM ${ref("fact_cash_position")}
+WHERE inflow_amount_tc < 0 OR outflow_amount_tc < 0 OR gross_cash_amount_pc < 0
+
+UNION ALL
+
+SELECT 'fact_procurement_spend' AS mart, purchase_order_id AS record_id, 'negative_spend' AS violation
+FROM ${ref("fact_procurement_spend")}
+WHERE spend_amount_tc < 0 OR spend_amount_pc < 0
+
+UNION ALL
+
+SELECT 'fact_manufacturing_yield' AS mart, work_order_id AS record_id, 'negative_qty' AS violation
+FROM ${ref("fact_manufacturing_yield")}
+WHERE planned_qty < 0 OR produced_qty < 0 OR shortfall_qty < 0
+
+UNION ALL
+
+SELECT 'fact_payroll_cost' AS mart, payroll_run_id AS record_id, 'negative_payroll_cost' AS violation
+FROM ${ref("fact_payroll_cost")}
+WHERE total_gross < 0 OR total_tax_pph21 < 0 OR total_net < 0 OR total_employer_cost < 0 OR employee_count < 0

@@ -46,21 +46,44 @@
         <div class="section-title">Asisten e-Faktur &amp; DJP Online</div>
         <div class="card">
           <div class="card-status status-info">Portal Pajak Resmi (pajak.go.id)</div>
-          <p class="card-desc">Buka halaman penerbitan faktur di DJP Online, lalu injeksikan data faktur ERP ke formulir aktif.</p>
+          <p class="card-desc">Muat faktur pajak langsung dari <code>tax-service</code> ERP, injeksikan ke formulir DJP Online, lalu laporkan NSFP/NTTE kembali ke ERP.</p>
+          <div id="taxInvoiceState" class="tax-state-banner" role="status">Memuat faktur pajak dari tax-service...</div>
           <div class="form-group">
-            <label for="invoiceSelect">Pilih Faktur Penjualan:</label>
-            <select id="invoiceSelect" class="select-input">
-              <option value="INV-2026-0089">INV-2026-0089 (PT Maju Bersama) — Rp 165.000.000</option>
-              <option value="INV-2026-0090">INV-2026-0090 (CV Mandiri Jaya) — Rp 42.500.000</option>
+            <label for="invoiceSelect">Pilih Faktur Pajak (Live tax-service):</label>
+            <select id="invoiceSelect" class="select-input" disabled>
+              <option value="">— Belum ada faktur pajak dimuat —</option>
             </select>
           </div>
           <div class="btn-stack">
-            <button id="injectTaxBtn" class="primary-btn" type="button">
+            <button id="reloadTaxInvoicesBtn" class="secondary-btn" type="button">
+              Muat Ulang Faktur Pajak (tax-service)
+            </button>
+            <button id="injectTaxBtn" class="primary-btn" type="button" disabled>
               Injeksi Data ke Halaman Aktif
             </button>
             <button id="scanFieldsBtn" class="secondary-btn" type="button">
               Pindai Kolom Formulir DJP
             </button>
+          </div>
+
+          <div class="tax-report-section">
+            <div class="section-subtitle">Pelaporan Konfirmasi DJP (REPORT_TAX_INVOICE)</div>
+            <div class="form-group">
+              <label for="efakturNoInput">Nomor e-Faktur / NSFP:</label>
+              <input id="efakturNoInput" type="text" class="text-input" placeholder="010.000-26.00000001">
+            </div>
+            <div class="form-group">
+              <label for="ntteInput">NTTE (Opsional):</label>
+              <input id="ntteInput" type="text" class="text-input" placeholder="NTTE konfirmasi DJP Online">
+            </div>
+            <div class="btn-stack">
+              <button id="extractConfirmationBtn" class="secondary-btn" type="button">
+                Ambil NSFP &amp; NTTE dari Tab DJP
+              </button>
+              <button id="reportTaxBtn" class="primary-btn" type="button" disabled>
+                Laporkan e-Faktur ke ERP
+              </button>
+            </div>
           </div>
         </div>
 
@@ -98,11 +121,11 @@
         <div class="status-box">
           <div class="status-row">
             <span>Gateway API:</span>
-            <span class="status-value green">Terhubung (Kong)</span>
+            <span id="gatewayStatusLabel" class="status-value">Memeriksa...</span>
           </div>
           <div class="status-row">
-            <span>Sesi OIDC:</span>
-            <span class="status-value green">Aktif (PKCE)</span>
+            <span>Sesi Autentikasi:</span>
+            <span id="authSessionStatusLabel" class="status-value">Belum Login</span>
           </div>
           <div class="status-row">
             <span>Entitas Cabang:</span>
@@ -118,7 +141,7 @@
           </div>
         </div>
 
-        <div class="section-title section-spacing">Konfigurasi Gateway</div>
+        <div class="section-title section-spacing">Konfigurasi Gateway &amp; Token Bearer</div>
         <div class="card">
           <div class="form-group">
             <label for="apiUrlInput">URL Kong API Gateway:</label>
@@ -128,7 +151,33 @@
             <label for="orgIdInput">Organization Scope ID (RLS):</label>
             <input id="orgIdInput" type="text" class="text-input" placeholder="11111111-1111-1111-1111-111111111111">
           </div>
-          <button id="saveSettingsBtn" class="primary-btn" type="button">Simpan Konfigurasi</button>
+          <div class="form-group">
+            <label for="bearerTokenInput">Manual Bearer Token (Disimpan di Sesi):</label>
+            <input id="bearerTokenInput" type="password" class="text-input" autocomplete="off" placeholder="Tempel JWT Bearer token...">
+            <div id="tokenStatusHint" class="field-hint">Belum ada token aktif.</div>
+          </div>
+          <div class="btn-stack">
+            <button id="saveSettingsBtn" class="primary-btn" type="button">Simpan Konfigurasi &amp; Token</button>
+            <button id="clearTokenBtn" class="danger-outline-btn" type="button">Hapus Token Sesi</button>
+          </div>
+        </div>
+
+        <div class="section-title section-spacing">Login SSO OIDC (PKCE)</div>
+        <div class="card">
+          <p class="card-desc">Gunakan <code>chrome.identity.launchWebAuthFlow</code> dengan PKCE S256 untuk mendapatkan token sesi berumur pendek.</p>
+          <div class="form-group">
+            <label for="oidcAuthUrlInput">OIDC Authorization URL:</label>
+            <input id="oidcAuthUrlInput" type="url" class="text-input" placeholder="https://idp.sinergi.example.com/oauth2/authorize">
+          </div>
+          <div class="form-group">
+            <label for="oidcTokenUrlInput">OIDC Token URL (untuk Authorization Code PKCE):</label>
+            <input id="oidcTokenUrlInput" type="url" class="text-input" placeholder="https://idp.sinergi.example.com/oauth2/token">
+          </div>
+          <div class="form-group">
+            <label for="oidcClientIdInput">OIDC Client ID:</label>
+            <input id="oidcClientIdInput" type="text" class="text-input" placeholder="erp-chrome-companion">
+          </div>
+          <button id="oidcLoginBtn" class="primary-btn" type="button">Login SSO via OIDC PKCE</button>
         </div>
       </section>
     </main>

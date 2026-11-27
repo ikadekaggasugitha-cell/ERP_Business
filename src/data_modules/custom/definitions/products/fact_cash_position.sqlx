@@ -1,0 +1,40 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["fact", "cortex_v7", "treasury", "cash_position"],
+  clusterBy: ["org_id", "currency_code", "payment_status"],
+  description: "Multi-currency treasury cash position and inflow/outflow summary mart"
+}
+
+WITH dedup_fx AS (
+  SELECT rate_date, from_currency, to_currency, mid_rate
+  FROM ${ref("dim_currency")}
+  WHERE rate_type IN ('M', 'SPOT', 'DEFAULT')
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY rate_date, from_currency, to_currency ORDER BY mid_rate DESC) = 1
+)
+
+SELECT
+  p.payment_id,
+  p.organization_id AS org_id,
+  p.bank_account_id,
+  p.payment_no,
+  p.payment_type,
+  p.status AS payment_status,
+  p.payment_date,
+  COALESCE(p.currency_code, 'IDR') AS currency_code,
+  CASE WHEN UPPER(p.payment_type) = 'INCOMING' THEN ABS(CAST(COALESCE(p.amount, 0) AS NUMERIC)) ELSE NUMERIC '0' END AS inflow_amount_tc,
+  CASE WHEN UPPER(p.payment_type) != 'INCOMING' THEN ABS(CAST(COALESCE(p.amount, 0) AS NUMERIC)) ELSE NUMERIC '0' END AS outflow_amount_tc,
+  CASE
+    WHEN COALESCE(p.currency_code, 'IDR') = '${dataform.projectConfig.vars.holding_presentation_currency}'
+      THEN ABS(CAST(COALESCE(p.amount, 0) AS NUMERIC))
+    ELSE ABS(CAST(COALESCE(p.amount, 0) AS NUMERIC)) * COALESCE(fx_pc.mid_rate, NUMERIC '1')
+  END AS gross_cash_amount_pc,
+  '${dataform.projectConfig.vars.holding_presentation_currency}' AS currency_pc,
+  p.source_last_updated_at
+FROM ${ref("erp_staging", "stg_treasury_payment_cdc")} p
+LEFT JOIN dedup_fx fx_pc
+  ON fx_pc.rate_date = p.payment_date
+  AND fx_pc.from_currency = COALESCE(p.currency_code, 'IDR')
+  AND fx_pc.to_currency = '${dataform.projectConfig.vars.holding_presentation_currency}'
+WHERE p.deleted_at IS NULL
+  AND p.status NOT IN ('Cancelled', 'Void')

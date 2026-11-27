@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/sinergiinvestasiproperti/erp/services/procurement-service/internal/procurementdb"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/eventbus"
@@ -335,6 +336,78 @@ func (r *PurchaseOrderRepository) ConsumeAndCacheParty(ctx context.Context, scop
 		return q.UpsertMasterdataCache(ctx, c)
 	})
 	return inserted, err
+}
+
+// ConsumeWorkflowApproved handles workflow.approval.completed idempotently,
+// auto-transitioning matching Draft POs or Draft/Submitted PRs to Approved.
+func (r *PurchaseOrderRepository) ConsumeWorkflowApproved(
+	ctx context.Context,
+	scope []uuid.UUID,
+	mark procurementdb.MarkEventProcessedParams,
+	docType, docRef string,
+	actor, corr uuid.UUID,
+) (bool, error) {
+	applied := false
+	err := r.db.WithOrgScope(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		n, e := q.MarkEventProcessed(ctx, mark)
+		if e != nil || n == 0 {
+			return e
+		}
+		if docRef == "" {
+			applied = true
+			return nil
+		}
+		switch docType {
+		case "PurchaseOrder", "PO":
+			var poID, orgID, vendorID uuid.UUID
+			var poNo, ccy string
+			var totalAmt pgtype.Numeric
+			errScan := tx.QueryRow(ctx, `
+				UPDATE prc.purchase_order
+				SET status = 'Approved', updated_by = $2
+				WHERE (id::text = $1 OR po_no = $1)
+				  AND status = 'Draft'
+				  AND deleted_at IS NULL
+				RETURNING id, organization_id, po_no, vendor_id, currency_code, total_amount
+			`, docRef, actor).Scan(&poID, &orgID, &poNo, &vendorID, &ccy, &totalAmt)
+			if errScan == nil {
+				payload, _ := json.Marshal(map[string]any{
+					"poNo":         poNo,
+					"vendorId":     vendorID.String(),
+					"currencyCode": ccy,
+					"totalAmount":  platform.FormatNumeric(totalAmt, 4),
+					"status":       "Approved",
+					"source":       "workflow.approval.completed",
+				})
+				if e := q.InsertOutbox(ctx, procurementdb.InsertOutboxParams{
+					AggregateType:  "PurchaseOrder",
+					AggregateID:    poID,
+					EventType:      "procurement.po.approved",
+					Payload:        payload,
+					OrganizationID: orgID,
+					CorrelationID:  corr,
+				}); e != nil {
+					return e
+				}
+			} else if !errors.Is(errScan, pgx.ErrNoRows) {
+				return errScan
+			}
+		case "PurchaseRequisition", "PR":
+			if _, e := tx.Exec(ctx, `
+				UPDATE prc.purchase_requisition
+				SET status = 'Approved', updated_by = $2
+				WHERE (id::text = $1 OR pr_no = $1)
+				  AND status IN ('Draft', 'Submitted')
+				  AND deleted_at IS NULL
+			`, docRef, actor); e != nil {
+				return e
+			}
+		}
+		applied = true
+		return nil
+	})
+	return applied, err
 }
 
 // DrainAndPublish drains unpublished outbox events under row locks and publishes them to Kafka.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -139,6 +140,63 @@ func TestAuditEndpointsPaginationRBACAndGetByID(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 on ErrNoRows, got %d", rec.Code)
+	}
+}
+
+func TestAuditExportAndVerifyChain(t *testing.T) {
+	orgID := uuid.New()
+	corrID := uuid.New()
+	t1 := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)
+
+	store := &stubStore{
+		rows: []auditdb.ListAuditLogsFilteredRow{
+			{ID: uuid.New(), OccurredAt: pgtype.Timestamptz{Time: t2, Valid: true}, OrganizationID: orgID, Action: "=gl.journal.posted", EntityType: "JournalEntry", CorrelationID: corrID},
+			{ID: uuid.New(), OccurredAt: pgtype.Timestamptz{Time: t1, Valid: true}, OrganizationID: orgID, Action: "ap.invoice.recorded", EntityType: "VendorInvoice", CorrelationID: corrID},
+		},
+		total: 2,
+	}
+
+	mux := http.NewServeMux()
+	NewServer(store).Register(mux)
+	h := httpx.Middleware(mux)
+
+	// 1. CSV export with formula neutralization
+	req := httptest.NewRequest(http.MethodGet, "/audit-events/export?format=csv&entityType=JournalEntry", nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-Permissions", "audit:read")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), "text/csv") {
+		t.Fatalf("export csv got %d ct=%q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	if !strings.Contains(rec.Body.String(), "'=gl.journal.posted") {
+		t.Fatalf("expected formula-neutralized action in CSV: %s", rec.Body.String())
+	}
+
+	// 2. JSON export
+	req = httptest.NewRequest(http.MethodGet, "/audit-events/export?format=json", nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-Permissions", "audit:read")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"count":2`) {
+		t.Fatalf("export json got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// 3. Verify chain is deterministic and returns valid=true, count=2, non-empty hashes
+	req = httptest.NewRequest(http.MethodGet, "/audit-events/verify-chain", nil)
+	req.Header.Set("X-Organization-Id", orgID.String())
+	req.Header.Set("X-Permissions", "audit:read")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("verify-chain got %d: %s", rec.Code, rec.Body.String())
+	}
+	var chain map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &chain)
+	if chain["valid"] != true || chain["count"] != float64(2) || chain["headHash"] == "" || chain["headHash"] == chain["genesisHash"] {
+		t.Fatalf("unexpected verify-chain result: %+v", chain)
 	}
 }
 

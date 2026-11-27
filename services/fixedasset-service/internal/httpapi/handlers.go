@@ -50,6 +50,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /asset-categories/{id}", s.deleteCategory)
 	mux.HandleFunc("GET /fixed-assets", s.listAssets)
 	mux.HandleFunc("POST /fixed-assets", s.createAsset)
+	mux.HandleFunc("POST /fixed-assets/depreciate-batch", s.depreciateBatch)
 	mux.HandleFunc("GET /fixed-assets/{id}", s.getAsset)
 	mux.HandleFunc("PUT /fixed-assets/{id}", s.updateAssetDraft)
 	mux.HandleFunc("DELETE /fixed-assets/{id}", s.deleteAssetDraft)
@@ -733,4 +734,89 @@ func (s *Server) listTransactions(w http.ResponseWriter, r *http.Request) {
 		out = append(out, transactionDTO(row))
 	}
 	httpx.WriteJSON(w, http.StatusOK, httpx.ListEnvelope{Data: out, Page: httpx.NewPageMeta(1, len(out), len(out))})
+}
+
+func (s *Server) depreciateBatch(w http.ResponseWriter, r *http.Request) {
+	scope, user, ok := requireWrite(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		FiscalPeriodRef uuid.UUID `json:"fiscalPeriodRef"`
+		RunDate         string    `json:"runDate"`
+	}
+	idemKey, reqHash, release, done := httpx.BeginIdempotent(w, r, s.idem, scope, &req)
+	if done {
+		return
+	}
+	defer release()
+
+	if req.FiscalPeriodRef == uuid.Nil {
+		httpx.WriteError(w, r, httpx.BadRequest("fiscalPeriodRef is required"))
+		return
+	}
+	runDate := pgtype.Date{Time: time.Now().UTC(), Valid: true}
+	if strings.TrimSpace(req.RunDate) != "" {
+		d, perr := platform.ParseDate(req.RunDate)
+		if perr != nil {
+			httpx.WriteError(w, r, httpx.BadRequest("runDate must be YYYY-MM-DD"))
+			return
+		}
+		runDate = d
+	}
+
+	activeStatus := "Active"
+	assets, _, err := s.repo.ListAssets(r.Context(), scope, &activeStatus, 10000, 0)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+
+	corrID := httpx.CorrelationUUID(r)
+	totalDep := new(big.Rat)
+	processedCount := 0
+	skippedCount := 0
+	results := make([]map[string]any, 0, len(assets))
+
+	for _, asset := range assets {
+		if asset.Status != "Active" {
+			skippedCount++
+			continue
+		}
+		entry, depStr, nbvStr, nextVer, derr := s.repo.DepreciateAndEmit(
+			r.Context(), scope, asset.ID, asset.RowVersion, req.FiscalPeriodRef, runDate, nil, nil, user, corrID,
+		)
+		if derr != nil {
+			skippedCount++
+			results = append(results, map[string]any{
+				"assetId": asset.ID,
+				"assetNo": asset.AssetNo,
+				"status":  "skipped",
+				"reason":  derr.Error(),
+			})
+			continue
+		}
+		if rDep, ok := new(big.Rat).SetString(depStr); ok {
+			totalDep.Add(totalDep, rDep)
+		}
+		processedCount++
+		results = append(results, map[string]any{
+			"assetId":            asset.ID,
+			"assetNo":            asset.AssetNo,
+			"depreciationId":     entry.ID,
+			"depreciationAmount": depStr,
+			"netBookValue":       nbvStr,
+			"rowVersion":         nextVer,
+			"status":             "depreciated",
+		})
+	}
+
+	httpx.SaveIDResponse(w, s.idem, scope, idemKey, reqHash, http.StatusOK, 1, map[string]any{
+		"fiscalPeriodRef":   req.FiscalPeriodRef,
+		"runDate":           platform.FormatDate(runDate),
+		"processedCount":    processedCount,
+		"skippedCount":      skippedCount,
+		"totalDepreciation": totalDep.FloatString(4),
+		"results":           results,
+	})
 }

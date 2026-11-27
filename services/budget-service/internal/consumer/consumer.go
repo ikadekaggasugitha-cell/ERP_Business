@@ -17,12 +17,14 @@ import (
 var Topics = []string{
 	eventbus.TopicFor("procurement.po.approved"),
 	eventbus.TopicFor("ap.invoice.recorded"),
+	eventbus.TopicFor("workflow.approval.completed"),
 }
 var sysActor = uuid.MustParse("00000000-0000-0000-0000-0000000000b2")
 
 type Store interface {
 	ConsumePOApproved(ctx context.Context, scope []uuid.UUID, mark budgetdb.MarkEventProcessedParams, orgID, actor, corr uuid.UUID, docRef string, amount pgtype.Numeric) (bool, error)
 	ConsumeAPInvoiceRecorded(ctx context.Context, scope []uuid.UUID, mark budgetdb.MarkEventProcessedParams, orgID, actor uuid.UUID, sourceRef string) (bool, error)
+	ConsumeWorkflowApproved(ctx context.Context, scope []uuid.UUID, mark budgetdb.MarkEventProcessedParams, orgID, actor, corr uuid.UUID, docRef string) (bool, error)
 }
 
 type Consumer struct {
@@ -48,6 +50,8 @@ func (x *Consumer) Handle(ctx context.Context, env eventbus.Envelope) error {
 		return x.handlePOApproved(ctx, env)
 	case "ap.invoice.recorded":
 		return x.handleAPInvoiceRecorded(ctx, env)
+	case "workflow.approval.completed":
+		return x.handleWorkflowApproved(ctx, env)
 	default:
 		return nil
 	}
@@ -117,5 +121,57 @@ func (x *Consumer) handleAPInvoiceRecorded(ctx context.Context, env eventbus.Env
 		ref = strings.TrimSpace(p.Reference)
 	}
 	_, err = x.repo.ConsumeAPInvoiceRecorded(ctx, []uuid.UUID{org}, budgetdb.MarkEventProcessedParams{EventID: evID, EventType: env.EventType}, org, sysActor, ref)
+	return err
+}
+
+func (x *Consumer) handleWorkflowApproved(ctx context.Context, env eventbus.Envelope) error {
+	org, err := uuid.Parse(strings.TrimSpace(env.OrganizationID))
+	if err != nil {
+		return eventbus.ErrPoison{Err: fmt.Errorf("invalid organizationId: %w", err)}
+	}
+	evID, err := uuid.Parse(strings.TrimSpace(env.EventID))
+	if err != nil {
+		return eventbus.ErrPoison{Err: fmt.Errorf("invalid eventId: %w", err)}
+	}
+	corr := evID
+	if c, e := uuid.Parse(strings.TrimSpace(env.CorrelationID)); e == nil && c != uuid.Nil {
+		corr = c
+	}
+	var p struct {
+		DocumentType   string `json:"documentType"`
+		DocumentRef    string `json:"documentRef"`
+		Decision       string `json:"decision"`
+		Status         string `json:"status"`
+		InstanceStatus string `json:"instanceStatus"`
+	}
+	if len(env.Data) > 0 {
+		if err := json.Unmarshal(env.Data, &p); err != nil {
+			return eventbus.ErrPoison{Err: fmt.Errorf("invalid workflow.approval.completed payload: %w", err)}
+		}
+	}
+	dec := strings.ToLower(strings.TrimSpace(p.Decision))
+	st := strings.ToLower(strings.TrimSpace(p.Status))
+	ist := strings.ToLower(strings.TrimSpace(p.InstanceStatus))
+	if dec != "approve" && dec != "approved" && st != "approved" && ist != "approved" {
+		return nil
+	}
+	docRef := strings.TrimSpace(p.DocumentRef)
+	if docRef == "" {
+		return nil
+	}
+	dt := strings.ToUpper(strings.TrimSpace(p.DocumentType))
+	refUp := strings.ToUpper(docRef)
+	if dt != "BUDGET" && !strings.HasPrefix(refUp, "BUD-") && !strings.HasPrefix(refUp, "BDG-") {
+		return nil
+	}
+	_, err = x.repo.ConsumeWorkflowApproved(
+		ctx,
+		[]uuid.UUID{org},
+		budgetdb.MarkEventProcessedParams{EventID: evID, EventType: env.EventType},
+		org,
+		sysActor,
+		corr,
+		docRef,
+	)
 	return err
 }

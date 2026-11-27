@@ -1,0 +1,26 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["fact", "cortex_v7", "tax", "ppn"],
+  clusterBy: ["org_id", "tax_period", "efaktur_status"],
+  description: "Indonesian VAT (PPN Keluaran vs PPN Masukan) and e-Faktur compliance summary mart"
+}
+
+SELECT
+  t.tax_invoice_id,
+  t.organization_id AS org_id,
+  t.tax_type,
+  t.efaktur_no,
+  COALESCE(t.efaktur_status, 'Draft') AS efaktur_status,
+  t.source_document_type,
+  t.source_document_ref,
+  t.tax_date,
+  FORMAT_DATE('%Y-%m', t.tax_date) AS tax_period,
+  CAST(COALESCE(t.tax_base_amount, 0) AS NUMERIC) AS dpp_amount,
+  CAST(COALESCE(t.tax_amount, 0) AS NUMERIC) AS ppn_amount,
+  CASE WHEN t.source_document_type IN ('AR_INVOICE', 'SALES_ORDER') THEN CAST(COALESCE(t.tax_amount, 0) AS NUMERIC) ELSE NUMERIC '0' END AS ppn_keluaran,
+  CASE WHEN t.source_document_type IN ('AP_INVOICE', 'PURCHASE_ORDER') THEN CAST(COALESCE(t.tax_amount, 0) AS NUMERIC) ELSE NUMERIC '0' END AS ppn_masukan,
+  COALESCE(t.currency_code, 'IDR') AS currency_code,
+  t.source_last_updated_at
+FROM ${ref("erp_staging", "stg_tax_invoice_cdc")} t
+WHERE t.deleted_at IS NULL

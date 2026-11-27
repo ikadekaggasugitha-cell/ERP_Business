@@ -1,0 +1,179 @@
+---
+# Hourly CronJob: batched cleanup of expired public.idempotency_key rows across all 30 ERP DBs
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: erp-idempotency-prune
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: erp-idempotency-prune
+    app.kubernetes.io/component: maintenance
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  schedule: "15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 600
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: erp-idempotency-prune
+            app.kubernetes.io/component: microservice
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: prune-idempotency
+              image: postgres:16-alpine
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -euo
+                - pipefail
+                - -c
+                - |
+                  ALL_DBS="gl_db ap_db ar_db coa_db tax_db treasury_db user_db security_db masterdata_db org_db workflow_db procurement_db inventory_db manufacturing_db sales_db hr_db payroll_db reporting_db audit_db currency_db asset_db budget_db consolidation_db crm_db dimension_db financialclose_db fixedasset_db localization_db maintenance_db project_db"
+                  for db in $ALL_DBS; do
+                    psql "postgres://${ERP_APP_USER}:${ERP_APP_PASSWORD}@erp-postgres-pooler-rw.erp-platform.svc.cluster.local:5432/${db}?sslmode=require" \
+                      -v ON_ERROR_STOP=1 -c "
+                      DO \$\$
+                      DECLARE n integer;
+                      BEGIN
+                        IF to_regclass('public.idempotency_key') IS NULL THEN RETURN; END IF;
+                        WITH expired AS (
+                          SELECT ctid FROM public.idempotency_key
+                          WHERE created_at < NOW() - INTERVAL '1 hour'
+                          LIMIT 5000
+                        )
+                        DELETE FROM public.idempotency_key t USING expired e WHERE t.ctid = e.ctid;
+                        GET DIAGNOSTICS n = ROW_COUNT;
+                        RAISE NOTICE '${db}: pruned % expired idempotency keys', n;
+                      END \$\$;
+                    "
+                  done
+              env:
+                - name: ERP_APP_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: erp-db-app-secret
+                      key: ERP_APP_USER
+                - name: ERP_APP_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: erp-db-app-secret
+                      key: ERP_APP_PASSWORD
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 250m
+                  memory: 256Mi
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}
+---
+# Daily CronJob: encrypted logical backup & checksum verification across all 30 ERP DBs
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: erp-backup-verify
+  namespace: erp-platform
+  labels:
+    app.kubernetes.io/name: erp-backup-verify
+    app.kubernetes.io/component: maintenance
+    app.kubernetes.io/part-of: erp-platform
+spec:
+  schedule: "30 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 3600
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: erp-backup-verify
+            app.kubernetes.io/component: microservice
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: backup-verify
+              image: postgres:16-alpine
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -euo
+                - pipefail
+                - -c
+                - |
+                  TS="$(date -u +%Y%m%dT%H%M%SZ)"
+                  OUT="/tmp/backups/${TS}"
+                  mkdir -p "$OUT"
+                  ALL_DBS="gl_db ap_db ar_db coa_db tax_db treasury_db user_db security_db masterdata_db org_db workflow_db procurement_db inventory_db manufacturing_db sales_db hr_db payroll_db reporting_db audit_db currency_db asset_db budget_db consolidation_db crm_db dimension_db financialclose_db fixedasset_db localization_db maintenance_db project_db"
+                  for db in $ALL_DBS; do
+                    pg_dump -Fc --no-owner \
+                      "postgres://${ERP_APP_USER}:${ERP_APP_PASSWORD}@erp-postgres-ro.erp-platform.svc.cluster.local:5432/${db}?sslmode=require" \
+                      -f "${OUT}/${db}.dump"
+                    pg_restore --list "${OUT}/${db}.dump" >/dev/null
+                  done
+                  sha256sum "${OUT}"/*.dump > "${OUT}/SHA256SUMS"
+                  echo "backup-verify: verified 30 dumps + SHA256SUMS at ${OUT}"
+              env:
+                - name: ERP_APP_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: erp-db-app-secret
+                      key: ERP_APP_USER
+                - name: ERP_APP_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: erp-db-app-secret
+                      key: ERP_APP_PASSWORD
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}

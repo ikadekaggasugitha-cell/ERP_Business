@@ -1,0 +1,27 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["fact", "cortex_v7", "payroll", "hr"],
+  clusterBy: ["org_id", "period_year", "period_month"],
+  description: "Aggregated payroll run cost mart (gross, PPh 21 tax, net, and BPJS statutory totals without employee PII)"
+}
+
+SELECT
+  pr.payroll_run_id,
+  pr.organization_id AS org_id,
+  pr.run_no,
+  pr.period_year,
+  pr.period_month,
+  FORMAT('%04d-%02d', pr.period_year, pr.period_month) AS period_code,
+  pr.status AS run_status,
+  pr.gl_journal_ref,
+  CAST(COALESCE(pr.employee_count, 0) AS INT64) AS employee_count,
+  CAST(COALESCE(pr.total_gross, 0) AS NUMERIC) AS total_gross,
+  CAST(COALESCE(pr.total_tax, 0) AS NUMERIC) AS total_tax_pph21,
+  CAST(COALESCE(pr.total_net, 0) AS NUMERIC) AS total_net,
+  CAST(COALESCE(pr.total_employee_bpjs, 0) AS NUMERIC) AS total_employee_bpjs,
+  CAST(COALESCE(pr.total_employer_bpjs, 0) AS NUMERIC) AS total_employer_bpjs,
+  CAST(COALESCE(pr.total_gross, 0) AS NUMERIC) + CAST(COALESCE(pr.total_employer_bpjs, 0) AS NUMERIC) AS total_employer_cost,
+  pr.source_last_updated_at
+FROM ${ref("erp_staging", "stg_payroll_run_cdc")} pr
+WHERE pr.deleted_at IS NULL

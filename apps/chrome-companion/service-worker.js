@@ -32,7 +32,7 @@ const DEFAULT_DEV_APPROVALS = [
 async function getExtensionConfig() {
   const localData =
     (chrome.storage?.local?.get &&
-      (await chrome.storage.local.get(['token', 'apiUrl', 'orgId', 'userId']))) ||
+      (await chrome.storage.local.get(['token', 'apiUrl', 'orgId', 'userId', 'oidcAuthUrl', 'oidcTokenUrl', 'oidcClientId']))) ||
     {};
   let sessionToken = '';
   if (chrome.storage?.session?.get) {
@@ -47,8 +47,11 @@ async function getExtensionConfig() {
       .replace(/\/+$/, '') || DEFAULT_API_URL;
   const orgId = String(localData?.orgId || DEFAULT_ORG_ID).trim() || DEFAULT_ORG_ID;
   const userId = String(localData?.userId || '').trim();
+  const oidcAuthUrl = String(localData?.oidcAuthUrl || '').trim();
+  const oidcTokenUrl = String(localData?.oidcTokenUrl || '').trim();
+  const oidcClientId = String(localData?.oidcClientId || '').trim();
 
-  return { token, apiUrl, orgId, userId };
+  return { token, apiUrl, orgId, userId, oidcAuthUrl, oidcTokenUrl, oidcClientId };
 }
 
 async function saveStoredToken(token) {
@@ -71,6 +74,161 @@ async function clearStoredToken() {
   if (chrome.storage?.local?.remove) {
     await chrome.storage.local.remove('token');
   }
+}
+
+function base64UrlEncode(bytes) {
+  let binary = '';
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  for (let i = 0; i < arr.length; i += 1) {
+    binary += String.fromCharCode(arr[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function generatePkceVerifier(byteLength = 32) {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return base64UrlEncode(bytes);
+}
+
+async function derivePkceChallenge(verifier) {
+  const encoded = new TextEncoder().encode(String(verifier || ''));
+  const digest = await crypto.subtle.digest('SHA-256', encoded);
+  return base64UrlEncode(new Uint8Array(digest));
+}
+
+async function launchOidcPkceFlow(options = {}) {
+  if (typeof chrome === 'undefined' || !chrome.identity?.launchWebAuthFlow) {
+    return {
+      success: false,
+      error: 'chrome.identity.launchWebAuthFlow tidak tersedia pada environment ini.',
+    };
+  }
+
+  const stored = await getExtensionConfig();
+  const authUrl = String(options.authUrl || stored.oidcAuthUrl || '').trim();
+  const tokenUrl = String(options.tokenUrl || stored.oidcTokenUrl || '').trim();
+  const clientId = String(options.clientId || stored.oidcClientId || '').trim();
+  const scope = String(options.scope || 'openid profile email').trim();
+
+  if (!authUrl || !clientId) {
+    return {
+      success: false,
+      error: 'OIDC Authorization URL dan Client ID wajib diisi untuk login PKCE.',
+    };
+  }
+
+  let parsedAuth;
+  try {
+    parsedAuth = new URL(authUrl);
+  } catch {
+    return { success: false, error: 'Format OIDC Authorization URL tidak valid.' };
+  }
+
+  const redirectUri =
+    typeof chrome.identity.getRedirectURL === 'function'
+      ? chrome.identity.getRedirectURL('oidc-callback')
+      : 'https://invalid.chromiumapp.org/oidc-callback';
+
+  const codeVerifier = generatePkceVerifier(32);
+  const codeChallenge = await derivePkceChallenge(codeVerifier);
+  const state = generatePkceVerifier(16);
+
+  parsedAuth.searchParams.set('client_id', clientId);
+  parsedAuth.searchParams.set('redirect_uri', redirectUri);
+  parsedAuth.searchParams.set('response_type', tokenUrl ? 'code' : 'token');
+  parsedAuth.searchParams.set('scope', scope);
+  parsedAuth.searchParams.set('state', state);
+  parsedAuth.searchParams.set('code_challenge', codeChallenge);
+  parsedAuth.searchParams.set('code_challenge_method', 'S256');
+
+  let callbackUrl;
+  try {
+    callbackUrl = await chrome.identity.launchWebAuthFlow({
+      url: parsedAuth.toString(),
+      interactive: options.interactive !== false,
+    });
+  } catch (err) {
+    return {
+      success: false,
+      error: err?.message || 'Autentikasi OIDC PKCE dibatalkan atau gagal.',
+    };
+  }
+
+  if (!callbackUrl) {
+    return { success: false, error: 'Callback OIDC kosong.' };
+  }
+
+  const parsedCallback = new URL(callbackUrl);
+  const hashParams = new URLSearchParams(parsedCallback.hash.replace(/^#/, ''));
+  const queryParams = parsedCallback.searchParams;
+
+  const returnedError = queryParams.get('error') || hashParams.get('error');
+  if (returnedError) {
+    const desc = queryParams.get('error_description') || hashParams.get('error_description') || returnedError;
+    return { success: false, error: `OIDC error: ${desc}` };
+  }
+
+  const returnedState = queryParams.get('state') || hashParams.get('state');
+  if (returnedState && returnedState !== state) {
+    return { success: false, error: 'State OIDC tidak cocok (kemungkinan CSRF).' };
+  }
+
+  let accessToken = hashParams.get('access_token') || queryParams.get('access_token') || '';
+  const authCode = queryParams.get('code') || hashParams.get('code') || '';
+
+  if (!accessToken && authCode) {
+    if (!tokenUrl) {
+      return {
+        success: false,
+        error: 'OIDC Token URL wajib diisi untuk menukar authorization code PKCE.',
+      };
+    }
+
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: clientId,
+      code: authCode,
+      redirect_uri: redirectUri,
+      code_verifier: codeVerifier,
+    });
+
+    const tokenResp = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+
+    if (!tokenResp.ok) {
+      return {
+        success: false,
+        error: await parseGatewayError(tokenResp, `Penukaran token OIDC gagal (HTTP ${tokenResp.status})`),
+      };
+    }
+
+    const tokenJson = await tokenResp.json();
+    accessToken = String(tokenJson?.access_token || '').trim();
+  }
+
+  if (!accessToken) {
+    return { success: false, error: 'Respons OIDC tidak menyertakan access_token.' };
+  }
+
+  await saveStoredToken(accessToken);
+  if (chrome.storage?.local?.set) {
+    await chrome.storage.local.set({
+      oidcAuthUrl: authUrl,
+      oidcTokenUrl: tokenUrl,
+      oidcClientId: clientId,
+    });
+  }
+
+  return {
+    success: true,
+    hasToken: true,
+    authMode: 'LIVE_BEARER',
+    message: 'Login OIDC PKCE berhasil dan token sesi disimpan.',
+  };
 }
 
 function buildGatewayHeaders({
@@ -694,6 +852,9 @@ async function handleMessage(message, sender = {}) {
       orgId = DEFAULT_ORG_ID,
       token,
       clearToken = false,
+      oidcAuthUrl,
+      oidcTokenUrl,
+      oidcClientId,
     } = message.payload || {};
     const cleanApiUrl =
       String(apiUrl || DEFAULT_API_URL)
@@ -701,7 +862,12 @@ async function handleMessage(message, sender = {}) {
         .replace(/\/+$/, '') || DEFAULT_API_URL;
     const cleanOrgId = String(orgId || DEFAULT_ORG_ID).trim() || DEFAULT_ORG_ID;
 
-    await chrome.storage.local.set({ apiUrl: cleanApiUrl, orgId: cleanOrgId });
+    const localUpdate = { apiUrl: cleanApiUrl, orgId: cleanOrgId };
+    if (oidcAuthUrl !== undefined) localUpdate.oidcAuthUrl = String(oidcAuthUrl || '').trim();
+    if (oidcTokenUrl !== undefined) localUpdate.oidcTokenUrl = String(oidcTokenUrl || '').trim();
+    if (oidcClientId !== undefined) localUpdate.oidcClientId = String(oidcClientId || '').trim();
+
+    await chrome.storage.local.set(localUpdate);
 
     if (clearToken) {
       await clearStoredToken();
@@ -709,13 +875,20 @@ async function handleMessage(message, sender = {}) {
       await saveStoredToken(token.trim());
     }
 
-    const { token: activeToken } = await getExtensionConfig();
+    const activeConfig = await getExtensionConfig();
     return {
       success: true,
       apiUrl: cleanApiUrl,
       orgId: cleanOrgId,
-      hasToken: Boolean(activeToken),
+      oidcAuthUrl: activeConfig.oidcAuthUrl,
+      oidcTokenUrl: activeConfig.oidcTokenUrl,
+      oidcClientId: activeConfig.oidcClientId,
+      hasToken: Boolean(activeConfig.token),
     };
+  }
+
+  if (msgType === 'START_OIDC_PKCE') {
+    return launchOidcPkceFlow(message.payload || message);
   }
 
   if (msgType === 'CLEAR_TOKEN') {
@@ -724,8 +897,16 @@ async function handleMessage(message, sender = {}) {
   }
 
   if (msgType === 'GET_SETTINGS') {
-    const { token, apiUrl, orgId } = await getExtensionConfig();
-    return { success: true, apiUrl, orgId, hasToken: Boolean(token) };
+    const { token, apiUrl, orgId, oidcAuthUrl, oidcTokenUrl, oidcClientId } = await getExtensionConfig();
+    return {
+      success: true,
+      apiUrl,
+      orgId,
+      oidcAuthUrl,
+      oidcTokenUrl,
+      oidcClientId,
+      hasToken: Boolean(token),
+    };
   }
 
   return { success: false, error: 'Unknown action' };
@@ -758,6 +939,10 @@ if (typeof module !== 'undefined' && module.exports) {
     getExtensionConfig,
     saveStoredToken,
     clearStoredToken,
+    base64UrlEncode,
+    generatePkceVerifier,
+    derivePkceChallenge,
+    launchOidcPkceFlow,
     checkGatewayStatus,
     syncPendingApprovals,
     submitWorkflowDecision,

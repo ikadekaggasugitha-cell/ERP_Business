@@ -214,5 +214,24 @@ func TestPayrollRunLifecycleCalculationAndRBAC(t *testing.T) {
 	if posted.Status != "Posted" || posted.GLJournalRef != "JV-PAY-01" {
 		t.Fatalf("unexpected posted run: %+v", posted)
 	}
+
+	// 5. Export Bank CSV (BCA) & e-Bupot 1721-A1 CSV (requires payroll:read)
+	bankRec := doPayReq(t, router, http.MethodGet, "/payroll-runs/"+created.ID.String()+"/export/bank-csv?bank=BCA", "", "payroll:read", "")
+	if bankRec.Code != http.StatusOK || !bytes.Contains(bankRec.Body.Bytes(), []byte("BCA")) || !bytes.Contains(bankRec.Body.Bytes(), []byte("TOTAL")) {
+		t.Fatalf("bank-csv export got %d body=%s", bankRec.Code, bankRec.Body.String())
+	}
+
+	ebupotRec := doPayReq(t, router, http.MethodGet, "/payroll-runs/"+created.ID.String()+"/export/ebupot", "", "payroll:read", "")
+	if ebupotRec.Code != http.StatusOK || !bytes.Contains(ebupotRec.Body.Bytes(), []byte("21-100-01")) || !bytes.Contains(ebupotRec.Body.Bytes(), []byte("1024075.0000")) {
+		t.Fatalf("ebupot export got %d body=%s", ebupotRec.Code, ebupotRec.Body.String())
+	}
+
+	// 6. Invalid bank format returns 400; missing payroll:read returns 403
+	if badBank := doPayReq(t, router, http.MethodGet, "/payroll-runs/"+created.ID.String()+"/export/bank-csv?bank=UNKNOWN", "", "payroll:read", ""); badBank.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 on invalid bank format, got %d", badBank.Code)
+	}
+	if forbid := doPayReq(t, router, http.MethodGet, "/payroll-runs/"+created.ID.String()+"/export/ebupot", "", "gl:read", ""); forbid.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 without payroll:read, got %d", forbid.Code)
+	}
 }
 

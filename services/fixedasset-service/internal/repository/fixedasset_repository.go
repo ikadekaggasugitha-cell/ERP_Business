@@ -499,3 +499,41 @@ func (r *FixedAssetRepository) DrainAndPublish(ctx context.Context, limit int32,
 	}
 	return published, pubErr
 }
+
+// ConsumeCapExAsset idempotently registers a Draft fixed asset from AP/Procurement CapEx events.
+func (r *FixedAssetRepository) ConsumeCapExAsset(
+	ctx context.Context, scope []uuid.UUID,
+	mark fadb.MarkEventProcessedParams,
+	asset fadb.CreateFixedAssetParams,
+) (bool, error) {
+	var created bool
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		n, e := q.MarkEventProcessed(ctx, mark)
+		if e != nil || n == 0 {
+			return e
+		}
+		if asset.AssetCategoryID == uuid.Nil {
+			cats, e := q.ListAssetCategories(ctx, fadb.ListAssetCategoriesParams{Limit: 1, Offset: 0})
+			if e != nil {
+				return e
+			}
+			if len(cats) == 0 {
+				return nil
+			}
+			asset.AssetCategoryID = cats[0].ID
+			if asset.UsefulLifeMonths <= 0 && cats[0].DefaultUsefulLifeMonths != nil && *cats[0].DefaultUsefulLifeMonths > 0 {
+				asset.UsefulLifeMonths = *cats[0].DefaultUsefulLifeMonths
+			}
+			if asset.DepreciationMethod == "" && cats[0].DefaultDepreciationMethod != "" {
+				asset.DepreciationMethod = cats[0].DefaultDepreciationMethod
+			}
+		}
+		if _, e := q.CreateFixedAsset(ctx, asset); e != nil {
+			return e
+		}
+		created = true
+		return nil
+	})
+	return created, err
+}

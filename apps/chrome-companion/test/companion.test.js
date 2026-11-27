@@ -2,10 +2,13 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 
 const sandbox = require('../sandbox/sandbox.js');
 const bankExtractor = require('../content/bank-extractor.js');
 const taxHelper = require('../content/tax-helper.js');
+const sidepanel = require('../sidepanel/sidepanel.js');
+const serviceWorker = require('../service-worker.js');
 
 describe('Bank Parser Amount Normalization & 100x Bug Fix', () => {
   test('sandbox.parseAmount: correctly parses 1234,56 without 100x overstatement', () => {
@@ -159,6 +162,314 @@ describe('Tax Helper & Native Form Setter', () => {
     assert.ok('timestamp' in conf);
     assert.ok('ntte' in conf);
     assert.ok('nsfp' in conf);
+  });
+});
+
+function createMockChrome(initialLocal = {}, initialSession = {}, identityOverride = {}) {
+  const localStore = { ...initialLocal };
+  const sessionStore = { ...initialSession };
+
+  const makeArea = (store) => ({
+    async get(keys) {
+      if (Array.isArray(keys)) {
+        const out = {};
+        for (const k of keys) out[k] = store[k];
+        return out;
+      }
+      if (typeof keys === 'string') {
+        return { [keys]: store[keys] };
+      }
+      return { ...store };
+    },
+    async set(obj) {
+      Object.assign(store, obj);
+    },
+    async remove(key) {
+      delete store[key];
+    },
+  });
+
+  return {
+    localStore,
+    sessionStore,
+    chrome: {
+      storage: {
+        local: makeArea(localStore),
+        session: makeArea(sessionStore),
+      },
+      runtime: {
+        getManifest: () => ({ version: '1.0.0' }),
+      },
+      identity: {
+        getRedirectURL: (suffix = '') => `https://ext-id.chromiumapp.org/${suffix}`,
+        ...identityOverride,
+      },
+    },
+  };
+}
+
+describe('Live Tax Invoice Wiring & OIDC PKCE Controls', () => {
+  test('sidepanel.js and sidepanel.html contain zero hardcoded INVOICE_CATALOG fixtures', () => {
+    const js = fs.readFileSync(path.resolve(__dirname, '../sidepanel/sidepanel.js'), 'utf8');
+    const html = fs.readFileSync(path.resolve(__dirname, '../sidepanel/sidepanel.html'), 'utf8');
+
+    assert.ok(!js.includes('INVOICE_CATALOG'), 'sidepanel.js must not define hardcoded INVOICE_CATALOG');
+    assert.ok(!js.includes('INV-2026-0089'), 'sidepanel.js must not hardcode INV-2026-0089');
+    assert.ok(!html.includes('INV-2026-0089'), 'sidepanel.html must not hardcode INV-2026-0089');
+    assert.ok(!html.includes('INV-2026-0090'), 'sidepanel.html must not hardcode INV-2026-0090');
+
+    assert.ok(js.includes('GET_TAX_INVOICES'), 'sidepanel.js must fetch live invoices via GET_TAX_INVOICES');
+    assert.ok(js.includes('REPORT_TAX_INVOICE'), 'sidepanel.js must report invoices via REPORT_TAX_INVOICE');
+    assert.ok(html.includes('id="taxInvoiceState"'), 'sidepanel.html must expose explicit tax invoice state banner');
+    assert.ok(html.includes('id="bearerTokenInput"'), 'sidepanel.html must expose manual Bearer token input');
+    assert.ok(html.includes('id="clearTokenBtn"'), 'sidepanel.html must expose clear token button');
+    assert.ok(html.includes('id="oidcLoginBtn"'), 'sidepanel.html must expose OIDC PKCE login button');
+  });
+
+  test('sidepanel maps tax-service DTO cleanly to autofill payload and option label', () => {
+    const dto = {
+      id: 'tax-inv-1',
+      sourceDocumentRef: 'AR-2026-0101',
+      baseAmount: '150000000.00',
+      taxAmount: '16500000.00',
+      efakturNo: '010.000-26.00000001',
+      efakturStatus: 'DRAFT',
+      rowVersion: 2,
+    };
+
+    const payload = sidepanel.mapTaxInvoiceToAutofillPayload(dto);
+    assert.strictEqual(payload.invoiceNo, 'AR-2026-0101');
+    assert.strictEqual(payload.dppAmount, '150000000.00');
+    assert.strictEqual(payload.ppnAmount, '16500000.00');
+
+    const label = sidepanel.formatTaxInvoiceOptionLabel(dto);
+    assert.ok(label.includes('AR-2026-0101'));
+    assert.ok(label.includes('150000000.00'));
+    assert.ok(label.includes('DRAFT'));
+  });
+
+  test('service-worker getTaxInvoices returns explicit unauthenticated/live/error states without fake fallback', async () => {
+    const prevChrome = global.chrome;
+    const prevFetch = global.fetch;
+
+    try {
+      // 1. Unauthenticated
+      const unauthEnv = createMockChrome({ apiUrl: 'https://api.erp.test/api/v1' }, {});
+      global.chrome = unauthEnv.chrome;
+      const unauthResp = await serviceWorker.getTaxInvoices();
+      assert.strictEqual(unauthResp.authenticated, false);
+      assert.deepStrictEqual(unauthResp.invoices, []);
+
+      // 2. Live fetch
+      const authEnv = createMockChrome(
+        { apiUrl: 'https://api.erp.test/api/v1' },
+        { token: 'live-jwt-token' }
+      );
+      global.chrome = authEnv.chrome;
+      let capturedUrl = '';
+      let capturedAuth = '';
+      global.fetch = async (url, init) => {
+        capturedUrl = url;
+        capturedAuth = init.headers.Authorization;
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return {
+              data: [
+                {
+                  id: 'ti-1',
+                  sourceDocumentRef: 'AR-2026-0200',
+                  baseAmount: '10000000.00',
+                  taxAmount: '1100000.00',
+                  efakturStatus: 'DRAFT',
+                  rowVersion: 1,
+                },
+              ],
+            };
+          },
+        };
+      };
+
+      const liveResp = await serviceWorker.getTaxInvoices();
+      assert.strictEqual(capturedUrl, 'https://api.erp.test/api/v1/tax-invoices');
+      assert.strictEqual(capturedAuth, 'Bearer live-jwt-token');
+      assert.strictEqual(liveResp.success, true);
+      assert.strictEqual(liveResp.authenticated, true);
+      assert.strictEqual(liveResp.invoices.length, 1);
+      assert.strictEqual(liveResp.invoices[0].id, 'ti-1');
+
+      // 3. Upstream error returns explicit error and empty list
+      global.fetch = async () => ({
+        ok: false,
+        status: 502,
+        async json() {
+          return { error: { message: 'tax-service unavailable' } };
+        },
+      });
+      const errResp = await serviceWorker.getTaxInvoices();
+      assert.strictEqual(errResp.success, false);
+      assert.deepStrictEqual(errResp.invoices, []);
+      assert.ok(errResp.error.includes('tax-service unavailable'));
+    } finally {
+      global.chrome = prevChrome;
+      global.fetch = prevFetch;
+    }
+  });
+
+  test('service-worker reportTaxInvoice sends If-Match, Idempotency-Key, and strict DTO', async () => {
+    const prevChrome = global.chrome;
+    const prevFetch = global.fetch;
+
+    try {
+      const authEnv = createMockChrome(
+        { apiUrl: 'https://api.erp.test/api/v1' },
+        { token: 'live-jwt-token' }
+      );
+      global.chrome = authEnv.chrome;
+
+      let reqUrl = '';
+      let reqInit = null;
+      global.fetch = async (url, init) => {
+        reqUrl = url;
+        reqInit = init;
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return {
+              id: 'ti-1',
+              sourceDocumentRef: 'AR-2026-0200',
+              efakturStatus: 'REPORTED',
+              rowVersion: 2,
+            };
+          },
+        };
+      };
+
+      const resp = await serviceWorker.handleMessage({
+        action: 'REPORT_TAX_INVOICE',
+        payload: {
+          id: 'ti-1',
+          rowVersion: 1,
+          efakturNo: '010.000-26.00000001',
+          ntte: 'NTTE1234567890ABCDEF',
+        },
+      });
+
+      assert.strictEqual(resp.success, true);
+      assert.strictEqual(reqUrl, 'https://api.erp.test/api/v1/tax-invoices/ti-1/report');
+      assert.strictEqual(reqInit.method, 'POST');
+      assert.strictEqual(reqInit.headers['If-Match'], '1');
+      assert.ok(reqInit.headers['Idempotency-Key'].startsWith('tax-report-ti-1-'));
+      assert.deepStrictEqual(JSON.parse(reqInit.body), {
+        efakturNo: '010.000-26.00000001',
+        ntte: 'NTTE1234567890ABCDEF',
+      });
+    } finally {
+      global.chrome = prevChrome;
+      global.fetch = prevFetch;
+    }
+  });
+
+  test('service-worker launchOidcPkceFlow uses PKCE S256 and stores exchanged token in session', async () => {
+    const prevChrome = global.chrome;
+    const prevFetch = global.fetch;
+
+    try {
+      let launchedAuthUrl = '';
+      const env = createMockChrome(
+        {},
+        {},
+        {
+          async launchWebAuthFlow({ url }) {
+            launchedAuthUrl = url;
+            const parsed = new URL(url);
+            const state = parsed.searchParams.get('state');
+            return `https://ext-id.chromiumapp.org/oidc-callback?code=auth-code-123&state=${encodeURIComponent(state)}`;
+          },
+        }
+      );
+      global.chrome = env.chrome;
+
+      let tokenExchangeBody = '';
+      global.fetch = async (url, init) => {
+        assert.strictEqual(url, 'https://idp.sinergi.example.com/oauth2/token');
+        tokenExchangeBody = init.body;
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return { access_token: 'pkce-session-token-xyz' };
+          },
+        };
+      };
+
+      const res = await serviceWorker.handleMessage({
+        action: 'START_OIDC_PKCE',
+        payload: {
+          authUrl: 'https://idp.sinergi.example.com/oauth2/authorize',
+          tokenUrl: 'https://idp.sinergi.example.com/oauth2/token',
+          clientId: 'erp-chrome-companion',
+        },
+      });
+
+      assert.strictEqual(res.success, true);
+      assert.strictEqual(res.hasToken, true);
+      assert.strictEqual(env.sessionStore.token, 'pkce-session-token-xyz');
+
+      const authParsed = new URL(launchedAuthUrl);
+      assert.strictEqual(authParsed.searchParams.get('code_challenge_method'), 'S256');
+      assert.ok(authParsed.searchParams.get('code_challenge'));
+      assert.ok(tokenExchangeBody.includes('grant_type=authorization_code'));
+      assert.ok(tokenExchangeBody.includes('code_verifier='));
+    } finally {
+      global.chrome = prevChrome;
+      global.fetch = prevFetch;
+    }
+  });
+});
+
+describe('Production Packager (scripts/package-prod.mjs)', () => {
+  const scriptPath = path.resolve(__dirname, '../scripts/package-prod.mjs');
+
+  test('package-prod.mjs --dry-run strips localhost permissions and validates MV3 defaults', () => {
+    const stdout = execFileSync(process.execPath, [scriptPath, '--dry-run'], {
+      encoding: 'utf8',
+    });
+    const result = JSON.parse(stdout);
+
+    assert.strictEqual(result.valid, true);
+    assert.strictEqual(result.mode, 'dry-run');
+    assert.strictEqual(result.manifestVersion, 3);
+    assert.strictEqual(result.origin, 'https://erp.sinergi.example.com/*');
+    assert.ok(
+      result.strippedHostPermissions.includes('http://localhost:8000/*'),
+      'Must strip http://localhost:8000/*'
+    );
+    assert.ok(
+      result.strippedHostPermissions.includes('http://localhost:3000/*'),
+      'Must strip http://localhost:3000/*'
+    );
+    assert.ok(
+      result.hostPermissions.includes('https://erp.sinergi.example.com/*'),
+      'Must include default production origin'
+    );
+    for (const perm of result.hostPermissions) {
+      assert.ok(!perm.includes('localhost'), `Production host_permissions must not contain localhost: ${perm}`);
+    }
+  });
+
+  test('package-prod.mjs --dry-run supports custom --origin normalization', () => {
+    const stdout = execFileSync(
+      process.execPath,
+      [scriptPath, '--dry-run', '--origin', 'https://erp.corp.id'],
+      { encoding: 'utf8' }
+    );
+    const result = JSON.parse(stdout);
+    assert.strictEqual(result.valid, true);
+    assert.strictEqual(result.origin, 'https://erp.corp.id/*');
+    assert.ok(result.hostPermissions.includes('https://erp.corp.id/*'));
   });
 });
 

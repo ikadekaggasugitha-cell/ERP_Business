@@ -59,6 +59,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /purchase-orders/{id}", s.deletePO)
 	mux.HandleFunc("POST /purchase-orders/{id}/approve", s.approvePO)
 	mux.HandleFunc("POST /purchase-orders/{id}/receive", s.receivePO)
+	mux.HandleFunc("POST /purchase-orders/{id}/three-way-match", s.threeWayMatchPO)
 
 	mux.HandleFunc("GET /goods-receipts", s.listGRs)
 	mux.HandleFunc("GET /goods-receipts/{id}", s.getGR)

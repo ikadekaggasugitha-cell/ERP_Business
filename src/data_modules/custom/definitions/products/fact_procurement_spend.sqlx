@@ -1,0 +1,39 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["fact", "cortex_v7", "procurement", "spend"],
+  clusterBy: ["org_id", "vendor_id", "po_status"],
+  description: "Procurement spend analytics mart across Purchase Orders with presentation currency valuation"
+}
+
+WITH dedup_fx AS (
+  SELECT rate_date, from_currency, to_currency, mid_rate
+  FROM ${ref("dim_currency")}
+  WHERE rate_type IN ('M', 'SPOT', 'DEFAULT')
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY rate_date, from_currency, to_currency ORDER BY mid_rate DESC) = 1
+)
+
+SELECT
+  po.purchase_order_id,
+  po.organization_id AS org_id,
+  po.vendor_id,
+  po.po_no,
+  po.order_date,
+  FORMAT_DATE('%Y-%m', po.order_date) AS order_month,
+  po.status AS po_status,
+  COALESCE(po.currency_code, 'IDR') AS currency_tc,
+  CAST(COALESCE(po.total_amount, 0) AS NUMERIC) AS spend_amount_tc,
+  CASE
+    WHEN COALESCE(po.currency_code, 'IDR') = '${dataform.projectConfig.vars.holding_presentation_currency}'
+      THEN CAST(COALESCE(po.total_amount, 0) AS NUMERIC)
+    ELSE CAST(COALESCE(po.total_amount, 0) AS NUMERIC) * COALESCE(fx_pc.mid_rate, NUMERIC '1')
+  END AS spend_amount_pc,
+  '${dataform.projectConfig.vars.holding_presentation_currency}' AS currency_pc,
+  po.source_last_updated_at
+FROM ${ref("erp_staging", "stg_procurement_po_cdc")} po
+LEFT JOIN dedup_fx fx_pc
+  ON fx_pc.rate_date = po.order_date
+  AND fx_pc.from_currency = COALESCE(po.currency_code, 'IDR')
+  AND fx_pc.to_currency = '${dataform.projectConfig.vars.holding_presentation_currency}'
+WHERE po.deleted_at IS NULL
+  AND po.status NOT IN ('Cancelled')

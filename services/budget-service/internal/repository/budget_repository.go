@@ -409,6 +409,44 @@ func (r *BudgetRepository) ConsumeAPInvoiceRecorded(ctx context.Context, scope [
 	return applied, err
 }
 
+func (r *BudgetRepository) ConsumeWorkflowApproved(ctx context.Context, scope []uuid.UUID, mark budgetdb.MarkEventProcessedParams, orgID, actor, corr uuid.UUID, docRef string) (bool, error) {
+	applied := false
+	err := r.withOrgTx(ctx, scope, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		n, e := q.MarkEventProcessed(ctx, mark)
+		if e != nil || n == 0 {
+			return e
+		}
+		if docRef != "" {
+			var budID uuid.UUID
+			var code string
+			errScan := tx.QueryRow(ctx, `
+				UPDATE bud.budget
+				SET status = 'Approved', updated_by = $3
+				WHERE organization_id = $1
+				  AND (id::text = $2 OR code = $2)
+				  AND status IN ('Draft', 'Submitted')
+				  AND deleted_at IS NULL
+				RETURNING id, code
+			`, orgID, docRef, actor).Scan(&budID, &code)
+			if errScan == nil {
+				if e = emit(ctx, q, "Budget", "budget.approved", budID, orgID, corr, map[string]any{
+					"code":   code,
+					"status": "Approved",
+					"source": "workflow.approval.completed",
+				}); e != nil {
+					return e
+				}
+			} else if !errors.Is(errScan, pgx.ErrNoRows) {
+				return errScan
+			}
+		}
+		applied = true
+		return nil
+	})
+	return applied, err
+}
+
 func (r *BudgetRepository) DrainAndPublish(ctx context.Context, limit int32, pub *eventbus.Publisher) (int, error) {
 	tx, err := r.db.Pool.Begin(ctx)
 	if err != nil {

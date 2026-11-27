@@ -1,0 +1,73 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["fact", "cortex_v7", "ap", "aging"],
+  clusterBy: ["org_id", "vendor_id", "aging_bucket"],
+  description: "Accounts Payable vendor invoice aging mart with 30/60/90+ day buckets and presentation currency valuation"
+}
+
+WITH dedup_org AS (
+  SELECT *
+  FROM ${ref("dim_organization")}
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY org_id ORDER BY is_active DESC) = 1
+),
+
+dedup_fx AS (
+  SELECT rate_date, from_currency, to_currency, mid_rate
+  FROM ${ref("dim_currency")}
+  WHERE rate_type IN ('M', 'SPOT', 'DEFAULT')
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY rate_date, from_currency, to_currency ORDER BY mid_rate DESC) = 1
+),
+
+base_ap AS (
+  SELECT
+    inv.invoice_id,
+    inv.organization_id AS org_id,
+    inv.vendor_id,
+    inv.invoice_no,
+    inv.invoice_date,
+    inv.due_date,
+    inv.status,
+    COALESCE(inv.currency_code, org.functional_currency, 'IDR') AS currency_tc,
+    CAST(COALESCE(inv.total_amount, 0) AS NUMERIC) AS total_amount_tc,
+    CAST(COALESCE(inv.paid_amount, 0) AS NUMERIC) AS paid_amount_tc,
+    GREATEST(CAST(COALESCE(inv.total_amount, 0) AS NUMERIC) - CAST(COALESCE(inv.paid_amount, 0) AS NUMERIC), NUMERIC '0') AS outstanding_amount_tc,
+    GREATEST(DATE_DIFF(CURRENT_DATE(), COALESCE(inv.due_date, inv.invoice_date), DAY), 0) AS days_past_due,
+    inv.source_last_updated_at
+  FROM ${ref("erp_staging", "stg_ap_vendor_invoice_cdc")} inv
+  LEFT JOIN dedup_org org ON org.org_id = inv.organization_id
+  WHERE inv.deleted_at IS NULL
+    AND inv.status NOT IN ('Cancelled', 'Void')
+)
+
+SELECT
+  b.invoice_id,
+  b.org_id,
+  b.vendor_id,
+  b.invoice_no,
+  b.invoice_date,
+  b.due_date,
+  b.status,
+  b.days_past_due,
+  CASE
+    WHEN b.days_past_due = 0 THEN 'CURRENT'
+    WHEN b.days_past_due <= 30 THEN '1_30_DAYS'
+    WHEN b.days_past_due <= 60 THEN '31_60_DAYS'
+    WHEN b.days_past_due <= 90 THEN '61_90_DAYS'
+    ELSE '90_PLUS_DAYS'
+  END AS aging_bucket,
+  b.currency_tc,
+  b.total_amount_tc,
+  b.paid_amount_tc,
+  b.outstanding_amount_tc,
+  CASE
+    WHEN b.currency_tc = '${dataform.projectConfig.vars.holding_presentation_currency}' THEN b.outstanding_amount_tc
+    ELSE b.outstanding_amount_tc * COALESCE(fx_pc.mid_rate, NUMERIC '1')
+  END AS outstanding_amount_pc,
+  '${dataform.projectConfig.vars.holding_presentation_currency}' AS currency_pc,
+  b.source_last_updated_at
+FROM base_ap b
+LEFT JOIN dedup_fx fx_pc
+  ON fx_pc.rate_date = b.invoice_date
+  AND fx_pc.from_currency = b.currency_tc
+  AND fx_pc.to_currency = '${dataform.projectConfig.vars.holding_presentation_currency}'

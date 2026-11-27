@@ -1,0 +1,26 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.target_dataset,
+  tags: ["fact", "cortex_v7", "manufacturing", "yield"],
+  clusterBy: ["org_id", "product_item_id", "wo_status"],
+  description: "Manufacturing work order production yield and scrap variance analytics mart"
+}
+
+SELECT
+  wo.work_order_id,
+  wo.organization_id AS org_id,
+  wo.wo_no,
+  wo.product_item_id,
+  wo.bom_id,
+  wo.status AS wo_status,
+  CAST(COALESCE(wo.planned_qty, 0) AS NUMERIC) AS planned_qty,
+  CAST(COALESCE(wo.produced_qty, 0) AS NUMERIC) AS produced_qty,
+  GREATEST(CAST(COALESCE(wo.planned_qty, 0) AS NUMERIC) - CAST(COALESCE(wo.produced_qty, 0) AS NUMERIC), NUMERIC '0') AS shortfall_qty,
+  CASE
+    WHEN CAST(COALESCE(wo.planned_qty, 0) AS NUMERIC) > NUMERIC '0'
+      THEN ROUND((CAST(COALESCE(wo.produced_qty, 0) AS NUMERIC) / CAST(wo.planned_qty AS NUMERIC)) * NUMERIC '100', 2)
+    ELSE NUMERIC '0'
+  END AS yield_pct,
+  wo.source_last_updated_at
+FROM ${ref("erp_staging", "stg_manufacturing_wo_cdc")} wo
+WHERE wo.deleted_at IS NULL

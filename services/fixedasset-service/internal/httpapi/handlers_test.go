@@ -38,6 +38,12 @@ func (m *mockFAStore) ListCategories(_ context.Context, _ []uuid.UUID, _, _ int3
 func (m *mockFAStore) CreateAsset(_ context.Context, _ []uuid.UUID, _ fadb.CreateFixedAssetParams) (fadb.CreateFixedAssetRow, error) {
 	return fadb.CreateFixedAssetRow{ID: uuid.New(), Status: "Draft", RowVersion: 1}, nil
 }
+func (m *mockFAStore) ListAssets(_ context.Context, _ []uuid.UUID, _ *string, _, _ int32) ([]fadb.FaFixedAsset, int64, error) {
+	return []fadb.FaFixedAsset{
+		{ID: uuid.New(), AssetNo: "FA-001", Status: "Active", RowVersion: 1},
+		{ID: uuid.New(), AssetNo: "FA-002", Status: "Active", RowVersion: 1},
+	}, 2, nil
+}
 func (m *mockFAStore) CapitalizeAndEmit(_ context.Context, _ []uuid.UUID, _ uuid.UUID, _ int32, _ pgtype.Date, _, _ uuid.UUID) (int32, error) {
 	m.capCalls++
 	return 2, nil
@@ -156,5 +162,21 @@ func TestFixedAssetDepreciationAndLifecycle(t *testing.T) {
 	}
 	if err := json.Unmarshal(depRec.Body.Bytes(), &env); err != nil || len(env.Data) != 1 || env.Data[0]["depreciationAmount"] != "1000000.0000" || env.Data[0]["runDate"] != "2026-01-31" {
 		t.Fatalf("unexpected depreciation DTO wire payload: %s", depRec.Body.String())
+	}
+
+	// POST /fixed-assets/depreciate-batch across 2 Active assets -> totalDepreciation 2000000.0000 + idempotent replay
+	batchBody := `{"fiscalPeriodRef":"` + uuid.NewString() + `","runDate":"2026-11-30"}`
+	bRec := doFAWithIdem(h, "POST", "/fixed-assets/depreciate-batch", batchBody, "fixedasset:write", "", orgID, "batch-dep-1")
+	if bRec.Code != http.StatusOK {
+		t.Fatalf("depreciate-batch got %d: %s", bRec.Code, bRec.Body.String())
+	}
+	var bResp map[string]any
+	_ = json.Unmarshal(bRec.Body.Bytes(), &bResp)
+	if bResp["processedCount"] != float64(2) || bResp["totalDepreciation"] != "2000000.0000" {
+		t.Fatalf("unexpected batch depreciation response: %+v", bResp)
+	}
+	bReplay := doFAWithIdem(h, "POST", "/fixed-assets/depreciate-batch", batchBody, "fixedasset:write", "", orgID, "batch-dep-1")
+	if bReplay.Code != http.StatusOK || bReplay.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("expected idempotent replay on depreciate-batch, got %d", bReplay.Code)
 	}
 }

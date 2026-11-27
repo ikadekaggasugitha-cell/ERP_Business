@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sinergiinvestasiproperti/erp/services/fixedasset-service/internal/consumer"
 	"github.com/sinergiinvestasiproperti/erp/services/fixedasset-service/internal/httpapi"
 	"github.com/sinergiinvestasiproperti/erp/services/fixedasset-service/internal/repository"
 	"github.com/sinergiinvestasiproperti/erp/services/shared/eventbus"
@@ -31,6 +32,7 @@ func main() {
 
 	var wg sync.WaitGroup
 	var pub *eventbus.Publisher
+	var cons *consumer.Consumer
 	if len(brokers) > 0 {
 		pub = eventbus.NewPublisher(brokers)
 		wg.Add(1)
@@ -39,6 +41,14 @@ func main() {
 			eventbus.RunOutboxRelay(ctx, "fixedasset-service", 300*time.Millisecond, func(c context.Context) (int, error) {
 				return repo.DrainAndPublish(c, 50, pub)
 			})
+		}()
+		cons = consumer.New(repo, brokers)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := cons.Run(ctx); err != nil && ctx.Err() == nil {
+				log.Printf("fixedasset consumer stopped: %v", err)
+			}
 		}()
 	}
 
@@ -60,6 +70,9 @@ func main() {
 	mux.HandleFunc("GET /metrics", metrics.Handler())
 
 	httpx.ServeHTTP(ctx, cancel, "fixedasset-service", addr, metrics.Wrap(httpx.Middleware(mux)), &wg, func() {
+		if cons != nil {
+			_ = cons.Close()
+		}
 		if pub != nil {
 			_ = pub.Close()
 		}

@@ -1,7 +1,10 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
+	"fmt"
 	"math/big"
 	"net/http"
 	"strings"
@@ -46,6 +49,8 @@ func NewRouter(store Store, metrics *httpx.Metrics, checks ...httpx.ReadinessChe
 	mux.HandleFunc("POST /payroll-runs", h.handleCreateRun)
 	mux.HandleFunc("GET /payroll-runs", h.handleListRuns)
 	mux.HandleFunc("GET /payroll-runs/{id}", h.handleGetRun)
+	mux.HandleFunc("GET /payroll-runs/{id}/export/bank-csv", h.handleExportBankCSV)
+	mux.HandleFunc("GET /payroll-runs/{id}/export/ebupot", h.handleExportEbupotCSV)
 	mux.HandleFunc("DELETE /payroll-runs/{id}", h.handleDeleteDraftRun)
 	mux.HandleFunc("POST /payroll-runs/{id}/calculate", h.handleCalculateRun)
 	mux.HandleFunc("POST /payroll-runs/{id}/approve", h.handleApproveRun)
@@ -375,4 +380,134 @@ func (h *Handler) handlePostRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteIDResponse(w, http.StatusOK, detail.RowVersion, detail)
+}
+
+func sanitizeCSVCell(v string) string {
+	if v == "" {
+		return v
+	}
+	if _, ok := new(big.Rat).SetString(v); ok {
+		return v
+	}
+	switch v[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + v
+	}
+	return v
+}
+
+func parseRatOrZero(s string) *big.Rat {
+	if r, ok := new(big.Rat).SetString(strings.TrimSpace(s)); ok {
+		return r
+	}
+	return new(big.Rat)
+}
+
+// handleExportBankCSV exports a BCA/Mandiri/BI-FAST payroll disbursement CSV using exact *big.Rat totals.
+func (h *Handler) handleExportBankCSV(w http.ResponseWriter, r *http.Request) {
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := httpx.RequirePermission(r, "payroll:read"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	detail, err := h.store.GetByID(r.Context(), scope, id)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+
+	bankFmt := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("bank")))
+	if bankFmt == "" {
+		bankFmt = "BIFAST"
+	}
+	if bankFmt != "BCA" && bankFmt != "MANDIRI" && bankFmt != "BIFAST" {
+		httpx.WriteError(w, r, httpx.BadRequest("bank format must be BCA, MANDIRI, or BIFAST"))
+		return
+	}
+
+	period := fmt.Sprintf("%04d-%02d", detail.PeriodYear, detail.PeriodMonth)
+	var buf bytes.Buffer
+	cw := csv.NewWriter(&buf)
+	_ = cw.Write([]string{"RunNo", "Period", "BankFormat", "EmployeeID", "Currency", "NetAmount", "Remark"})
+	totalNet := new(big.Rat)
+	for _, res := range detail.Results {
+		netRat := parseRatOrZero(res.NetAmount)
+		totalNet.Add(totalNet, netRat)
+		_ = cw.Write([]string{
+			sanitizeCSVCell(detail.RunNo),
+			period,
+			bankFmt,
+			res.EmployeeID.String(),
+			"IDR",
+			netRat.FloatString(2),
+			sanitizeCSVCell("Payroll " + detail.RunNo + " " + period),
+		})
+	}
+	_ = cw.Write([]string{"TOTAL", period, bankFmt, fmt.Sprintf("%d", len(detail.Results)), "IDR", totalNet.FloatString(2), ""})
+	cw.Flush()
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="payroll-%s-%s.csv"`, strings.ToLower(bankFmt), period))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buf.Bytes())
+}
+
+// handleExportEbupotCSV exports DJP e-Bupot 1721-A1 CSV for monthly PPh 21 reporting.
+func (h *Handler) handleExportEbupotCSV(w http.ResponseWriter, r *http.Request) {
+	scope, err := httpx.RequireScope(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if err := httpx.RequirePermission(r, "payroll:read"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	id, err := httpx.ParseUUIDParam("id", r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	detail, err := h.store.GetByID(r.Context(), scope, id)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+
+	var buf bytes.Buffer
+	cw := csv.NewWriter(&buf)
+	_ = cw.Write([]string{"MasaPajak", "TahunPajak", "RunNo", "EmployeeID", "KodeObjekPajak", "JumlahBruto", "Pengurang", "BPJSKaryawan", "PPh21Dipotong", "JumlahNetto"})
+	for _, res := range detail.Results {
+		bpjsEmp := new(big.Rat)
+		for _, sc := range res.StatutoryContributions {
+			bpjsEmp.Add(bpjsEmp, parseRatOrZero(sc.EmployeeAmount))
+		}
+		_ = cw.Write([]string{
+			fmt.Sprintf("%02d", detail.PeriodMonth),
+			fmt.Sprintf("%04d", detail.PeriodYear),
+			sanitizeCSVCell(detail.RunNo),
+			res.EmployeeID.String(),
+			"21-100-01",
+			parseRatOrZero(res.GrossAmount).FloatString(4),
+			parseRatOrZero(res.DeductionAmount).FloatString(4),
+			bpjsEmp.FloatString(4),
+			parseRatOrZero(res.TaxAmount).FloatString(4),
+			parseRatOrZero(res.NetAmount).FloatString(4),
+		})
+	}
+	cw.Flush()
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="ebupot-1721a1-%04d-%02d.csv"`, detail.PeriodYear, detail.PeriodMonth))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buf.Bytes())
 }
